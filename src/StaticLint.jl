@@ -50,13 +50,14 @@ abstract type FileSystem end
 mutable struct State{T}
     current_scope::Scope
     loc::Location
+    target_file::String
     bad_refs::Vector{Reference}
     refs::Vector{Reference}
     nodecl::UnitRange{Int}
     isquotenode::Bool
     includes::Dict
 end
-State(s) = State{FileSystem}(s, Location("", 0), [], [], 0:0, false, Dict())
+State(s) = State{FileSystem}(s, Location("", 0), "", [], [], 0:0, false, Dict())
 State() = State(Scope())
 
 
@@ -220,6 +221,8 @@ function get_external_binding(x, s, S::State)
                 end
             end
         end
+    elseif x isa CSTParser.EXPR{T} where T <: Union{CSTParser.Import,CSTParser.Using,CSTParser.ImportAll}
+        get_imports(x, S)
     end
 end
 
@@ -266,17 +269,6 @@ function find_bad_refs(S)
     end
 end
 
-# function find_scope(loc, s)
-#     if loc.offset in s.range
-#         for c in s.children
-#             if loc.offset in c.range
-#                 return find_scope(loc, c)
-#             end     
-#         end
-#     end
-#     return s    
-# end
-
 
 function resolve_missing_binding(r::Reference, s = r.b.s)
     if CSTParser.str_value(r.x) in keys(s.names)
@@ -288,14 +280,6 @@ function resolve_missing_binding(r::Reference, s = r.b.s)
     return false
 end
 
-# function has_binding(name, s)
-#     if name in keys(s.names)
-#         return true
-#     elseif s.parent != nothing
-#         return has_binding(name, s.parent)
-#     end
-#     return false
-# end
 
 include("trav.jl")
 include("imports.jl")

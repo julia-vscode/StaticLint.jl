@@ -10,19 +10,25 @@ function trav(x::CSTParser.EXPR{CSTParser.MacroName}, s, S::State)
     S.loc.offset += x.fullspan
 end
 
-# function trav(x::CSTParser.EXPR{CSTParser.MacroCall}, s, S::State)
-#     S.loc.offset += x.fullspan
+function trav(x::CSTParser.EXPR{CSTParser.Quote}, s, S::State)
+    S.loc.offset += x.fullspan
+end
+
+# function trav(x::CSTParser.EXPR{CSTParser.Kw}, s, S::State)
+#     S.loc.offset += x.args[1].fullspan + x.args[2].fullspan
+#     trav(x.args[3], s, S)
 # end
 
 function trav(x, s, S::State)
     x isa CSTParser.EXPR{CSTParser.Quotenode} && (S.isquotenode = true)
     for a in x
         get_external_binding(a, s, S)
-        create_scope(a, s, S)
-        lint_call(a, s, S)
-        get_imports(a, S)
-        trav(a, S.current_scope, S)
-        S.current_scope = s
+        if enter_scope(x, s, S)
+            create_scope(a, s, S)
+            lint_call(a, s, S)
+            trav(a, S.current_scope, S)
+            S.current_scope = s
+        end
     end
     x isa CSTParser.EXPR{CSTParser.Quotenode} && (S.isquotenode = false)
     s
@@ -36,9 +42,38 @@ function trav(x)
 end
 
 function trav(path::String)
-    S = State{FileSystem}(Scope(), Location(path, 0), [], [], 0:0, false, Dict(path => File(path, nothing, [])))
+    S = State{FileSystem}(Scope(), Location(path, 0), "", [], [], 0:0, false, Dict(path => File(path, nothing, [])))
     x = CSTParser.parse(readstring(path), true)
     trav(x, S.current_scope, S)
     find_bad_refs(S)
     return S
+end
+
+
+function enter_scope(x, s, S)
+    isempty(S.target_file) && return true
+    ns =  CSTParser.defines_function(x) ||
+    # CSTParser.defines_module(x) ||
+    CSTParser.defines_macro(x) ||
+    CSTParser.defines_datatype(x) ||
+    x isa CSTParser.EXPR{CSTParser.Let} ||
+    x isa CSTParser.EXPR{CSTParser.Do} ||
+    x isa CSTParser.EXPR{CSTParser.While} ||
+    x isa CSTParser.EXPR{CSTParser.For} ||
+    x isa CSTParser.EXPR{CSTParser.Try} ||
+    x isa CSTParser.WhereOpCall ||
+    x isa CSTParser.EXPR{CSTParser.Generator} ||
+    CSTParser.defines_anon_function(x) ||
+    CSTParser.is_assignment(x) && x.arg1 isa CSTParser.EXPR{CSTParser.Curly}
+
+    if ns
+        if S.loc.path == S.target_file
+            return true
+        else
+            return false
+        end
+    else
+        return true
+    end
+    
 end
