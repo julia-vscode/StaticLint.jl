@@ -27,8 +27,9 @@ mutable struct Scope
     children::Vector{Scope}
     names::Dict{String,Vector{Binding}}
     range::UnitRange{Int64}
+    loc::Location
 end
-Scope() = Scope("__toplevel__", "", nothing, [], Dict(), 1:typemax(Int))
+Scope() = Scope("__toplevel__", "", nothing, [], Dict(), 1:typemax(Int), Location("", 1:typemax(Int)))
 function Base.display(s::Scope, i = 0)
     println(" "^i, s.t, ":[", join(keys(s.names), ", "), "]")
     for c in s.children
@@ -70,7 +71,7 @@ function add_binding(name, t, S::State, offset)
 end
 
 function add_scope(a, s, S::State, t, name = "")
-    push!(S.current_scope.children, Scope(t, name, s, [], Dict(), S.loc.offset + a.span))
+    push!(S.current_scope.children, Scope(t, name, s, [], Dict(), S.loc.offset + a.span, Location(S.loc.path, S.loc.offset + a.span)))
     S.current_scope = last(S.current_scope.children)
 end
 
