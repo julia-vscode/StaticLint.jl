@@ -6,18 +6,9 @@ function trav(x::CSTParser.LeafNode, s, S::State)
     S.loc.offset += x.fullspan
 end
 
-function trav(x::CSTParser.EXPR{CSTParser.MacroName}, s, S::State)
+function trav(x::CSTParser.EXPR{T}, s, S::State) where T <: Union{CSTParser.MacroName,CSTParser.Quote}
     S.loc.offset += x.fullspan
 end
-
-function trav(x::CSTParser.EXPR{CSTParser.Quote}, s, S::State)
-    S.loc.offset += x.fullspan
-end
-
-# function trav(x::CSTParser.EXPR{CSTParser.Kw}, s, S::State)
-#     S.loc.offset += x.args[1].fullspan + x.args[2].fullspan
-#     trav(x.args[3], s, S)
-# end
 
 function trav(x, s, S::State)
     x isa CSTParser.EXPR{CSTParser.Quotenode} && (S.isquotenode = true)
@@ -28,6 +19,8 @@ function trav(x, s, S::State)
             lint_call(a, s, S)
             trav(a, S.current_scope, S)
             S.current_scope = s
+        else
+            S.loc.offset += a.fullspan
         end
     end
     x isa CSTParser.EXPR{CSTParser.Quotenode} && (S.isquotenode = false)
@@ -42,7 +35,7 @@ function trav(x)
 end
 
 function trav(path::String)
-    S = State{FileSystem}(Scope(), Location(path, 0), "", [], [], 0:0, false, Dict(path => File(path, nothing, [])))
+    S = State{FileSystem}(Scope(), Location(path, 0), "", [], [], 0:0, false, Dict(path => File(path, nothing, [])), FileSystem())
     x = CSTParser.parse(readstring(path), true)
     trav(x, S.current_scope, S)
     find_bad_refs(S)

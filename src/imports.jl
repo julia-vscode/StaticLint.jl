@@ -34,42 +34,51 @@ function unwrap_imports(x)
     return vars
 end
 
-function is_pkg_available(pkg::Symbol, S::State{FileSystem})
-    Pkg.installed(string(pkg)) != nothing
+function is_pkg_available(pkg::Symbol, S)
+    string(pkg) in readdir(Pkg.dir())
 end
 
-function is_pkg_loaded(pkg::Symbol, S::State{FileSystem})
-    isdefined(Main, pkg)
+function is_pkg_loaded(pkg::Symbol, S)
+    string(pkg) in keys(loaded_mods)
 end
 
 
-function load_pkg(pkg::Symbol, S::State{FileSystem})
+function load_pkg(pkg::Symbol, S)
     if is_pkg_available(pkg, S)
         eval(:(import $(pkg)))
+        mod_names(getfield(Main, pkg), loaded_mods)
     end
 end
 
 function get_imports(x, S) end
 function get_imports(x::CSTParser.EXPR{T}, S) where T <: Union{CSTParser.Using,CSTParser.Import,CSTParser.ImportAll}
+    u = T == CSTParser.Using
     vars = unwrap_imports(x)
     for v in vars
-        if length(v) == 1
-            if is_pkg_loaded(v[1], S) && getfield(Main, v[1]) isa Module
-                for n in names(getfield(Main, v[1]))
-                    add_binding(string(n), :Any, S::State, S.loc.offset + x.span)
+        if u && string(v[1]) in keys(S.current_scope.names) && S.current_scope.names[string(v[1])][end].t == :Module
+            mx = S.current_scope.names[string(v[1])][end].val.args[3].args
+            for a in mx
+                if a isa CSTParser.EXPR{CSTParser.Export}
+                    for i = 2:length(a.args)
+                        if a.args[i] isa CSTParser.IDENTIFIER
+                            add_binding(x, CSTParser.str_value(a.args[i]), :Any, S::State, S.loc.offset + x.span)
+                        end
+                    end
                 end
-            elseif is_pkg_available(v[1], S)
-                load_pkg(v[1], S)
             end
-        elseif length(v) == 2
-            if is_pkg_loaded(v[1], S) && getfield(Main, v[1]) isa Module
-                add_binding(string(v[1]), :Module, S::State, S.loc.offset + x.span)
-                if v[2] in names(getfield(Main, v[1]), true, true)
-                    add_binding(string(v[2]), :Any, S::State, S.loc.offset + x.span)
+        elseif join(v, ".") in keys(loaded_mods)
+            add_binding(x, string(v[end]), :Any, S::State, S.loc.offset + x.span)
+            if u
+                for n in loaded_mods[join(v, ".")][1]
+                    add_binding(x, string(n), :Any, S::State, S.loc.offset + x.span)
                 end
-            elseif is_pkg_available(v[1], S)
-                load_pkg(v[1], S)
             end
+        elseif length(v) > 1 && join(v[1:length(v)-1], ".") in keys(loaded_mods)
+            if v[end] in loaded_mods[join(view(v,1:length(v)-1), ".")][2]
+                add_binding(x, string(v[end]), :Any, S::State, S.loc.offset + x.span)
+            end
+        elseif is_pkg_available(v[1], S)
+            load_pkg(v[1], S)
         end
     end
 end
