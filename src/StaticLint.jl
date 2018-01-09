@@ -238,13 +238,7 @@ function get_external_binding(x, s, S::State)
     return false
 end
 
-function find_ref(name, S::State)
-    if Symbol(name) in BaseCoreNames
-        return Binding("BaseCore", Location("____", 0:0), nothing)
-    else
-        return find_ref(name, S.current_scope, S)
-    end
-end
+find_ref(name, S::State) = find_ref(name, S.current_scope, S)
 
 function find_ref(name, s, S::State)
     if name in keys(s.names)
@@ -252,7 +246,11 @@ function find_ref(name, s, S::State)
     elseif s.parent != nothing
         return find_ref(name, s.parent, S)
     else
-        return MissingBinding(S.current_scope)
+        if Symbol(name) in BaseCoreNames
+            return Binding("BaseCore", Location("____", 0:0), nothing)
+        else
+            return MissingBinding(S.current_scope)
+        end
     end
 end
 
