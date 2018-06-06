@@ -1,6 +1,5 @@
 module StaticLint
 using CSTParser
-include("documentserver.jl")
 const Index = Tuple
 
 mutable struct Location
@@ -13,7 +12,10 @@ mutable struct Binding
     index::Index
     pos::Int
     val
+    t
 end
+Base.display(b::Binding) = println(b.index, b.pos," @ ",  basename(b.loc.file), ":", b.loc.offset)
+Base.display(b::Vector{Binding}) = (println("N = ", length(b));display.(b))
 
 mutable struct Reference{T}
     val::T
@@ -21,6 +23,11 @@ mutable struct Reference{T}
     index::Index
     pos::Int
     delayed::Bool
+end
+
+mutable struct ResolvedRef{T}
+    r::Reference{T}
+    b::Binding
 end
 
 mutable struct Include{T}
@@ -31,16 +38,23 @@ mutable struct Include{T}
     pos::Int
 end
 
+
 mutable struct Scope
     parent::Union{Void,Scope}
     children::Vector{Scope}
     offset::UnitRange{Int}
-    bindings::Int
     t::DataType
     index::Index
+    bindings::Int
+end
+Scope() = Scope(nothing, [], 0:-1, CSTParser.TopLevel, (), 0)
+function Base.display(s::Scope, depth = 0)
+    println(" "^depth, "| ", s.t.name.name, " @ ", s.index, " / ", s.offset)
+    for a in s.children
+        display(a, depth + 1)
+    end
 end
 
-Scope() = Scope(nothing, [], 0:-1, 0, CSTParser.TopLevel, ())
 
 mutable struct State
     loc::Location
@@ -50,6 +64,17 @@ mutable struct State
     server
 end
 State() = State(Location("", 0), Dict{String, Vector{Binding}}(), Reference[], Include[], DocumentServer())
+
+mutable struct File
+    cst::CSTParser.EXPR
+    state::State
+    scope::Scope
+    index::Index
+    nb::Int
+    parent::String
+    rref::Vector{ResolvedRef}
+    uref::Vector{Reference}
+end
 
 function pass(x::CSTParser.LeafNode, state::State, s::Scope, index, blockref, delayed)
     state.loc.offset += x.fullspan
@@ -72,11 +97,23 @@ function pass(x, state::State, s::Scope, index, blockref, delayed)
     s
 end
 
+function pass(file::File)
+    file.state.loc.offset = 0
+    empty!(file.state.bindings)
+    empty!(file.state.refs)
+    empty!(file.state.includes)
+    file.state.bindings["using"] = [Binding(Location("", 0), file.index, file.nb, SymbolServer.server["Base"], nothing), Binding(Location("", 0), file.index, file.nb, SymbolServer.server["Core"], nothing)]
+    file.state.bindings["module"] = Binding[]
+    file.scope = Scope(nothing, Scope[], file.cst.span, CSTParser.TopLevel, file.index, file.nb)
+    file.scope = pass(file.cst, file.state, file.scope, file.index, false, false)
+end
+
 include("bindings.jl")
 include("references.jl")
 include("utils.jl")
-include("display.jl")
 include("symbolserver.jl")
+include("documentserver.jl")
+include("lint.jl")
 
 # SymbolServer.init()
 # SymbolServer.load_module(Core, true, true)

@@ -1,81 +1,14 @@
-# function resolve_ref(r::Reference{CSTParser.IDENTIFIER}, bindings, res = Tuple{Reference,Any}[], unres = Reference[])
-#     out = []
-#     name = CSTParser.str_value(r.val)
-#     if haskey(bindings, name)
-#         for i = length(bindings[name]):-1:1
-#             b = bindings[name][i]
-#             if comp(r.index, r.pos, b.index, b.pos)
-#                 push!(out, b)
-#             elseif r.delayed
-#                 for m in bindings["module"]
-#                     if length(m.index) <= length(r.index) && m.index == r.index[1:length(m.index)] && b.index == m.index
-#                         push!(out, b)
-#                     end
-#                 end
-#             end
-#         end
-#     end
-    
-#     for m in bindings["using"]
-#         if Symbol(name) in m.val.exported
-#             push!(out, m.val.loaded[name].val)
-#         end
-#     end
-#     if isempty(out) 
-#         push!(unres, r)
-#     else
-#         push!(res, (r, first(out)))
-#     end
-#     return res, unres
-# end
-
-# function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, bindings, res = Tuple{Reference,Any}[], unres = Reference[])
-#     args = flatten_dot(r.val)
-#     for a in args
-#         if !(a isa CSTParser.IDENTIFIER)
-#             return
-#         end
-#     end
-#     offset = 0
-#     res1 = []
-#     for arg in args
-#     end
-#     return res, unres
-# end
-
-# function resolve_ref(r::Reference{CSTParser.EXPR{CSTParser.MacroName}}, bindings, res = Tuple{Reference,Any}[], unres = Reference[])
-#     name = CSTParser.str_value(r.val.args[2])
-#     if haskey(bindings, name)
-#         for i = length(bindings[name]):-1:1
-#             b = bindings[name][i]
-#             if comp(r.index, r.pos, b.index, b.pos) && CSTParser.defines_macro(b.val)
-#                 push!(res, (r, b))
-#                 return res, unres            
-#             end
-#         end
-#     end
-#     mname = string("@", name)
-#     for m in bindings["using"]
-#         if Symbol(mname) in m.val.exported
-#             push!(res, (r, m.val.loaded[mname].val))
-#             return res, unres
-#         end
-#     end
-#     push!(unres, r)
-#     return res, unres
-# end
-
-function resolve_ref(r::Reference{CSTParser.IDENTIFIER}, bindings)
-    out = []
+function resolve_ref(r::Reference{CSTParser.IDENTIFIER}, bindings, rrefs)
+    out = Binding[]
     name = CSTParser.str_value(r.val)
     if haskey(bindings, name)
         for i = length(bindings[name]):-1:1
             b = bindings[name][i]
-            if comp(r.index, r.pos, b.index, b.pos)
+            if inscope(r.index, r.pos, b.index, b.pos)
                 push!(out, b)
             elseif r.delayed
                 for m in bindings["module"]
-                    if length(m.index) <= length(r.index) && m.index == r.index[1:length(m.index)] && b.index == m.index
+                    if in_delayedscope(r.index, m.index, b.index)
                         push!(out, b)
                     end
                 end
@@ -85,33 +18,75 @@ function resolve_ref(r::Reference{CSTParser.IDENTIFIER}, bindings)
     
     for m in bindings["using"]
         if Symbol(name) in m.val.exported
-            push!(out, m.val.loaded[name].val)
+            push!(out, m.val.loaded[name])
         end
     end
-    return isempty(out) ? r : (r, first(out))
+    if isempty(out)
+        return r
+    else
+        ret = first(out)
+        for i = 2:length(out)
+            if lt(ret, out[i])
+                ret = out[i]
+            end
+        end
+        rr = ResolvedRef(r, ret)
+        push!(rrefs, rr)
+        return rr
+    end
 end
 
-function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, bindings)
-    args = flatten_dot(r.val)
-    for a in args
-        if !(a isa CSTParser.IDENTIFIER)
-            return r
+
+
+function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, bindings, rrefs)
+    # rhs 
+    rr = Reference(r.val.arg2.args[1], Location(r.loc.file, r.loc.offset + r.val.arg1.fullspan + r.val.op.fullspan), r.index, r.pos, r.delayed)
+    # lhs
+    lr = Reference(r.val.arg1, Location(r.loc.file, r.loc.offset), r.index, r.pos, r.delayed)
+    rlr = resolve_ref(lr, bindings, rrefs)
+    if rlr isa ResolvedRef
+        return resolve_ref(rr, bindings, rrefs, rlr)
+    else
+        return rlr
+    end
+end
+
+
+resolve_ref(rr, bindings, rrefs) = rr
+# Resolve reference given `lr.r`
+function resolve_ref(rr::Reference, bindings, rrefs, rlr::ResolvedRef)
+    if rlr.b.val isa SymbolServer.ModuleBinding # root (rlr.b) is an imported module
+        if Symbol(CSTParser.str_value(rr.val)) in rlr.b.val.internal
+            b = rlr.b.val.loaded[CSTParser.str_value(rr.val)]
+            rrr = ResolvedRef(rr, b)
+            push!(rrefs, rrr)
+            return rrr
+        end
+    elseif rlr.b.val isa Module && haskey(SymbolServer.server, string(rlr.b.val)) # root (rlr.b) is an imported module
+        if Symbol(CSTParser.str_value(rr.val)) in SymbolServer.server[string(rlr.b.val)].internal
+            b = SymbolServer.server[string(rlr.b.val)].loaded[CSTParser.str_value(rr.val)]
+            rrr = ResolvedRef(rr, b)
+            push!(rrefs, rrr)
+            return rrr
         end
     end
-    offset = 0
-    res1 = []
-    for arg in args
-    end
-    return r
+    return rr
+end 
+
+
+function _hasfield(b::Binding, r::Reference)
+    
 end
 
-function resolve_ref(r::Reference{CSTParser.EXPR{CSTParser.MacroName}}, bindings)
+function resolve_ref(r::Reference{CSTParser.EXPR{CSTParser.MacroName}}, bindings, refs)
     name = CSTParser.str_value(r.val.args[2])
     if haskey(bindings, name)
         for i = length(bindings[name]):-1:1
             b = bindings[name][i]
-            if comp(r.index, r.pos, b.index, b.pos) && CSTParser.defines_macro(b.val)
-                return (r, b)
+            if inscope(r.index, r.pos, b.index, b.pos) && CSTParser.defines_macro(b.val)
+                rr = ResolvedRef(r,b)
+                push!(refs, rr)
+                return rr
             end
         end
     end
@@ -119,20 +94,20 @@ function resolve_ref(r::Reference{CSTParser.EXPR{CSTParser.MacroName}}, bindings
     smname = Symbol(mname)
     for m in bindings["using"]
         if smname in m.val.exported
-            return (r, m.val.loaded[mname].val)
+            rr = ResolvedRef(r, m.val.loaded[mname])
+            push!(refs, rr)
+            return rr
         end
     end
     return r
 end
 
 
-function resolve_refs(refs, bindings, res = Tuple{Reference,Any}[], unres = Reference[])
+function resolve_refs(refs, bindings, res = ResolvedRef[], unres = Reference[])
     for r in refs
-        rr = resolve_ref(r, bindings)
-        if rr isa Reference
+        rr = resolve_ref(r, bindings, res)
+        if rr == r
             push!(unres, rr)
-        else
-            push!(res, rr)
         end
     end
     return res, unres
@@ -184,4 +159,23 @@ function cat_references(server, file, refs = [])
         cat_references(server, incl.val, refs)
     end
     return refs
+end
+
+function get_methods(rref::ResolvedRef, bindings)
+    M  = Binding[rref.b]
+    B = bindings[CSTParser.str_value(rref.r.val)]
+    
+    for i = findfirst(b->b==rref.b, B)-1:-1:1
+        if lt(B[i], rref.b) 
+            if B[i].t == CSTParser.FunctionDef
+                push!(M, B[i])
+            elseif B[i].t in (CSTParser.Struct, CSTParser.Mutable, CSTParser.Abstract, CSTParser.Primitive)
+                unshift!(M, B[i])
+                break
+            end
+        else
+            break
+        end
+    end
+    M
 end

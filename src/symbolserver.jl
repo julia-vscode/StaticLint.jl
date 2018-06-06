@@ -3,6 +3,7 @@ const initted = false
 import StaticLint:Binding,Location
 
 mutable struct ModuleBinding
+    name::String
     exported::Set{Symbol}
     internal::Set{Symbol}
     loaded::Dict{String,Binding}
@@ -38,14 +39,14 @@ function load_module(m::Module, load = false, force = false)
         return
     end
     
-    server[mname] = ModuleBinding(Set(names(m)), Set(names(m, true, true)), Dict(), true, false)
+    server[mname] = ModuleBinding(mname, Set(names(m)), Set(names(m, true, true)), Dict(), true, false)
     for i in server[mname].internal
         !isdefined(m, i) && continue
         x = getfield(m, i)
         if x isa Module
             load_module(x)
         end
-        server[mname].loaded[String(i)] = Binding(Location("", 0), (), -1, x)
+        server[mname].loaded[String(i)] = Binding(Location("", 0), (), -1, x, typeof(x))
     end
 end
 
@@ -55,7 +56,7 @@ function load_binding(m::String, b::String)
     end
 end
 
-const pkgdir = Pkg.dir()
+# const pkgdir = Pkg.dir()
 pkgdir = "c:/Users/zacnu/.julia/v0.6"
 const installed_packages = filter(p->isdir(joinpath(pkgdir,p)) && p!="METADATA" && !startswith(p,"."), readdir(pkgdir))
 const server = Dict{String,ModuleBinding}()
@@ -66,7 +67,7 @@ function init()
     load_module(Main.Core)
     for pkg in installed_packages
         if isfile(joinpath(pkgdir, pkg, "src", join([pkg, ".jl"])))
-            server[pkg] = ModuleBinding(Set{String}(), Set{String}(), Dict(), false, false)
+            server[pkg] = ModuleBinding(pkg, Set{String}(), Set{String}(), Dict(), false, false)
         end
     end
     global initted = true

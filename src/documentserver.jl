@@ -1,49 +1,36 @@
-mutable struct File
-    cst::CSTParser.EXPR
-    state
-    scope
-end
 CST(f::File) = f.cst
 mutable struct DocumentServer
     files::Dict{String,File}
 end
 DocumentServer() = DocumentServer(Dict())
+function Base.display(server::DocumentServer)
+    for (file,f) in server.files
+        println(basename(file), " -> ", [(basename(i.file), i.index) for i in f.state.includes])
+    end
+end
+
 getfile(server::DocumentServer, p) = server.files[p]
 setfile(server::DocumentServer, p, x) = server.files[p] = x
 
-# Base.setindex!(ds::DocumentServer, x, i) = ds.files[i] = x
-# Base.getindex(ds::DocumentServer, i) = ds.files[i]
+is_loaded(server, path) = haskey(server.files, path)
 
+can_load(server, path) = isfile(path)
 
-function isloaded(server::DocumentServer, path, root)
-    if haskey(server.files, path)
-        loaded = true
-    elseif haskey(server.files, joinpath(dirname(root), path))
-        path = joinpath(dirname(root), path)
-        loaded = true
-    elseif isabspath(path) && isfile(path)
-        loadfile(server, path)
-        loaded = true
-    elseif isfile(joinpath(dirname(root), path))
-        path = joinpath(dirname(root), path)
-        loadfile(server, path)
-        loaded = true
-    else
-        loaded = false
-    end
-    return loaded ? path : ""
-end
-
-
-function loadfile(server::DocumentServer, path, index = ())
+function load_file(server, path::String, index, nb, parent)
     code = readstring(path)
     cst = CSTParser.parse(code, true)
     state = State(Location(path, 0), Dict(), Reference[], [], server)
-    state.bindings["using"] = [Binding(Location("", 0), index, 0, SymbolServer.server["Base"]), Binding(Location("", 0), index, 0, SymbolServer.server["Core"])]
+    state.bindings["using"] = []
+    if isempty(parent)
+        push!(state.bindings["using"],Binding(Location("", 0), index, 0, SymbolServer.server["Base"], nothing))
+        push!(state.bindings["using"],Binding(Location("", 0), index, 0, SymbolServer.server["Core"], nothing))
+    end
     state.bindings["module"] = Binding[]
-    s = Scope(nothing, Scope[], cst.span, 0, CSTParser.TopLevel, index)
+    s = Scope(nothing, Scope[], cst.span,  CSTParser.TopLevel, index, nb, Set())
     scope = pass(cst, state, s, index, false, false)
-    setfile(server, path, File(cst, state, scope))
+    file = File(cst, state, scope, index, nb, parent, ResolvedRef[], Reference[])
+    setfile(server, path, file)
+    return file
 end
 
 function loaddir(dir::String, server::DocumentServer = DocumentServer())
@@ -52,7 +39,7 @@ function loaddir(dir::String, server::DocumentServer = DocumentServer())
             if endswith(file, ".jl")
                 path = joinpath(root, file)
                 path in keys(server.files) && continue
-                loadfile(server, path)
+                load_file(server, path, (), 0, "")
             end
         end
     end

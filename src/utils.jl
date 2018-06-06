@@ -22,9 +22,9 @@ function create_scope(x, state, s, index)
         s.bindings += 1
         index1 = cattuple(index,s.bindings)
         if CSTParser.defines_module(x) # add module barrier
-            push!(state.bindings["module"], Binding(Location(state.loc.file, state.loc.offset), index1, 0, x))
+            push!(state.bindings["module"], Binding(Location(state.loc.file, state.loc.offset), index1, 0, x, nothing))
         end
-        s1 = Scope(s, [], state.loc.offset + x.span, 0, t, index1)
+        s1 = Scope(s, [], state.loc.offset + x.span, t, index1, 0, Set())
         push!(s.children, s1)
         int_binding(x, state, s1, index1)
         return s1, index1
@@ -33,19 +33,58 @@ function create_scope(x, state, s, index)
     end
 end
 
-function comp(r1, r2, b1, b2)
-    nr = length(r1)
-    nb = length(b1)
-    nr < nb && return false
-    suc = true
-    for i = 1:nb
-        suc = b1[i] ≤ r1[i]
+function inscope(rind, rpos, bind, bpos)
+    nrind = length(rind)
+    nbind = length(bind)
+    nbind > nrind && return false
+    i = 1
+    while i <= nbind
+        rind[i] != bind[i] && return false
+        i += 1
     end
-    !suc && return false
-    if nb == nr
-        return r2 >= b2
+    if nrind == nbind
+        return rpos ≥ bpos
     else
-        return r1[nb+1] >= b2
+        return rind[i] ≥ bpos
+    end
+end
+
+function lt(ai::NTuple{na,Int},ap, bi::NTuple{nb,Int}, bp) where {na, nb}
+    if na == nb
+        for i = 1:na
+            if ai[i] > bi[i]
+                return false
+            end
+        end
+        return ap < bp
+    elseif na > nb
+        for i = 1:nb
+            if ai[i] > bi[i]
+                return false
+            end
+        end
+        return ai[nb + 1] < bp
+    else
+        for i = 1:na
+            if ai[i] > bi[i]
+                return false
+            end
+        end
+        return ap < bi[na + 1]
+    end 
+end
+lt(a::Binding, b::Binding) = lt(a.index, a.pos, b.index, b.pos)
+
+@generated function in_delayedscope(rindex::NTuple{Nr,Int}, mindex::NTuple{Nm,Int}, bindex::NTuple{Nb,Int}) where {Nr,Nm,Nb}
+    out = :()
+    if bindex != mindex || Nm > Nr || Nb > Nr
+        return :(false)
+    else
+        out = :(rindex[$Nm] == mindex[$Nm])
+        for i = Nm-1:-1:1
+            out = :(rindex[$i] == mindex[$i] && $out)
+        end
+        return Expr(:&&,:(bindex == mindex), out)
     end
 end
 
@@ -72,7 +111,7 @@ function load_import(x, state, s, index, root, block, predots, u)
             SymbolServer.load_module(full)
             !SymbolServer.server[full].is_loaded && return
         end
-        b = Binding(Location(state.loc.file, state.loc.offset), index, s.bindings, SymbolServer.server[full])
+        b = Binding(Location(state.loc.file, state.loc.offset), index, s.bindings, SymbolServer.server[full], nothing)
         name = last(block)
         add_binding(name, b, state)
         if u
@@ -86,7 +125,7 @@ function load_import(x, state, s, index, root, block, predots, u)
         name = last(block)
         if name in keys(SymbolServer.server[rootmod].loaded)
             s.bindings += 1
-            val = Binding(Location(state.loc.file, state.loc.offset), index, s.bindings, SymbolServer.server[rootmod].loaded[name])
+            val = Binding(Location(state.loc.file, state.loc.offset), index, s.bindings, SymbolServer.server[rootmod].loaded[name], nothing)
             add_binding(name, val, state)
         end
     else
@@ -149,20 +188,26 @@ end
 function get_include(x, state, s, index)
     if x isa CSTParser.EXPR{CSTParser.Call} && CSTParser.str_value(x.args[1]) == "include"
         path = get_path(x)
-        path = isloaded(state.server, path, state.loc.file)
-        if !isempty(path)
-            incl_f = getfile(state.server, path)
-            if incl_f.scope.index != index
-                cst = CST(incl_f)
-                incl_f.state = State(Location(path, 0), Dict(), Reference[], [], state.server)
-                incl_f.state.bindings["using"] = [Binding(Location("", 0), index, 0, SymbolServer.server["Base"]), Binding(Location("", 0), index, 0, SymbolServer.server["Core"])]
-                incl_f.state.bindings["module"] = Binding[]
-                incl_f.scope = Scope(nothing, Scope[], cst.span, s.bindings + 1, CSTParser.TopLevel, index)
-                pass(cst, incl_f.state, incl_f.scope, index, false, false)
-            end
-            # push!(state.includes, Include(path, state.loc.offset, index, s.bindings))
-            push!(state.includes, Include(incl_f, path, state.loc.offset, index, s.bindings))
-            s.bindings = incl_f.scope.bindings
+        if is_loaded(state.server, path)
+            file = getfile(state.server, path)
+            loaded = true
+        elseif is_loaded(state.server, joinpath(dirname(state.loc.file), path))
+            loaded = true
+            path = joinpath(dirname(state.loc.file), path)
+            file = getfile(state.server, path)
+        elseif can_load(state.server, path)
+            loaded = true
+            file = load_file(state.server, path, index, s.bindings, state.loc.file)
+        elseif can_load(state.server, joinpath(dirname(state.loc.file), path))
+            loaded = true
+            path = joinpath(dirname(state.loc.file), path)
+            file = load_file(state.server, path, index, s.bindings, state.loc.file)
+        else
+            loaded = false
+        end
+        if loaded
+            push!(state.includes, Include(file, path, state.loc.offset, index, s.bindings))
+            s.bindings = file.scope.bindings
         end
     end
 end
@@ -179,16 +224,17 @@ function find_root(server, path)
 end
 
 
-function get_stack(x, offset, pos = 0, stack = [])
+function get_stack(x, offset, pos = 0, stack = [], offsets = Int[])
     push!(stack, x)
+    push!(offsets, pos)
     for a in x
         if pos < offset <= pos + a.fullspan
-            return get_stack(a, offset, pos, stack)
+            return get_stack(a, offset, pos, stack, offsets)
         else
             pos += a.fullspan
         end
     end
-    return stack
+    return stack, offsets
 end
 
 function flatten_dot(x::CSTParser.BinarySyntaxOpCall, stack = [])
