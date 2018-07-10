@@ -162,7 +162,7 @@ function get_fcall_args(sig, getparams = true)
     if sig isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(sig.op)
         sig = sig.arg1
     end
-    
+    sig isa CSTParser.IDENTIFIER && return args
     if sig.args[1] isa CSTParser.EXPR{CSTParser.Curly}
         for i = 2:length(sig.args[1].args)
             arg = sig.args[1].args[i]

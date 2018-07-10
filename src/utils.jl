@@ -24,7 +24,7 @@ function create_scope(x, state, s, index)
         if CSTParser.defines_module(x) # add module barrier
             push!(state.bindings["module"], Binding(Location(state.loc.file, state.loc.offset), index1, 0, x, nothing))
         end
-        s1 = Scope(s, [], state.loc.offset + x.span, t, index1, 0, Set())
+        s1 = Scope(s, Scope[], state.loc.offset .+ x.span, t, index1, 0)
         push!(s.children, s1)
         int_binding(x, state, s1, index1)
         return s1, index1

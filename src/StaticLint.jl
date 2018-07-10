@@ -40,7 +40,7 @@ end
 
 
 mutable struct Scope
-    parent::Union{Void,Scope}
+    parent::Union{Nothing,Scope}
     children::Vector{Scope}
     offset::UnitRange{Int}
     t::DataType
