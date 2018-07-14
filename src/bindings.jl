@@ -13,12 +13,6 @@ function add_binding(name, binding, state)
 end
 
 function ext_binding(x, state, s, index)
-    # if CSTParser.defines_module(x) ||
-    #     CSTParser.defines_function(x) ||
-    #     CSTParser.defines_macro(x) ||
-    #     CSTParser.defines_datatype(x)
-    #     name = CSTParser.str_value(CSTParser.get_name(x))
-    #     add_binding(name, x, state, s, index)
     if CSTParser.defines_module(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
         add_binding(name, x, state, s, index, CSTParser.ModuleH)

@@ -114,7 +114,7 @@ function resolve_refs(refs, bindings, res = ResolvedRef[], unres = Reference[])
 end
 
 
-function find_bindings_before(offset, state)
+function find_bindings_before(offset, state::State)
     list = Dict()
     for (name, bindings) in state.bindings
         for b in bindings
@@ -127,7 +127,7 @@ function find_bindings_before(offset, state)
 end
 
 
-function get_ref(x, state, s, index, blockref, delayed)
+function get_ref(x, state::State, s::Scope, index, blockref, delayed)
     if blockref
         if x isa CSTParser.UnarySyntaxOpCall && x.arg1 isa CSTParser.OPERATOR && x.arg1.kind == CSTParser.Tokens.EX_OR
             return false
@@ -170,7 +170,7 @@ function get_methods(rref::ResolvedRef, bindings)
             if B[i].t == CSTParser.FunctionDef
                 push!(M, B[i])
             elseif B[i].t in (CSTParser.Struct, CSTParser.Mutable, CSTParser.Abstract, CSTParser.Primitive)
-                unshift!(M, B[i])
+                pushfirst!(M, B[i])
                 break
             end
         else
