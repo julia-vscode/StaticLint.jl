@@ -20,10 +20,9 @@ function load_file(server, path::String, index, nb, parent)
     code = readstring(path)
     cst = CSTParser.parse(code, true)
     state = State(Location(path, 0), Dict(), Reference[], [], server)
-    state.bindings["using"] = []
     if isempty(parent)
-        push!(state.bindings["using"],Binding(Location("", 0), index, 0, SymbolServer.server["Base"], nothing))
-        push!(state.bindings["using"],Binding(Location("", 0), index, 0, SymbolServer.server["Core"], nothing))
+        state.bindings[".used modules"]["Base"] = StaticLint.ModuleBinding(StaticLint.Location(), StaticLint.SIndex(index, nb), StaticLint.store["Base"])
+        state.bindings[".used modules"]["Core"] = StaticLint.ModuleBinding(StaticLint.Location(), StaticLint.SIndex(index, nb), StaticLint.store["Core"])
     end
     state.bindings["module"] = Binding[]
     s = Scope(nothing, Scope[], cst.span,  CSTParser.TopLevel, index, nb, Set())

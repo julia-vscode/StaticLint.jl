@@ -1,4 +1,4 @@
-function create_scope(x, state, s, index)
+function create_scope(x, state, s)
     def_f = CSTParser.defines_function(x)
     if CSTParser.defines_module(x) ||
         def_f ||
@@ -20,19 +20,21 @@ function create_scope(x, state, s, index)
             end
         end
         s.bindings += 1
-        index1 = cattuple(index,s.bindings)
+        index1 = cattuple(s.index,s.bindings)
         if CSTParser.defines_module(x) # add module barrier
-            push!(state.bindings["module"], Binding(Location(state.loc.file, state.loc.offset), index1, 0, x, nothing))
+            push!(state.bindings["module"], Binding(Location(state), SIndex(index1, 0), x, nothing))
         end
         s1 = Scope(s, Scope[], state.loc.offset .+ x.span, t, index1, 0)
         push!(s.children, s1)
-        int_binding(x, state, s1, index1)
-        return s1, index1
+        int_binding(x, state, s1)
+        return s1
     else
-        return s, index
+        return s
     end
 end
 
+
+inscope(asi, bsi) = inscope(asi.i, asi.n, bsi.i, bsi.n)
 function inscope(rind, rpos, bind, bpos)
     nrind = length(rind)
     nbind = length(bind)
@@ -73,7 +75,8 @@ function lt(ai::NTuple{na,Int},ap, bi::NTuple{nb,Int}, bp) where {na, nb}
         return ap < bi[na + 1]
     end 
 end
-lt(a::Binding, b::Binding) = lt(a.index, a.pos, b.index, b.pos)
+
+lt(a, b) = lt(a.si.i, a.si.n, b.si.i, b.si.n)
 
 @generated function in_delayedscope(rindex::NTuple{Nr,Int}, mindex::NTuple{Nm,Int}, bindex::NTuple{Nb,Int}) where {Nr,Nm,Nb}
     out = :()
@@ -96,70 +99,6 @@ function cattuple(v1::Tuple, v2::Tuple)
     n1 = length(v1)
     n2 = length(v2)
     ntuple(j -> j <= n1 ? v1[j] : v2[j-n1], n1 + n2)
-end
-
-function load_import(x, state, s, index, root, block, predots, u)
-    full = string(root, join(block, "."))
-    if isempty(root)
-        firstmod = block[1]
-    else
-        firstmod = split(root, '.')[1]
-    end
-    rootmod = strip(string(root, join(view(block, 1:length(block)-1))), '.')
-    if full in keys(SymbolServer.server)
-        if !SymbolServer.server[full].is_loaded && !SymbolServer.server[full].load_failed
-            SymbolServer.load_module(full)
-            !SymbolServer.server[full].is_loaded && return
-        end
-        b = Binding(Location(state.loc.file, state.loc.offset), index, s.bindings, SymbolServer.server[full], nothing)
-        name = last(block)
-        add_binding(name, b, state)
-        if u
-            push!(state.bindings["using"], b)
-        end
-    elseif rootmod in keys(SymbolServer.server)
-        if !SymbolServer.server[rootmod].is_loaded && !SymbolServer.server[rootmod].load_failed
-            SymbolServer.load_module(rootmod)
-            !SymbolServer.server[rootmod].is_loaded && return
-        end
-        name = last(block)
-        if name in keys(SymbolServer.server[rootmod].loaded)
-            s.bindings += 1
-            val = Binding(Location(state.loc.file, state.loc.offset), index, s.bindings, SymbolServer.server[rootmod].loaded[name], nothing)
-            add_binding(name, val, state)
-        end
-    else
-    end
-end
-
-function get_imports(x, state, s, index)
-    u = x isa CSTParser.EXPR{CSTParser.Using}
-    i = 2
-    predots = 0
-    root = ""
-    block = String[]
-    while i ≤ length(x.args)
-        arg = x.args[i]
-        if arg isa CSTParser.PUNCTUATION && arg.kind == CSTParser.Tokens.DOT
-            if isempty(block)
-                predots += 1
-            end
-        elseif arg isa CSTParser.PUNCTUATION && arg.kind == CSTParser.Tokens.COMMA   
-            load_import(x, state, s, index, root, block, predots, u)
-            empty!(block)
-        elseif arg isa CSTParser.OPERATOR && arg.kind == CSTParser.Tokens.COLON
-            root = string(join(block, "."), ".")
-            empty!(block)
-        elseif arg isa CSTParser.IDENTIFIER
-            push!(block, CSTParser.str_value(arg))
-        else 
-            return
-        end
-        i += 1
-    end
-    if !isempty(block)
-        load_import(x, state, s, index, root, block, predots, u)
-    end
 end
 
 function get_path(x::CSTParser.EXPR{CSTParser.Call})
@@ -185,7 +124,7 @@ function get_path(x::CSTParser.EXPR{CSTParser.Call})
     return ""
 end
 
-function get_include(x, state, s, index)
+function get_include(x, state, s)
     if x isa CSTParser.EXPR{CSTParser.Call} && CSTParser.str_value(x.args[1]) == "include"
         path = get_path(x)
         if is_loaded(state.server, path)
@@ -197,16 +136,21 @@ function get_include(x, state, s, index)
             file = getfile(state.server, path)
         elseif can_load(state.server, path)
             loaded = true
-            file = load_file(state.server, path, index, s.bindings, state.loc.file)
+            file = load_file(state.server, path, s.index, s.bindings, state.loc.file)
         elseif can_load(state.server, joinpath(dirname(state.loc.file), path))
             loaded = true
             path = joinpath(dirname(state.loc.file), path)
-            file = load_file(state.server, path, index, s.bindings, state.loc.file)
+            file = load_file(state.server, path, s.index, s.bindings, state.loc.file)
         else
             loaded = false
         end
         if loaded
-            push!(state.includes, Include(file, path, state.loc.offset, index, s.bindings))
+            if !(file.index == s.index && file.nb == s.bindings)
+                file.index = s.index
+                file.nb = s.bindings
+                StaticLint.pass(file)
+            end
+            push!(state.includes, Include(file, path, state.loc.offset, s.index, s.bindings))
             s.bindings = file.scope.bindings
         end
     end
@@ -246,3 +190,5 @@ function flatten_dot(x::CSTParser.BinarySyntaxOpCall, stack = [])
     push!(stack, x.arg2 isa CSTParser.EXPR{CSTParser.Quotenode} ? x.arg2.args[1] : x.arg2)
     return stack
 end
+
+Location(state::State) = Location(state.loc.file, state.loc.offset)
