@@ -1,33 +1,28 @@
 module StaticLint
-using CSTParser
+using CSTParser, Pkg
 const Index = Tuple
+struct SIndex
+    i::Tuple
+    n::Int
+end
 
 mutable struct Location
     file::String
     offset::Int
 end
 
-mutable struct Binding
-    loc::Location
-    index::Index
-    pos::Int
-    val
-    t
-end
-Base.display(b::Binding) = println(b.index, b.pos," @ ",  basename(b.loc.file), ":", b.loc.offset)
-Base.display(b::Vector{Binding}) = (println("N = ", length(b));display.(b))
+include("bindings.jl")
 
 mutable struct Reference{T}
     val::T
     loc::Location
-    index::Index
-    pos::Int
+    si::SIndex
     delayed::Bool
 end
 
-mutable struct ResolvedRef{T}
+mutable struct ResolvedRef{T, S}
     r::Reference{T}
-    b::Binding
+    b::S
 end
 
 mutable struct Include{T}
@@ -38,9 +33,8 @@ mutable struct Include{T}
     pos::Int
 end
 
-
 mutable struct Scope
-    parent::Union{Void,Scope}
+    parent::Union{Nothing,Scope}
     children::Vector{Scope}
     offset::UnitRange{Int}
     t::DataType
@@ -58,12 +52,12 @@ end
 
 mutable struct State
     loc::Location
-    bindings::Dict{String,Vector{Binding}}
+    bindings::Dict{String,Any}
     refs::Vector{Reference}
     includes::Vector{Include}
     server
 end
-State() = State(Location("", 0), Dict{String, Vector{Binding}}(), Reference[], Include[], DocumentServer())
+State() = State(Location("", 0), Dict{String, Any}(), Reference[], Include[], DocumentServer())
 
 mutable struct File
     cst::CSTParser.EXPR
@@ -81,18 +75,18 @@ function pass(x::CSTParser.LeafNode, state::State, s::Scope, index, blockref, de
 end
 
 function pass(x, state::State, s::Scope, index, blockref, delayed)
-    ext_binding(x, state, s, index)
-    s1, index1 = create_scope(x, state, s, index)
+    ext_binding(x, state, s)
+    s1 = create_scope(x, state, s)
     if s1.t == CSTParser.FunctionDef || x isa CSTParser.EXPR{CSTParser.Export}
         delayed = true
     end
     if x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokens.DECLARATION
         delayed = false
     end
-    get_include(x, state, s1, index)
+    get_include(x, state, s1)
     for a in x
-        ablockref = get_ref(a, state, s1, index1, blockref, delayed)
-        pass(a, state, s1, index1, ablockref, delayed)
+        ablockref = get_ref(a, state, s1, blockref, delayed)
+        pass(a, state, s1, s1.index, ablockref, delayed)
     end
     s
 end
@@ -102,20 +96,21 @@ function pass(file::File)
     empty!(file.state.bindings)
     empty!(file.state.refs)
     empty!(file.state.includes)
-    file.state.bindings["using"] = [Binding(Location("", 0), file.index, file.nb, SymbolServer.server["Base"], nothing), Binding(Location("", 0), file.index, file.nb, SymbolServer.server["Core"], nothing)]
     file.state.bindings["module"] = Binding[]
+    file.state.bindings[".used modules"] = Dict{String,Any}(
+        "Base" => ModuleBinding(Location(file.state), SIndex(file.index, file.nb), store["Base"]),
+         "Core" => ModuleBinding(Location(file.state), SIndex(file.index, file.nb), store["Core"]))
     file.scope = Scope(nothing, Scope[], file.cst.span, CSTParser.TopLevel, file.index, file.nb)
     file.scope = pass(file.cst, file.state, file.scope, file.index, false, false)
 end
 
-include("bindings.jl")
+
 include("references.jl")
 include("utils.jl")
 include("symbolserver.jl")
 include("documentserver.jl")
 include("lint.jl")
 
-# SymbolServer.init()
-# SymbolServer.load_module(Core, true, true)
+const store = StaticLint.SymbolServer.load_store(joinpath(Pkg.API.dir("StaticLint"), "store"))
 end
 
