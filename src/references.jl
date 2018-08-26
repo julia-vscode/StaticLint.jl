@@ -1,55 +1,61 @@
 function get_ref(x, state::State, s::Scope, blockref, delayed)
     if blockref
         if x isa CSTParser.UnarySyntaxOpCall && x.arg1 isa CSTParser.OPERATOR && x.arg1.kind == CSTParser.Tokens.EX_OR
+            # Sets `blockref` to false, if we're in a string, etc. we're now interpolating.
             return false
         else
             return true
         end
     else
         if x isa CSTParser.IDENTIFIER && !(x.val in ("new", "end", "ccall"))
+            # Add symbol reference (ignore some keywords)
             push!(state.refs, Reference(x, Location(state), SIndex(s.index, s.bindings), delayed))
             return false
         elseif x isa CSTParser.EXPR{CSTParser.MacroName}
+            # Add macroname reference
             push!(state.refs, Reference(x, Location(state), SIndex(s.index, s.bindings), delayed))
             return true
         elseif x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokens.DOT
             if x.arg2 isa CSTParser.EXPR{CSTParser.TupleH}
+                # Add function call (broadcasted) name reference.
                 push!(state.refs, Reference(x.arg1, Location(state), SIndex(s.index, s.bindings), delayed))
                 return false
             else
+                # Add dot-access reference.
                 push!(state.refs, Reference(x, Location(state), SIndex(s.index, s.bindings), delayed))
                 return true
             end
         elseif x isa CSTParser.EXPR{CSTParser.Quote} || x isa CSTParser.EXPR{CSTParser.Quotenode} || x isa CSTParser.EXPR{CSTParser.x_Str}  || x isa CSTParser.EXPR{CSTParser.x_Cmd}
+            # Set `blockref` to true, we're in a quote, string or command
             return true
         end
     end
     return false
 end
 
-function resolve_ref(r::Reference{CSTParser.IDENTIFIER}, bindings, rrefs)
+function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
     out = Any[]
     name = CSTParser.str_value(r.val)
-    if haskey(bindings, name)
-        for i = length(bindings[name]):-1:1
-            b = bindings[name][i]
+    if haskey(state.bindings, name)
+        for i = length(state.bindings[name]):-1:1
+            b = state.bindings[name][i]
             if inscope(r.si, b.si) #inscope(r.index, r.pos, b.index, b.pos)
                 push!(out, b)
             elseif r.delayed
-                for m in bindings["module"]
-                    if in_delayedscope(r.si.i, m.si.i, b.si.i)#in_delayedscope(r.index, m.index, b.index)
+                for m in state.modules
+                    if in_delayedscope(r.si.i, m.si.i, b.si.i) # lots of action here 
                         push!(out, b)
                     end
                 end
             end
         end
     end
-    if haskey(bindings[".used modules"], name)
-        push!(out, bindings[".used modules"][name])
+    if haskey(state.used_modules, name)
+        push!(out, state.used_modules[name])
     else
-        for (n, m) in bindings[".used modules"]
-            if name in m.val[".exported"] && haskey(m.val, name)
-                push!(out, ImportBinding(m.loc, m.si, m.val[name]))
+        for m in state.used_modules
+            if name in m[2].val[".exported"] && haskey(m[2].val, name) # lots of action here
+                push!(out, ImportBinding(m[2].loc, m[2].si, m[2].val[name]))
             end
         end
     end
@@ -71,14 +77,14 @@ end
 
 
 
-function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, bindings, rrefs)
+function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, state, rrefs)
     # rhs 
     rr = Reference(r.val.arg2.args[1], Location(r.loc.file, r.loc.offset + r.val.arg1.fullspan + r.val.op.fullspan), r.si, r.delayed)
     # lhs
     lr = Reference(r.val.arg1, Location(r.loc.file, r.loc.offset), r.si, r.delayed)
-    rlr = resolve_ref(lr, bindings, rrefs)
+    rlr = resolve_ref(lr, state, rrefs)
     if rlr isa ResolvedRef
-        return resolve_ref(rr, bindings, rrefs, rlr)
+        return resolve_ref(rr, state, rrefs, rlr)
     else
         return rlr
     end
@@ -87,17 +93,11 @@ end
 
 resolve_ref(rr, bindings, rrefs) = rr
 # Resolve reference given `lr.r`
-function resolve_ref(rr::Reference, bindings, rrefs, rlr::ResolvedRef)
-    if rlr.b.val isa ModuleBinding # root (rlr.b) is an imported module
-        if Symbol(CSTParser.str_value(rr.val)) in rlr.b.val.internal
-            b = rlr.b.val.loaded[CSTParser.str_value(rr.val)]
-            rrr = ResolvedRef(rr, b)
-            push!(rrefs, rrr)
-            return rrr
-        end
-    elseif rlr.b.val isa Module && haskey(SymbolServer.server, string(rlr.b.val)) # root (rlr.b) is an imported module
-        if Symbol(CSTParser.str_value(rr.val)) in SymbolServer.server[string(rlr.b.val)].internal
-            b = SymbolServer.server[string(rlr.b.val)].loaded[CSTParser.str_value(rr.val)]
+function resolve_ref(rr::Reference, state, rrefs, rlr::ResolvedRef)
+    if rlr.b.val isa Dict # root (rlr.b) is an imported module
+        if haskey(rlr.b.val, CSTParser.str_value(rr.val))
+            b = rlr.b.val[CSTParser.str_value(rr.val)]
+            b = ImportBinding(rlr.b.loc, rlr.b.si, rlr.b.val[CSTParser.str_value(rr.val)])
             rrr = ResolvedRef(rr, b)
             push!(rrefs, rrr)
             return rrr
@@ -107,39 +107,9 @@ function resolve_ref(rr::Reference, bindings, rrefs, rlr::ResolvedRef)
 end 
 
 
-function _hasfield(b::Binding, r::Reference)
-    
-end
-
-function resolve_ref(r::Reference{CSTParser.EXPR{CSTParser.MacroName}}, bindings, refs)
-    name = CSTParser.str_value(r.val.args[2])
-    if haskey(bindings, name)
-        for i = length(bindings[name]):-1:1
-            b = bindings[name][i]
-            # if inscope(r.index, r.pos, b.index, b.pos) && CSTParser.defines_macro(b.val)
-            if inscope(r.si, b.si) && CSTParser.defines_macro(b.val)
-                rr = ResolvedRef(r, b)
-                push!(refs, rr)
-                return rr
-            end
-        end
-    end
-    mname = string("@", name)
-    smname = Symbol(mname)
-    # for m in bindings["using"]
-    #     if smname in m.val.exported
-    #         rr = ResolvedRef(r, m.val.loaded[mname])
-    #         push!(refs, rr)
-    #         return rr
-    #     end
-    # end
-    return r
-end
-
-
-function resolve_refs(refs, bindings, res = ResolvedRef[], unres = Reference[])
+function resolve_refs(refs, state, res = ResolvedRef[], unres = Reference[])
     for r in refs
-        rr = resolve_ref(r, bindings, res)
+        rr = resolve_ref(r, state, res)
         if rr == r
             push!(unres, rr)
         end
@@ -172,9 +142,9 @@ function cat_references(server, file, refs = [])
     return refs
 end
 
-function get_methods(rref::ResolvedRef, bindings)
+function get_methods(rref::ResolvedRef, state)
     M  = Binding[rref.b]
-    B = bindings[CSTParser.str_value(rref.r.val)]
+    B = state.bindings[CSTParser.str_value(rref.r.val)]
     firstind = findfirst(b->b==rref.b, B)
     firstind = firstind == nothing ? 0 : 1
     for i = firstind-1:-1:1

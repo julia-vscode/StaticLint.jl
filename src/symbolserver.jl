@@ -86,7 +86,7 @@ end
 
 function load_package(m, store, v)
     try
-        eval(Main,:(import $(Symbol(m))))
+        Main.eval(:(import $(Symbol(m))))
         M = getfield(Main, Symbol(m))
         load_module(M, store, v)
     catch err
@@ -94,15 +94,14 @@ function load_package(m, store, v)
     end
 end
 
-function build_base_store(store = Dict())
+function build_base_store(store = Dict{Any,Any}())
     mods = collect(keys(Pkg.API.installed()))
     load_module(Base, store, nothing)
-    push!(store["Base"][".exported"], "include")
+    push!(store["Base"][".exported"], :include)
     load_module(Core, store, nothing)
-    for (m, v) in Pkg.API.installed()
-        if v == nothing
-            load_package(m, store, v)
-        end
+    c = Pkg.Types.Context()
+    for (uuid,m) in c.stdlibs
+        load_package(m, store, nothing)
     end
     return store
 end
@@ -127,6 +126,11 @@ function load(file)
     io = open(file)
     store = JSON.Parser.parse(deserialize(io))
     close(io)
+    for (m,v) in store
+        if v isa Dict && haskey(v, ".exported")
+            v[".exported"] = Set{String}(v[".exported"])
+        end
+    end
     return store
 end
 
@@ -150,6 +154,29 @@ function load_store(dir)
     end
     store[".importable_mods"] = collect_mods(store)
     return store
+end
+
+function save_pkg_store(dir)
+    pkgstore = build_pkg_store(Dict())
+    for (k,v) in pkgstore
+        save(v, joinpath(dir, string(k, ".jstore")))
+    end
+end
+
+function load_pkg_store(dir, store)
+    for f in readdir(dir)
+        if endswith(f, ".jstore") && f != "base.jstore"
+            pstore = load(joinpath(dir, f))
+            store[f[1:end-7]] = pstore
+        end
+    end
+    for (m,v) in store
+        if v isa Dict && haskey(v, ".exported")
+            v[".exported"] = Set{String}(v[".exported"])
+        end
+    end
+    store[".importable_mods"] = collect_mods(store)
+    store
 end
 
 function collect_mods(store, mods = [], root = "")

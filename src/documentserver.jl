@@ -17,14 +17,10 @@ is_loaded(server, path) = haskey(server.files, path)
 can_load(server, path) = isfile(path)
 
 function load_file(server, path::String, index, nb, parent)
-    code = readstring(path)
+    code = read(path, String)
     cst = CSTParser.parse(code, true)
     state = State(Location(path, 0), Dict(), Reference[], [], server)
-    if isempty(parent)
-        state.bindings[".used modules"]["Base"] = StaticLint.ModuleBinding(StaticLint.Location(), StaticLint.SIndex(index, nb), StaticLint.store["Base"])
-        state.bindings[".used modules"]["Core"] = StaticLint.ModuleBinding(StaticLint.Location(), StaticLint.SIndex(index, nb), StaticLint.store["Core"])
-    end
-    state.bindings["module"] = Binding[]
+    init_bindings(state.bindings, parent)
     s = Scope(nothing, Scope[], cst.span,  CSTParser.TopLevel, index, nb, Set())
     scope = pass(cst, state, s, index, false, false)
     file = File(cst, state, scope, index, nb, parent, ResolvedRef[], Reference[])

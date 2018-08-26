@@ -10,6 +10,7 @@ function create_scope(x, state, s)
         x isa CSTParser.EXPR{CSTParser.For} ||
         x isa CSTParser.EXPR{CSTParser.Try} ||
         x isa CSTParser.EXPR{CSTParser.Generator} ||
+        x isa CSTParser.WhereOpCall ||
         CSTParser.defines_anon_function(x)
         if def_f
             t = CSTParser.FunctionDef
@@ -22,7 +23,7 @@ function create_scope(x, state, s)
         s.bindings += 1
         index1 = cattuple(s.index,s.bindings)
         if CSTParser.defines_module(x) # add module barrier
-            push!(state.bindings["module"], Binding(Location(state), SIndex(index1, 0), x, nothing))
+            add_module_barrier(state, index1, x)
         end
         s1 = Scope(s, Scope[], state.loc.offset .+ x.span, t, index1, 0)
         push!(s.children, s1)
@@ -33,21 +34,41 @@ function create_scope(x, state, s)
     end
 end
 
+function add_module_barrier(state, index, x)
+    # push!(state.bindings[".modules"], Binding(Location(state), SIndex(index, 0), x, nothing))
+    push!(state.modules, Binding(Location(state), SIndex(index, 0), x, nothing))
+end
 
 inscope(asi, bsi) = inscope(asi.i, asi.n, bsi.i, bsi.n)
-function inscope(rind, rpos, bind, bpos)
-    nrind = length(rind)
-    nbind = length(bind)
-    nbind > nrind && return false
-    i = 1
-    while i <= nbind
-        rind[i] != bind[i] && return false
-        i += 1
-    end
-    if nrind == nbind
-        return rpos ≥ bpos
+# function inscope(rind, rpos, bind, bpos)
+#     nrind = length(rind)
+#     nbind = length(bind)
+#     nbind > nrind && return false
+#     i = 1
+#     while i <= nbind
+#         rind[i] != bind[i] && return false
+#         i += 1
+#     end
+#     if nrind == nbind
+#         return rpos ≥ bpos
+#     else
+#         return rind[i] ≥ bpos
+#     end
+# end
+@generated function inscope(rind::NTuple{rN,Int}, rpos::Int, bind::NTuple{bN,Int}, bpos::Int) where {bN,rN}
+    if bN > rN
+        return :(false)
+    elseif bN == rN
+        return :(rind == bind && rpos >= bpos)
     else
-        return rind[i] ≥ bpos
+        return quote
+            i = 1
+            while i <= $(bN)
+                rind[i] != bind[i] && return false
+                i += 1
+            end
+            return rind[i] ≥ bpos
+        end
     end
 end
 
@@ -76,7 +97,10 @@ function lt(ai::NTuple{na,Int},ap, bi::NTuple{nb,Int}, bp) where {na, nb}
     end 
 end
 
-lt(a, b) = lt(a.si.i, a.si.n, b.si.i, b.si.n)
+
+# lt(a, b) = lt(a.si.i, a.si.n, b.si.i, b.si.n)
+lt(a,b) = lt(a.si, b.si)
+lt(a::SIndex, b::SIndex) = lt(a.i, a.n, b.i, b.n)
 
 @generated function in_delayedscope(rindex::NTuple{Nr,Int}, mindex::NTuple{Nm,Int}, bindex::NTuple{Nb,Int}) where {Nr,Nm,Nb}
     out = :()
@@ -99,6 +123,24 @@ function cattuple(v1::Tuple, v2::Tuple)
     n1 = length(v1)
     n2 = length(v2)
     ntuple(j -> j <= n1 ? v1[j] : v2[j-n1], n1 + n2)
+end
+
+@generated function shrink_tuple(t::NTuple{N,Int}) where N
+    out = :()
+    for i = 1:N-1
+        push!(out.args, :(t[$i]))
+    end     
+    return out
+end
+
+shrink_sindex(si::SIndex) = SIndex(shrink_tuple(si.i), si.i[end])
+function shrink_sindex(si::SIndex, n) 
+    i = 0
+    while i < n
+        si = shrink_sindex(si)
+        i+=1
+    end
+    si
 end
 
 function get_path(x::CSTParser.EXPR{CSTParser.Call})
@@ -156,16 +198,6 @@ function get_include(x, state, s)
     end
 end
 
-function find_root(server, path)
-    for (n,f) in server.files
-        for incl in f.state.includes
-            if path == incl.file
-                return find_root(server, n)
-            end
-        end
-    end
-    return path
-end
 
 
 function get_stack(x, offset, pos = 0, stack = [], offsets = Int[])
@@ -181,14 +213,6 @@ function get_stack(x, offset, pos = 0, stack = [], offsets = Int[])
     return stack, offsets
 end
 
-function flatten_dot(x::CSTParser.BinarySyntaxOpCall, stack = [])
-    if x.arg1 isa CSTParser.BinarySyntaxOpCall
-        flatten_dot(x.arg1, stack)
-    else
-        push!(stack, x.arg1)
-    end
-    push!(stack, x.arg2 isa CSTParser.EXPR{CSTParser.Quotenode} ? x.arg2.args[1] : x.arg2)
-    return stack
-end
+
 
 Location(state::State) = Location(state.loc.file, state.loc.offset)
