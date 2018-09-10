@@ -20,7 +20,7 @@ function get_ref(x, state::State, s::Scope, blockref, delayed)
                 # Add function call (broadcasted) name reference.
                 push!(state.refs, Reference(x.arg1, Location(state), SIndex(s.index, s.bindings), delayed))
                 return false
-            else
+            elseif x.arg2 isa CSTParser.EXPR{CSTParser.Quotenode}
                 # Add dot-access reference.
                 push!(state.refs, Reference(x, Location(state), SIndex(s.index, s.bindings), delayed))
                 return true
@@ -78,6 +78,7 @@ end
 
 
 function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, state, rrefs)
+    length(r.val.arg2.args) == 0 && return r
     # rhs 
     rr = Reference(r.val.arg2.args[1], Location(r.loc.file, r.loc.offset + r.val.arg1.fullspan + r.val.op.fullspan), r.si, r.delayed)
     # lhs
