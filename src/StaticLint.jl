@@ -128,12 +128,8 @@ include("documentserver.jl")
 include("lint.jl")
 
 const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
-if isfile(joinpath(storedir, "base.jstore"))
-    const store = SymbolServer.load(joinpath(storedir, "base.jstore"))
-else
-    const store = SymbolServer.build_base_store()
-    SymbolServer.save(store, joinpath(storedir, "base.jstore"))
-end
+const store = SymbolServer.build_base_store()
+
 # To be called after `using ...`
 loadpkgs() = SymbolServer.load_pkg_store(storedir, store)
 end

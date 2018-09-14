@@ -78,7 +78,7 @@ end
 
 
 function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, state, rrefs)
-    length(r.val.arg2.args) == 0 && return r
+    (length(r.val.arg2.args) == 0 || !(r.val.arg2 isa CSTParser.EXPR{CSTParser.Quotenode})) && return r
     # rhs 
     rr = Reference(r.val.arg2.args[1], Location(r.loc.file, r.loc.offset + r.val.arg1.fullspan + r.val.op.fullspan), r.si, r.delayed)
     # lhs
