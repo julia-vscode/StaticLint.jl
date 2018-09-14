@@ -1,5 +1,5 @@
 module StaticLint
-using CSTParser, Pkg
+using CSTParser, Pkg, SymbolServer
 const Index = Tuple
 struct SIndex{N}
     i::NTuple{N,Int}
@@ -123,17 +123,27 @@ end
 
 include("references.jl")
 include("utils.jl")
-include("symbolserver.jl")
 include("documentserver.jl")
 include("lint.jl")
 
-const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
-if isfile(joinpath(storedir, "base.jstore"))
-    const store = SymbolServer.load(joinpath(storedir, "base.jstore"))
-else
-    const store = SymbolServer.build_base_store()
-    SymbolServer.save(store, joinpath(storedir, "base.jstore"))
+const store = Dict{Any,Any}()
+
+function load_base_into_store(symbolserver)
+    store["Base"] = SymbolServer.import_module(symbolserver, :Base)
+    push!(store["Base"][".exported"], :include)
+
+    store["Core]"] = SymbolServer.import_module(symbolserver, :Core)
+    c = Pkg.Types.Context()
+    for (uuid,m) in c.stdlibs
+        store[string(m)] = SymbolServer.import_module(symbolserver, Symbol(m))
+    end
 end
-# To be called after `using ...`
-loadpkgs() = SymbolServer.load_pkg_store(storedir, store)
+
+function load_pkgs_into_store(symbolserver)
+    pkgs = get_packages_in_env(symbolserver)
+    for p in pkgs
+        store[string(p)] = SymbolServer.import_module(symbolserver, p)
+    end
+end
+
 end
