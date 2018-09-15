@@ -106,6 +106,20 @@ function pass(x, state::State, s::Scope, index, blockref, delayed)
     s
 end
 
+function pass(x::CSTParser.EXPR{CSTParser.Kw}, state::State, s::Scope, index, blockref, delayed)
+    if x.args[1] isa CSTParser.IDENTIFIER
+        state.loc.offset += x.args[1].fullspan + x.args[2].fullspan
+        pass(x.args[3], state, s, s.index, blockref, delayed)
+    else
+        for a in x
+            ablockref = get_ref(a, state, s, blockref, delayed)
+            pass(a, state, s, s.index, ablockref, delayed)
+        end
+        s
+    end
+        
+end
+
 
 function pass(file::File)
     file.state.loc.offset = 0
@@ -129,6 +143,7 @@ include("lint.jl")
 
 const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
 const store = SymbolServer.build_base_store()
+store[".importable_mods"] = SymbolServer.collect_mods(store)
 
 # To be called after `using ...`
 loadpkgs() = SymbolServer.load_pkg_store(storedir, store)
