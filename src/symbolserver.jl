@@ -1,4 +1,4 @@
-module SymbolServer
+    module SymbolServer
 using JSON, Serialization, Pkg
 import Base
 import Base: isdeprecated
@@ -173,7 +173,7 @@ function load_pkg_store(dir, store)
     end
     for (m,v) in store
         if v isa Dict && haskey(v, ".exported")
-            v[".exported"] = Set{String}(v[".exported"])
+            v[".exported"] = Set{String}(string.(v[".exported"]))
         end
     end
     store[".importable_mods"] = collect_mods(store)
