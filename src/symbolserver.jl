@@ -164,6 +164,7 @@ function save_pkg_store(dir)
 end
 
 function load_pkg_store(dir, store)
+    !isdir(dir) && return store
     for f in readdir(dir)
         if endswith(f, ".jstore") && f != "base.jstore"
             pstore = load(joinpath(dir, f))
