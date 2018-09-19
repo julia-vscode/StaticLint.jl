@@ -133,6 +133,16 @@ end
     return out
 end
 
+@generated function add_to_tuple(t::NTuple{N,Int}, n) where N
+    out = :()
+    for i = 1:N
+        push!(out.args, :(t[$i]))
+    end
+    push!(out.args, :n)
+    return out
+end
+
+
 shrink_sindex(si::SIndex) = SIndex(shrink_tuple(si.i), si.i[end])
 function shrink_sindex(si::SIndex, n) 
     i = 0
