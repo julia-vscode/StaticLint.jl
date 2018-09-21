@@ -7,7 +7,7 @@ end
 mutable struct Binding
     loc::Location
     si::SIndex
-    val
+    val::Union{CSTParser.AbstractEXPR,Dict}
     t
 end
 
@@ -393,13 +393,31 @@ function resolve_import(imprt, state)
     for b in bindings
         # b = (doimport, name, val)
         !b[1] && continue
-        binding = Binding(imprt.loc, imprt.si, b[3], nothing)
+        if b[3] isa Binding
+            binding = Binding(imprt.loc, imprt.si, b[3].val, b[3].t)
+        else
+            binding = Binding(imprt.loc, imprt.si, b[3], nothing)
+        end
         add_binding(b[2], binding, state.bindings)
         
         if u 
             if b[3] isa Dict && get(b[3],".type", "") == "module"
                 state.used_modules[b[2]] = binding
-            else
+            elseif b[3] isa Binding
+                ind = add_to_tuple(b[3].si.i, b[3].si.n + 1)                
+                if haskey(state.exports, ind)
+                    for n in state.exports[ind]
+                        ret = find_binding(state.bindings, n, b->b.si.i == ind)
+                        isempty(ret) && continue
+                        eb = last(ret)
+                        if eb isa Binding
+                            binding = Binding(imprt.loc, imprt.si, eb.val, eb.t)
+                        else
+                            binding = Binding(imprt.loc, imprt.si, eb, nothing)
+                        end
+                        add_binding(n, binding, state.bindings)
+                    end
+                end
             end
         end
     end
