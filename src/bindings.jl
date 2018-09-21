@@ -298,101 +298,6 @@ function build_bindings(server, file)
     return state
 end
 
-function resolve_imports(state)
-    for imprt in state.imports
-        x = imprt.val
-        u = x isa CSTParser.EXPR{CSTParser.Using}
-        i = 2
-        predots = 0
-        root = []
-        block = []
-        while i ≤ length(x.args)
-            arg = x.args[i]
-            if arg isa Union{CSTParser.PUNCTUATION,CSTParser.OPERATOR} && arg.kind == CSTParser.Tokens.DOT
-                if isempty(block)
-                    predots += 1
-                end
-            elseif arg isa CSTParser.PUNCTUATION && arg.kind == CSTParser.Tokens.COMMA   
-                add_import_binding(state, imprt, root, block, predots, u)
-                empty!(block)
-            elseif arg isa CSTParser.OPERATOR && arg.kind == CSTParser.Tokens.COLON
-                root = block
-                block = []
-            elseif arg isa CSTParser.IDENTIFIER
-                push!(block, arg)
-            else 
-                return
-            end
-            i += 1
-        end
-        if !isempty(block)
-            add_import_binding(state, imprt, root, block, predots, u)
-        end
-    end
-end
-
-
-function import_local(full_name_cst, si, state)
-    name = CSTParser.str_value(first(full_name_cst))
-    if length(full_name_cst) > 1
-        root = find_binding(state.bindings, name, b -> b.t == CSTParser.ModuleH && b.si.i == si.i && b.si.n >= si.n)
-        if !isempty(root)
-            popfirst!(full_name_cst)
-            return import_local(full_name_cst, last(root).si, state)
-        end
-    else
-        val = find_binding(state.bindings, name, b -> b.si.i == si.i && b.si.n >= si.n)
-        if !isempty(val)
-            return last(val)
-        end
-    end
-    return 
-end
-
-
-function add_import_binding(state, imprt, root, block, predots, u)
-    strs = CSTParser.str_value.(block)
-    full_name = join(strs, ".")
-    if full_name in store[".importable_mods"]
-        binding = Binding(imprt.loc, imprt.si, _store_search(strs, store)[end], store["Core"]["Module"])
-        if haskey(state.bindings, last(strs))
-            push!(state.bindings[last(strs)], binding)
-        else
-            state.bindings[last(strs)] = [binding]
-        end
-        if u
-            state.used_modules[last(strs)] = binding
-        end
-    elseif predots > 0
-        full_name_cst = vcat(root, block)
-        ms = find_binding(state.bindings, CSTParser.str_value(first(full_name_cst)), b->b.t == CSTParser.ModuleH)
-
-        if length(ms) >= 2 && length(imprt.si.i) >= predots-1
-            si = predots > 1 ? shrink_sindex(imprt.si, predots - 1) : imprt.si
-            ext_i = findfirst(m->m.si.i == si.i, ms) #find module binding in this scope
-            ext_i == nothing || length(ms) <= ext_i && return
-
-            ext_m = ms[ext_i] # outer bindings
-            int_m = ms[ext_i+1] # inner reference within module scope
-            
-            b = import_local(full_name_cst, int_m.si, state)
-            if b.val isa Union{CSTParser.ModuleH,CSTParser.BareModule}
-            elseif b.val isa CSTParser.AbstractEXPR
-                add_binding(CSTParser.str_value(last(full_name_cst)), Binding(b.loc, imprt.si, b.val, b.t), state.bindings)
-            end            
-        end
-    else
-        if !isempty(root)
-            strs = CSTParser.str_value.(vcat(root, block))
-        end
-        bs = _store_search(strs, store)
-        if bs!=nothing
-            add_binding(last(strs), Binding(imprt.loc, imprt.si, last(bs), nothing), state.bindings)
-        end
-    end
-end
-
-
 function find_binding(bindings, name, st::Function = x->true)
     out = Binding[]
     if haskey(bindings, name)
@@ -403,4 +308,105 @@ function find_binding(bindings, name, st::Function = x->true)
         end
     end
     return out
+end
+
+function _get_field(par, arg, state)
+    if par isa Dict
+        if haskey(par, CSTParser.str_value(arg))
+            par = par[CSTParser.str_value(arg)]
+            return par
+        else
+            return
+        end
+    elseif par isa Tuple
+        ret = StaticLint.find_binding(state.bindings, CSTParser.str_value(arg), b->b.si.i == par && b.val isa CSTParser.EXPR{T} where T <: Union{CSTParser.ModuleH,CSTParser.BareModule}) 
+        if isempty(ret)
+            return
+        else
+            par = last(ret)
+            return par
+        end
+    else
+        ind = StaticLint.add_to_tuple(par.si.i, par.si.n + 1)
+        ret = StaticLint.find_binding(state.bindings, CSTParser.str_value(arg), b->b.si.i == ind) 
+        if isempty(ret)
+            return
+        else
+            par = last(ret)
+            return par
+        end
+    end
+    return
+end
+
+
+
+function resolve_import(imprt, state)
+    x = imprt.val
+    u = x isa CSTParser.EXPR{CSTParser.Using}
+    i = 2
+    n = length(x.args)
+    argname = ""
+    predots = 0
+    
+    root = par = store
+    bindings = []
+    while i <= length(x.args)
+        arg = x.args[i]
+        if arg isa CSTParser.IDENTIFIER
+            par = _get_field(par,arg, state)
+            argname = CSTParser.str_value(x.args[i])
+            if par == nothing
+                return
+            end
+        elseif arg isa CSTParser.PUNCTUATION && arg.kind == CSTParser.Tokens.COMMA
+            push!(bindings, (true, argname, par))
+            par = root
+        elseif arg isa CSTParser.OPERATOR && arg.kind == CSTParser.Tokens.COLON
+            root = par
+            push!(bindings, (false, argname, par))
+        elseif arg isa CSTParser.PUNCTUATION && arg.kind == CSTParser.Tokens.DOT
+            #dot between identifiers
+            push!(bindings, (false, argname, par))
+        elseif arg isa CSTParser.OPERATOR && arg.kind == CSTParser.Tokens.DOT
+            #dot prexceding identifier
+            if par == root == store
+                par = imprt.si.i
+            elseif par isa Tuple
+                if length(par) > 0
+                    par = shrink_tuple(par)
+                else
+                    return
+                end
+            else
+                return
+            end
+        else
+            return
+        end
+        if i == n
+            push!(bindings, (true, CSTParser.str_value(arg), par))
+        end
+        i += 1
+    end
+
+    for b in bindings
+        # b = (doimport, name, val)
+        !b[1] && continue
+        binding = Binding(imprt.loc, imprt.si, b[3], nothing)
+        add_binding(b[2], binding, state.bindings)
+        
+        if u 
+            if b[3] isa Dict && get(b[3],".type", "") == "module"
+                state.used_modules[b[2]] = binding
+            else
+            end
+        end
+    end
+end
+
+function resolve_imports(state)
+    for imprt in state.imports
+        resolve_import(imprt, state)
+    end
 end
