@@ -19,16 +19,15 @@ can_load(server, path) = isfile(path)
 function load_file(server, path::String, index, nb, parent)
     code = read(path, String)
     cst = CSTParser.parse(code, true)
-    state = State(Location(path, 0), Dict(), Reference[], [], server)
-    init_bindings(state.bindings, parent)
-    s = Scope(nothing, Scope[], cst.span,  CSTParser.TopLevel, index, nb, Set())
+    state = State(path, server)
+    s = Scope(nothing, Scope[], cst.span,  CSTParser.TopLevel, index, nb)
     scope = pass(cst, state, s, index, false, false)
-    file = File(cst, state, scope, index, nb, parent, ResolvedRef[], Reference[])
+    file = File(cst, state, scope, index, nb, "", [], [])
     setfile(server, path, file)
     return file
 end
 
-function loaddir(dir::String, server::DocumentServer = DocumentServer())
+function load_dir(dir::String, server::DocumentServer = DocumentServer())
     for (root, dirs, files) in walkdir(dir)
         for file in files
             if endswith(file, ".jl")
