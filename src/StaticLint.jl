@@ -11,14 +11,14 @@ mutable struct Location
     offset::Int
 end
 
-include("bindings.jl")
-
 mutable struct Reference{T}
     val::T
     loc::Location
     si::SIndex
     delayed::Bool
 end
+
+include("bindings.jl")
 
 mutable struct ResolvedRef{T, S}
     r::Reference{T}
@@ -52,7 +52,7 @@ end
 
 mutable struct State
     loc::Location
-    bindings::Dict{String,Vector{Binding}}
+    bindings
     modules::Vector{Binding}
     exports::Dict{Tuple,Vector{String}}
     imports::Vector{ImportBinding}
@@ -61,8 +61,8 @@ mutable struct State
     includes::Vector{Include}
     server
 end
-State() = State(Location("", 0), Dict{String,Vector{Binding}}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], DocumentServer())
-State(path::String, server) = State(Location(path, 0), Dict{String,Vector{Binding}}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], server)
+State() = State(Location("", 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], DocumentServer())
+State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], server)
 function Base.display(state::State)
     println("[State ($(state.loc.file)) w/ ")
     println("      $(length(state.bindings)) bindings") 
@@ -140,6 +140,7 @@ include("utils.jl")
 include("symbolserver.jl")
 include("documentserver.jl")
 include("lint.jl")
+include("helpers.jl")
 
 const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
 const store = SymbolServer.build_base_store()

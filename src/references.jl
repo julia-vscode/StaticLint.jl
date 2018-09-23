@@ -33,23 +33,35 @@ function get_ref(x, state::State, s::Scope, blockref, delayed)
     return false
 end
 
+function res_ref(name, ind, bindings)
+    if haskey(bindings, ind) && haskey(bindings[ind], name)
+        return bindings[ind][name]
+    elseif length(ind) > 0
+        return res_ref(name, shrink_tuple(ind), bindings)
+    else
+        return []
+    end
+end
+
 function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
     out = Any[]
     name = CSTParser.str_value(r.val)
-    if haskey(state.bindings, name)
-        for i = length(state.bindings[name]):-1:1
-            b = state.bindings[name][i]
-            if inscope(r.si, b.si) #inscope(r.index, r.pos, b.index, b.pos)
-                push!(out, b)
-            elseif r.delayed
-                for m in state.modules
-                    if in_delayedscope(r.si.i, m.si.i, b.si.i) # lots of action here 
-                        push!(out, b)
-                    end
-                end
-            end
-        end
-    end
+    ind = r.si.i
+    append!(out,res_ref(name, ind, state.bindings))
+    # if haskey(state.bindings, name)
+    #     for i = length(state.bindings[name]):-1:1
+    #         b = state.bindings[name][i]
+    #         if inscope(r.si, b.si) #inscope(r.index, r.pos, b.index, b.pos)
+    #             push!(out, b)
+    #         elseif r.delayed
+    #             for m in state.modules
+    #                 if in_delayedscope(r.si.i, m.si.i, b.si.i) # lots of action here 
+    #                     push!(out, b)
+    #                 end
+    #             end
+    #         end
+    #     end
+    # end
     if haskey(state.used_modules, name)
         push!(out, state.used_modules[name])
     else
@@ -60,18 +72,31 @@ function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTP
         end
     end
     
+    #get lower bound on scope
+    lbsi = SIndex((), 0)
+    for m in state.modules
+        if inscope(r.si, m.si) && lt(lbsi, m.si)
+            lbsi = m.si
+        end
+    end
+
     if isempty(out)
         return r
     else
         ret = first(out)
         for i = 2:length(out)
-            if lt(ret, out[i])
+            if r.delayed && length(r.si.i) > length(out[i].si.i) && in_delayedscope(r.si.i, lbsi.i, out[i].si.i) && lt(ret, out[i])
+
+                ret = out[i]
+            elseif lt(ret, out[i]) && inscope(r.si, out[i].si)
                 ret = out[i]
             end
         end
         rr = ResolvedRef(r, ret)
         push!(rrefs, rr)
+        push!(ret.refs, r)
         return rr
+        # return out
     end
 end
 
