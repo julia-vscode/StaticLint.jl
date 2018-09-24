@@ -48,20 +48,7 @@ function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTP
     name = CSTParser.str_value(r.val)
     ind = r.si.i
     append!(out,res_ref(name, ind, state.bindings))
-    # if haskey(state.bindings, name)
-    #     for i = length(state.bindings[name]):-1:1
-    #         b = state.bindings[name][i]
-    #         if inscope(r.si, b.si) #inscope(r.index, r.pos, b.index, b.pos)
-    #             push!(out, b)
-    #         elseif r.delayed
-    #             for m in state.modules
-    #                 if in_delayedscope(r.si.i, m.si.i, b.si.i) # lots of action here 
-    #                     push!(out, b)
-    #                 end
-    #             end
-    #         end
-    #     end
-    # end
+    
     if haskey(state.used_modules, name)
         push!(out, state.used_modules[name])
     else
@@ -73,12 +60,7 @@ function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTP
     end
     
     #get lower bound on scope
-    lbsi = SIndex((), 0)
-    for m in state.modules
-        if inscope(r.si, m.si) && lt(lbsi, m.si)
-            lbsi = m.si
-        end
-    end
+    lbsi = get_lbsi(r, state)
 
     if isempty(out)
         return r
@@ -86,7 +68,6 @@ function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTP
         ret = first(out)
         for i = 2:length(out)
             if r.delayed && length(r.si.i) > length(out[i].si.i) && in_delayedscope(r.si.i, lbsi.i, out[i].si.i) && lt(ret, out[i])
-
                 ret = out[i]
             elseif lt(ret, out[i]) && inscope(r.si, out[i].si)
                 ret = out[i]
@@ -96,10 +77,18 @@ function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTP
         push!(rrefs, rr)
         push!(ret.refs, r)
         return rr
-        # return out
     end
 end
 
+function get_lbsi(ref, state)
+    lbsi = SIndex((), 0)
+    for m in state.modules
+        if inscope(ref.si, m.si) && lt(lbsi, m.si)
+            lbsi = m.si
+        end
+    end
+    lbsi
+end
 
 
 function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, state, rrefs)
@@ -170,20 +159,32 @@ end
 
 function get_methods(rref::ResolvedRef, state)
     M  = Binding[rref.b]
-    B = state.bindings[CSTParser.str_value(rref.r.val)]
-    firstind = findfirst(b->b==rref.b, B)
-    firstind = firstind == nothing ? 0 : 1
-    for i = firstind-1:-1:1
-        if lt(B[i], rref.b) 
-            if B[i].t == CSTParser.FunctionDef
-                push!(M, B[i])
-            elseif B[i].t in (CSTParser.Struct, CSTParser.Mutable, CSTParser.Abstract, CSTParser.Primitive)
-                pushfirst!(M, B[i])
-                break
+    if haskey(state.bindings, rref.b.si.i)
+        if haskey(state.bindings[rref.b.si.i], CSTParser.str_value(rref.r.val))
+            for b in state.bindings[rref.b.si.i][CSTParser.str_value(rref.r.val)]
+                if CSTParser.defines_function(b.val)
+                    push!(M, b)
+                else
+                    pushfirst!(M, b)
+                    break
+                end
             end
-        else
-            break
         end
     end
+    # B = state.bindings[CSTParser.str_value(rref.r.val)]
+    # firstind = findfirst(b->b==rref.b, B)
+    # firstind = firstind == nothing ? 0 : 1
+    # for i = firstind-1:-1:1
+    #     if lt(B[i], rref.b) 
+    #         if B[i].t == CSTParser.FunctionDef
+    #             push!(M, B[i])
+    #         elseif B[i].t in (CSTParser.Struct, CSTParser.Mutable, CSTParser.Abstract, CSTParser.Primitive)
+    #             pushfirst!(M, B[i])
+    #             break
+    #         end
+    #     else
+    #         break
+    #     end
+    # end
     M
 end

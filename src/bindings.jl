@@ -2,7 +2,9 @@ mutable struct ImportBinding
     loc::Location
     si::SIndex
     val
+    refs::Vector{Reference}
 end
+ImportBinding(loc, si, val, refs = Reference[]) = ImportBinding(loc, si, val, refs)
 
 mutable struct Binding
     loc::Location
