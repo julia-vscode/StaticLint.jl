@@ -6,7 +6,7 @@ import Base: isdeprecated
 function read_methods(x)
     map(methods(x)) do m
         Dict("type" => "method",
-             "file" => String(m.file),
+             "file" => isabspath(String(m.file)) ? String(m.file) : Base.find_source_file(String(m.file)),
              "line" => m.line,
              "args" => Base.arg_decl_parts(m)[2][2:end])
     end
