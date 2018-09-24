@@ -2,15 +2,18 @@ mutable struct ImportBinding
     loc::Location
     si::SIndex
     val
+    refs::Vector{Reference}
 end
+ImportBinding(loc, si, val, refs = Reference[]) = ImportBinding(loc, si, val, refs)
 
 mutable struct Binding
     loc::Location
     si::SIndex
     val::Union{CSTParser.AbstractEXPR,Dict}
     t
+    refs::Vector{Reference}
 end
-
+Binding(loc, si, val, t= nothing, refs = Reference[]) = Binding(loc, si, val, t, refs)
 Base.display(b::Binding) = println(b.si," @ ",  basename(b.loc.file), ":", b.loc.offset)
 Base.display(B::Array{Binding}) = for b in B display(b) end
 
@@ -18,16 +21,22 @@ function add_binding(name, x, state, s, t = nothing)
     # global bindinglist
     s.bindings += 1
     val = Binding(StaticLint.Location(state), SIndex(s.index, s.bindings), x, t)
-    add_binding(name, val, state.bindings)
+    
+    add_binding(name, val, state.bindings, s.index)
 end
 
-function add_binding(name, binding, bindings::Dict{String,Vector{Binding}})
-    if haskey(bindings, name)
-        push!(bindings[name], binding)
+function add_binding(name, binding::Binding, bindings::Dict, index::Tuple)
+    if haskey(bindings, index)
+        if haskey(bindings[index], name)
+            push!(bindings[index][name], binding)
+        else
+            bindings[index][name] = Binding[binding]
+        end
     else
-        bindings[name] = Binding[binding]
+        bindings[index] = Dict(name => Binding[binding])
     end
 end
+    
 
 # Gets bindings added to the current scope which an expression is in: modules, functions, macros, datatype declarations, variables and imported bindings.
 function ext_binding(x, state, s)
@@ -261,12 +270,18 @@ function get_imports(x, state, s)
 end
 
 function cat_bindings(server, file, vars = State())
-    for (name,bs) in file.state.bindings
-        if !haskey(vars.bindings, name)
-            vars.bindings[name] = Binding[]
+    for (ind, d) in file.state.bindings
+        if !haskey(vars.bindings, ind)
+            vars.bindings[ind] = Dict()
         end
-        append!(vars.bindings[name], bs)
+        for (n, bs) in file.state.bindings[ind]
+            if !haskey(vars.bindings[ind], n)
+                vars.bindings[ind][n] = Binding[]
+            end
+            append!(vars.bindings[ind][n], file.state.bindings[ind][n])
+        end
     end
+    
     append!(vars.modules, file.state.modules)
     append!(vars.imports, file.state.imports)
     
@@ -398,7 +413,7 @@ function resolve_import(imprt, state)
         else
             binding = Binding(imprt.loc, imprt.si, b[3], nothing)
         end
-        add_binding(b[2], binding, state.bindings)
+        add_binding(b[2], binding, state.bindings, imprt.si.i)
         
         if u 
             if b[3] isa Dict && get(b[3],".type", "") == "module"
@@ -415,7 +430,7 @@ function resolve_import(imprt, state)
                         else
                             binding = Binding(imprt.loc, imprt.si, eb, nothing)
                         end
-                        add_binding(n, binding, state.bindings)
+                        add_binding(n, binding, state.bindings, imprt.si.i)
                     end
                 end
             end

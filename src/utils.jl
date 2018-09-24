@@ -106,6 +106,8 @@ lt(a::SIndex, b::SIndex) = lt(a.i, a.n, b.i, b.n)
     out = :()
     if bindex != mindex || Nm > Nr || Nb > Nr
         return :(false)
+    elseif Nm == Nb == 0
+        return true
     else
         out = :(rindex[$Nm] == mindex[$Nm])
         for i = Nm-1:-1:1
