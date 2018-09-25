@@ -216,7 +216,7 @@ function get_stack(x, offset, pos = 0, stack = [], offsets = Int[])
     push!(stack, x)
     push!(offsets, pos)
     for a in x
-        if pos < offset <= pos + a.fullspan
+        if pos <= offset < pos + a.fullspan
             return get_stack(a, offset, pos, stack, offsets)
         else
             pos += a.fullspan

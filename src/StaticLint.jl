@@ -139,7 +139,6 @@ include("references.jl")
 include("utils.jl")
 include("symbolserver.jl")
 include("documentserver.jl")
-include("lint.jl")
 include("helpers.jl")
 
 const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
