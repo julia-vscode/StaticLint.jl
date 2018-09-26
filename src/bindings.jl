@@ -28,6 +28,10 @@ end
 function add_binding(name, binding::Binding, bindings::Dict, index::Tuple)
     if haskey(bindings, index)
         if haskey(bindings[index], name)
+            # Don't repeat bindings (occurs with for/generator loops)
+            if last(bindings[index][name]).loc.offset == binding.loc.offset && last(bindings[index][name]).loc.file == binding.loc.file
+                return
+            end
             push!(bindings[index][name], binding)
         else
             bindings[index][name] = Binding[binding]
@@ -60,15 +64,7 @@ function ext_binding(x, state, s)
         ass = x.arg1
         ass = CSTParser.rem_decl(ass)
         ass = CSTParser.rem_curly(ass)
-        if ass isa CSTParser.IDENTIFIER
-            name = CSTParser.str_value(ass)
-            add_binding(name, x, state, s)
-        elseif ass isa CSTParser.EXPR{CSTParser.TupleH}
-            for a in CSTParser.flatten_tuple(ass)
-                name = CSTParser.str_value(CSTParser.get_name(a))
-                add_binding(name, x, state, s)
-            end
-        end
+        assign_to_tuple(ass, x.arg2, state.loc.offset, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.Using} || x isa CSTParser.EXPR{CSTParser.Import} || x isa CSTParser.EXPR{CSTParser.ImportAll}
         get_imports(x, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.Export}
@@ -116,16 +112,14 @@ function int_binding(x, state, s)
         end
     elseif x isa CSTParser.EXPR{CSTParser.For}
         if is_for_iter(x.args[2])
-            for a in CSTParser.flatten_tuple(x.args[2].arg1)
-                add_binding(CSTParser.str_value(CSTParser.get_name(a)), x, state, s)
-            end
+            assign_to_tuple(x.args[2].arg1, x.args[2].arg2, state.loc.offset +x.args[1].fullspan, state, s)
         else
+            offset = state.loc.offset
             for i = 1:length(x.args[2].args)
                 if is_for_iter(x.args[2].args[i])
-                    for a in CSTParser.flatten_tuple(x.args[2].args[i].arg1)
-                        add_binding(CSTParser.str_value(CSTParser.get_name(a)), x, state, s)
-                    end
+                    assign_to_tuple(x.args[2].args[i].arg1, x.args[2].args[i].arg2, offset, state, s)
                 end
+                offset += x.args[2].args[i].fullspan
             end
         end
     elseif x isa CSTParser.EXPR{CSTParser.Do}
@@ -135,20 +129,20 @@ function int_binding(x, state, s)
         end
     elseif x isa CSTParser.EXPR{CSTParser.Generator}
         if is_for_iter(x.args[3])
+            offset = state.loc.offset
             for i = 3:length(x.args)
-                !is_for_iter(x.args[i]) && continue
-                for arg in CSTParser.flatten_tuple(x.args[i].arg1)
-                    name = CSTParser.str_value(CSTParser.get_name(arg))
-                    add_binding(name, x, state, s)
+                if is_for_iter(x.args[i])
+                    assign_to_tuple(x.args[i].arg1, x.args[i].arg2, offset, state, s)
                 end
-                # name = CSTParser.str_value(CSTParser.get_name(x.args[i].arg1))
-                # add_binding(name, x, state, s)
+                offset += x.args[i].fullspan
             end
         elseif x.args[3] isa CSTParser.EXPR{CSTParser.Filter}
+            offset = state.loc.offset
             for i = 1:length(x.args[3].args)
-                !is_for_iter(x.args[3].args[i]) && continue
-                name = CSTParser.str_value(CSTParser.get_name(x.args[3].args[i].arg1))
-                add_binding(name, x, state, s)
+                if is_for_iter(x.args[3].args[i])
+                    assign_to_tuple(x.args[3].args[i].arg1, x.args[3].args[i].arg2, offset, state, s)
+                end
+                offset += x.args[3].args[i].fullspan
             end
         end
     elseif CSTParser.defines_anon_function(x)
@@ -158,6 +152,32 @@ function int_binding(x, state, s)
         end
     end
 end
+
+function assign_to_tuple(x::CSTParser.EXPR{CSTParser.InvisBrackets}, val, offset, state, s)
+    assign_to_tuple(x.args[2], val, offset + x.args[1].fullspan, state)
+    return offset + x.fullspan
+end
+
+function assign_to_tuple(x, val, offset, state, s)
+    if x isa CSTParser.EXPR{CSTParser.TupleH}
+        for arg in x
+            if !(arg isa CSTParser.PUNCTUATION)
+                offset = assign_to_tuple(arg, val, offset, state, s)
+            else
+                offset += arg.fullspan
+            end
+        end
+    else
+        name = CSTParser.str_value(CSTParser.rem_decl(x))
+        s.bindings += 1
+        b = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), val, nothing)
+        add_binding(name, b, state.bindings, s.index)
+        
+        offset += x.fullspan
+    end
+    return offset
+end
+
 
 function is_for_iter(x)
     (x isa CSTParser.BinarySyntaxOpCall || x isa CSTParser.BinaryOpCall) && x.op.kind in (CSTParser.Tokens.IN, CSTParser.Tokens.ELEMENT_OF, CSTParser.Tokens.EQ)
@@ -404,7 +424,6 @@ function resolve_import(imprt, state)
         end
         i += 1
     end
-
     for b in bindings
         # b = (doimport, name, val)
         !b[1] && continue
