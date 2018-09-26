@@ -43,7 +43,7 @@ function res_ref(name, ind, bindings)
     end
 end
 
-function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
+function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
     out = Any[]
     name = CSTParser.str_value(r.val)
     ind = r.si.i
@@ -63,6 +63,7 @@ function resolve_ref(r::Reference{T}, state::State, rrefs) where T <: Union{CSTP
     lbsi = get_lbsi(r, state)
 
     if isempty(out)
+        push!(urefs, r)
         return r
     else
         ret = first(out)
@@ -91,24 +92,27 @@ function get_lbsi(ref, state)
 end
 
 
-function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, state, rrefs)
+function resolve_ref(r::Reference{CSTParser.BinarySyntaxOpCall}, state, rrefs, urefs)
     (length(r.val.arg2.args) == 0 || !(r.val.arg2 isa CSTParser.EXPR{CSTParser.Quotenode})) && return r
     # rhs 
     rr = Reference(r.val.arg2.args[1], Location(r.loc.file, r.loc.offset + r.val.arg1.fullspan + r.val.op.fullspan), r.si, r.delayed)
     # lhs
     lr = Reference(r.val.arg1, Location(r.loc.file, r.loc.offset), r.si, r.delayed)
-    rlr = resolve_ref(lr, state, rrefs)
+    rlr = resolve_ref(lr, state, rrefs, urefs)
+    if r.val.arg1 isa CSTParser.IDENTIFIER && rlr isa Reference
+        push!(urefs, rlr)
+    end
     if rlr isa ResolvedRef
-        return resolve_ref(rr, state, rrefs, rlr)
+        return resolve_dot_ref(rr, state, rrefs, rlr)
     else
         return rlr
     end
 end
 
 
-resolve_ref(rr, bindings, rrefs) = rr
+resolve_ref(rr, bindings, rrefs, urefs) = rr
 # Resolve reference given `lr.r`
-function resolve_ref(rr::Reference, state, rrefs, rlr::ResolvedRef)
+function resolve_dot_ref(rr::Reference, state, rrefs, rlr::ResolvedRef)
     if rlr.b.val isa Dict # root (rlr.b) is an imported module
         if haskey(rlr.b.val, CSTParser.str_value(rr.val))
             b = rlr.b.val[CSTParser.str_value(rr.val)]
@@ -122,14 +126,11 @@ function resolve_ref(rr::Reference, state, rrefs, rlr::ResolvedRef)
 end 
 
 
-function resolve_refs(refs, state, res = ResolvedRef[], unres = Reference[])
+function resolve_refs(refs, state, rrefs = ResolvedRef[], urefs = Reference[])
     for r in refs
-        rr = resolve_ref(r, state, res)
-        if rr == r
-            push!(unres, rr)
-        end
+        rr = resolve_ref(r, state, rrefs, urefs)
     end
-    return res, unres
+    return rrefs, urefs
 end
 
 
