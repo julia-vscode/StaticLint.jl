@@ -340,10 +340,10 @@ function build_bindings(server, file)
     return state
 end
 
-function find_binding(bindings, name, st::Function = x->true)
+function find_binding(bindings, name, ind, st::Function = x->true)
     out = Binding[]
-    if haskey(bindings, name)
-        for b in bindings[name]
+    if haskey(bindings, ind) && haskey(bindings[ind], name)
+        for b in bindings[ind][name]
             if st(b)
                 push!(out, b)
             end
@@ -361,7 +361,7 @@ function _get_field(par, arg, state)
             return
         end
     elseif par isa Tuple
-        ret = StaticLint.find_binding(state.bindings, CSTParser.str_value(arg), b->b.si.i == par && b.val isa CSTParser.EXPR{T} where T <: Union{CSTParser.ModuleH,CSTParser.BareModule}) 
+        ret = StaticLint.find_binding(state.bindings, CSTParser.str_value(arg), par, b-> b.val isa CSTParser.EXPR{T} where T <: Union{CSTParser.ModuleH,CSTParser.BareModule}) 
         if isempty(ret)
             return
         else
@@ -395,7 +395,7 @@ function resolve_import(imprt, state)
     bindings = []
     while i <= length(x.args)
         arg = x.args[i]
-        if arg isa CSTParser.IDENTIFIER
+        if arg isa CSTParser.IDENTIFIER     
             par = _get_field(par,arg, state)
             argname = CSTParser.str_value(x.args[i])
             if par == nothing
