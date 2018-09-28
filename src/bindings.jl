@@ -109,6 +109,13 @@ function int_binding(x, state, s)
     elseif CSTParser.defines_datatype(x)
         if x isa CSTParser.EXPR{CSTParser.Struct} || x isa CSTParser.EXPR{CSTParser.Mutable}
             get_struct_bindings(x, state, s)
+        elseif x isa CSTParser.EXPR{CSTParser.Abstract}
+            sig = CSTParser.get_sig(x)
+            sig = CSTParser.rem_subtype(sig)
+            sig = CSTParser.rem_where(sig)
+            for arg in CSTParser.get_curly_params(sig)
+                add_binding(arg, x, state, s, DataType)
+            end
         end
     elseif x isa CSTParser.EXPR{CSTParser.For}
         if is_for_iter(x.args[2])
