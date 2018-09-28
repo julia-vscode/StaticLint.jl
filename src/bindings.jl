@@ -63,8 +63,12 @@ function ext_binding(x, state, s)
     elseif CSTParser.is_assignment(x)
         ass = x.arg1
         ass = CSTParser.rem_decl(ass)
-        ass = CSTParser.rem_curly(ass)
-        assign_to_tuple(ass, x.arg2, state.loc.offset, state, s)
+        if ass isa CSTParser.EXPR{CSTParser.Curly}
+            ass = CSTParser.rem_curly(ass)
+            add_binding(CSTParser.str_value(ass), x, state, s)
+        else
+            assign_to_tuple(ass, x.arg2, state.loc.offset, state, s)
+        end
     elseif x isa CSTParser.EXPR{CSTParser.Using} || x isa CSTParser.EXPR{CSTParser.Import} || x isa CSTParser.EXPR{CSTParser.ImportAll}
         get_imports(x, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.Export}
