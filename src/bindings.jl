@@ -365,7 +365,7 @@ function _get_field(par, arg, state)
             return
         end
     elseif par isa Tuple
-        ret = StaticLint.find_binding(state.bindings, CSTParser.str_value(arg), par, b-> b.val isa CSTParser.EXPR{T} where T <: Union{CSTParser.ModuleH,CSTParser.BareModule}) 
+        ret = find_binding(state.bindings, CSTParser.str_value(arg), par, b-> b.val isa CSTParser.EXPR{T} where T <: Union{CSTParser.ModuleH,CSTParser.BareModule}) 
         if isempty(ret)
             return
         else
@@ -373,8 +373,8 @@ function _get_field(par, arg, state)
             return par
         end
     else
-        ind = StaticLint.add_to_tuple(par.si.i, par.si.n + 1)
-        ret = StaticLint.find_binding(state.bindings, CSTParser.str_value(arg), b->b.si.i == ind) 
+        ind = add_to_tuple(par.si.i, par.si.n + 1)
+        ret = find_binding(state.bindings, CSTParser.str_value(arg), ind) 
         if isempty(ret)
             return
         else
@@ -399,7 +399,7 @@ function resolve_import(imprt, state)
     bindings = []
     while i <= length(x.args)
         arg = x.args[i]
-        if arg isa CSTParser.IDENTIFIER     
+        if arg isa CSTParser.IDENTIFIER
             par = _get_field(par,arg, state)
             argname = CSTParser.str_value(x.args[i])
             if par == nothing
@@ -436,7 +436,7 @@ function resolve_import(imprt, state)
         i += 1
     end
     for b in bindings
-        # b = (doimport, name, val)
+        # b contains (doimport, name, val)
         !b[1] && continue
         if b[3] isa Binding
             binding = Binding(imprt.loc, imprt.si, b[3].val, b[3].t)
@@ -452,7 +452,7 @@ function resolve_import(imprt, state)
                 ind = add_to_tuple(b[3].si.i, b[3].si.n + 1)                
                 if haskey(state.exports, ind)
                     for n in state.exports[ind]
-                        ret = find_binding(state.bindings, n, b->b.si.i == ind)
+                        ret = find_binding(state.bindings, n, ind)
                         isempty(ret) && continue
                         eb = last(ret)
                         if eb isa Binding
