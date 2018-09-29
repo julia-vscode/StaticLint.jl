@@ -5,10 +5,10 @@ function test_sl(str)
     x = StaticLint.CSTParser.parse(str, true)
     f = StaticLint.File(x)
     StaticLint.pass(f)
-    f.state = StaticLint.build_bindings(nothing, f)
-    f.rref, f.uref = StaticLint.resolve_refs(f.state.refs, f.state);    
-    
-    f
+    state = StaticLint.build_bindings(nothing, f)
+    StaticLint.resolve_refs(f.state.refs, state, f.rref, f.uref);    
+    f.state.bindings = state.bindings
+    return f
 end
 
 include("test_bindings.jl")

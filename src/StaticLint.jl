@@ -116,8 +116,20 @@ function pass(x::CSTParser.EXPR{CSTParser.Kw}, state::State, s::Scope, index, bl
             pass(a, state, s, s.index, ablockref, delayed)
         end
         s
+    end        
+end
+
+function pass(x::CSTParser.EXPR{CSTParser.Try}, state::State, s::Scope, index, blockref, delayed)
+    s1 = create_scope(x, state, s)
+    it = 1
+    for a in x
+        if it == 4 && a isa CSTParser.IDENTIFIER
+            add_binding(CSTParser.str_value(a), a, state, s1)
+        end
+        ablockref = get_ref(a, state, s1, blockref, delayed)
+        pass(a, state, s1, s1.index, ablockref, delayed)
+        it += 1
     end
-        
 end
 
 
