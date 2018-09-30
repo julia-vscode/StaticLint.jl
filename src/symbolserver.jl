@@ -1,4 +1,4 @@
-    module SymbolServer
+module SymbolServer
 using JSON, Serialization, Pkg
 import Base
 import Base: isdeprecated
@@ -22,7 +22,7 @@ function collect_params(t, params = [])
 end
 
 function read_module(m)
-    out = Dict()
+    out = Dict{String,Any}()
     out[".type"] = "module"
     out[".doc"] = string(Docs.doc(m))
     out[".exported"] = names(m)
@@ -94,7 +94,7 @@ function load_package(m, store, v)
     end
 end
 
-function build_base_store(store = Dict{Any,Any}())
+function build_base_store(store = Dict{String,Any}())
     mods = collect(keys(Pkg.API.installed()))
     load_module(Base, store, nothing)
     push!(store["Base"][".exported"], :include)

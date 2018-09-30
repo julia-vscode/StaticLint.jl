@@ -165,7 +165,7 @@ function int_binding(x, state, s)
 end
 
 function assign_to_tuple(x::CSTParser.EXPR{CSTParser.InvisBrackets}, val, offset, state, s)
-    assign_to_tuple(x.args[2], val, offset + x.args[1].fullspan, state)
+    assign_to_tuple(x.args[2], val, offset + x.args[1].fullspan, state, s)
     return offset + x.fullspan
 end
 
