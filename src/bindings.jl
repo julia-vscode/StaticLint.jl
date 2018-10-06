@@ -344,7 +344,8 @@ function build_bindings(server, file)
     return state
 end
 
-function find_binding(bindings, name, ind, st::Function = x->true)
+# find binding in specific scope index
+function find_binding(bindings, name, ind, st::Function)
     out = Binding[]
     if haskey(bindings, ind) && haskey(bindings[ind], name)
         for b in bindings[ind][name]
@@ -355,6 +356,17 @@ function find_binding(bindings, name, ind, st::Function = x->true)
     end
     return out
 end
+
+# as above but ascend scopes
+function find_binding_ascend(bindings, name, ind, st::Function)
+    out = []
+    while length(ind) > 0
+        append!(out, find_binding(bindings, name, ind, st))
+        ind = shrink_tuple(ind)
+    end
+    out
+end
+
 
 function _get_field(par, arg, state)
     if par isa Dict
@@ -374,7 +386,7 @@ function _get_field(par, arg, state)
         end
     else
         ind = add_to_tuple(par.si.i, par.si.n + 1)
-        ret = find_binding(state.bindings, CSTParser.str_value(arg), ind) 
+        ret = find_binding(state.bindings, CSTParser.str_value(arg), ind, x->true) 
         if isempty(ret)
             return
         else
@@ -452,7 +464,7 @@ function resolve_import(imprt, state)
                 ind = add_to_tuple(b[3].si.i, b[3].si.n + 1)                
                 if haskey(state.exports, ind)
                     for n in state.exports[ind]
-                        ret = find_binding(state.bindings, n, ind)
+                        ret = find_binding(state.bindings, n, ind, x-> true)
                         isempty(ret) && continue
                         eb = last(ret)
                         if eb isa Binding
