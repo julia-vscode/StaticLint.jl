@@ -20,7 +20,7 @@ Base.display(B::Array{Binding}) = for b in B display(b) end
 function add_binding(name, x, state, s, t = nothing)
     # global bindinglist
     s.bindings += 1
-    val = Binding(StaticLint.Location(state), SIndex(s.index, s.bindings), x, t)
+    val = Binding(Location(state), SIndex(s.index, s.bindings), x, t)
     
     add_binding(name, val, state.bindings, s.index)
 end
@@ -81,11 +81,6 @@ function ext_binding(x, state, s)
                 add_binding(name, x, state, s)
             end
         end
-    elseif x isa CSTParser.WhereOpCall
-        for arg in x.args
-            arg isa CSTParser.PUNCTUATION && continue
-            add_binding(CSTParser.str_value(CSTParser.rem_curly(CSTParser.rem_subtype(arg))), x, state, s)
-        end 
     end
 end
 
@@ -158,6 +153,18 @@ function int_binding(x, state, s)
             name = CSTParser.str_value(CSTParser.get_name(arg))
             add_binding(name, x, state, s)
         end
+    elseif x isa CSTParser.WhereOpCall
+        offset = state.loc.offset + x.arg1.fullspan + x.op.fullspan
+        for arg in x.args
+            if !(arg isa CSTParser.PUNCTUATION) 
+                #TODO: add subtype marker
+                arg1 = CSTParser.rem_curly(CSTParser.rem_subtype(arg))
+                s.bindings += 1
+                val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg1, _DataType)
+                add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
+            end
+            offset += arg.fullspan
+        end 
     end
 end
 
@@ -196,41 +203,85 @@ function get_iter_args(x::CSTParser.BinarySyntaxOpCall, state, s)
     add_binding(name, x, state, s)
 end
 
-function get_fcall_args(sig, getparams = true)
-    args = Pair[]
+function get_fcall_bindings(sig, state, s)
+    offset = state.loc.offset
     while sig isa CSTParser.WhereOpCall
+        offset1 = offset + sig.arg1.fullspan + sig.op.fullspan
         for arg in sig.args
-            arg isa CSTParser.PUNCTUATION && continue
-            push!(args, CSTParser.rem_curly(CSTParser.rem_subtype(arg)) => _DataType)
-        end 
+            if !(arg isa CSTParser.PUNCTUATION)
+                #TODO: add subtype marker
+                arg1 = CSTParser.rem_curly(CSTParser.rem_subtype(arg))
+                s.bindings += 1
+                val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, _DataType)
+                add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
+            end
+            offset1 += arg.fullspan
+        end        
         sig = sig.arg1
     end
     if sig isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(sig.op)
         sig = sig.arg1
     end
-    sig isa CSTParser.IDENTIFIER && return args
+    sig isa CSTParser.IDENTIFIER && return 
     if sig isa CSTParser.EXPR{CSTParser.Call} && sig.args[1] isa CSTParser.EXPR{CSTParser.Curly}
+        offset1 = offset + sig.args[1].args[1].fullspan
         for i = 2:length(sig.args[1].args)
             arg = sig.args[1].args[i]
-            arg isa CSTParser.PUNCTUATION && continue
-            push!(args, CSTParser.rem_subtype(arg) => _DataType)
+            if !(arg isa CSTParser.PUNCTUATION)
+                #TODO: add subtype marker
+                arg1 = CSTParser.rem_subtype(arg)
+                s.bindings += 1
+                val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, _DataType)
+                add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
+            end
+            offset1 += arg.fullspan
         end
     end
-    !getparams && empty!(args)
-    !(sig isa CSTParser.EXPR) && return args
+    !(sig isa CSTParser.EXPR) && return 
+    offset += sig.args[1].fullspan + sig.args[2].fullspan
     for i = 3:length(sig.args)-1
         arg = sig.args[i]
-        arg isa CSTParser.PUNCTUATION && continue
-        get_arg_type(arg, args)
-    end
-    return args
-end
-function get_fcall_bindings(sig, state, s)
-    args = get_fcall_args(sig)
-    for (arg, t) in args
-        add_binding(CSTParser.str_value(arg), sig, state, s, t)
+        if !(arg isa CSTParser.PUNCTUATION) 
+            get_arg_type(arg, state, s, offset)
+        end
+        offset += arg.fullspan
     end
 end
+
+
+function get_arg_type(arg, state, s, offset)
+    if arg isa CSTParser.UnarySyntaxOpCall && CSTParser.is_dddot(arg.arg2)
+        arg = arg.arg1
+    end
+    if arg isa CSTParser.IDENTIFIER
+        t = nothing
+    elseif arg isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.op)
+        t = arg.arg2
+        arg = arg.arg1
+    elseif arg isa CSTParser.EXPR{CSTParser.Kw}
+        if arg.args[1] isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.args[1].op)
+            t = arg.args[1].arg2
+            arg = arg.args[1].arg1
+        else arg.args[1] isa CSTParser.IDENTIFIER
+            arg = arg.args[1]
+            t = nothing
+        end
+    else
+        t = nothing
+    end
+    s.bindings += 1
+    val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg, t)
+    add_binding(CSTParser.str_value(arg), val, state.bindings, s.index)
+    return
+end
+
+function get_arg_type(arg::CSTParser.EXPR{CSTParser.Parameters}, state, s, offset)
+    for a in arg.args
+        get_arg_type(a, state, s, offset)
+        offset += a.fullspan
+    end
+end
+
 
 function get_struct_bindings(x, state, s)
     isstruct = x isa CSTParser.EXPR{CSTParser.Struct}
@@ -251,30 +302,6 @@ function get_struct_bindings(x, state, s)
             end
             add_binding(name, x, state, s, t)
         end
-    end
-end
-
-function get_arg_type(arg, args)
-    if arg isa CSTParser.UnarySyntaxOpCall && CSTParser.is_dddot(arg.arg2)
-        arg = arg.arg1
-    end
-    if arg isa CSTParser.IDENTIFIER
-        push!(args, arg=>nothing)
-    elseif arg isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.op)
-        push!(args, arg.arg1 => arg.arg2)
-    elseif arg isa CSTParser.EXPR{CSTParser.Kw}
-        if arg.args[1] isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.args[1].op)
-            push!(args, arg.args[1].arg1 => arg.args[1].arg2)
-        # elseif arg.args[3] isa CSTParser.LITERAL
-        #     push!(args, arg.args[1] => arg.args[3].kind)
-        else
-            push!(args, arg.args[1] => nothing)
-        end
-    end
-end
-function get_arg_type(arg::CSTParser.EXPR{CSTParser.Parameters}, args)
-    for a in arg.args
-        get_arg_type(a, args)
     end
 end
 
