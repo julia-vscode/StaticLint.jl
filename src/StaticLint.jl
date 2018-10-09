@@ -156,7 +156,9 @@ include("helpers.jl")
 const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
 const store = SymbolServer.build_base_store()
 store[".importable_mods"] = SymbolServer.collect_mods(store)
-
+const _Module = store["Core"]["Module"]
+const _DataType = store["Core"]["DataType"]
+const _Function = store["Core"]["Function"]
 # To be called after `using ...`
 loadpkgs() = SymbolServer.load_pkg_store(storedir, store)
 end

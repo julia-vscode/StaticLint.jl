@@ -1,7 +1,7 @@
 mutable struct ImportBinding
     loc::Location
     si::SIndex
-    val
+    val::Union{CSTParser.AbstractEXPR,Dict}
     refs::Vector{Reference}
 end
 ImportBinding(loc, si, val, refs = Reference[]) = ImportBinding(loc, si, val, refs)
@@ -10,10 +10,10 @@ mutable struct Binding
     loc::Location
     si::SIndex
     val::Union{CSTParser.AbstractEXPR,Dict}
-    t
+    t::Union{Nothing,Dict,CSTParser.AbstractEXPR}
     refs::Vector{Reference}
 end
-Binding(loc, si, val, t= nothing, refs = Reference[]) = Binding(loc, si, val, t, refs)
+Binding(loc, si, val, t= nothing) = Binding(loc, si, val, t, Reference[])
 Base.display(b::Binding) = println(b.si," @ ",  basename(b.loc.file), ":", b.loc.offset)
 Base.display(B::Array{Binding}) = for b in B display(b) end
 
@@ -46,28 +46,25 @@ end
 function ext_binding(x, state, s)
     if CSTParser.defines_module(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, CSTParser.ModuleH)
+        add_binding(name, x, state, s, _Module)
     elseif CSTParser.defines_function(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, CSTParser.FunctionDef)
+        add_binding(name, x, state, s, _Function)
     elseif CSTParser.defines_macro(x)
         name = string("@", CSTParser.str_value(CSTParser.get_name(x)))
-        add_binding(name, x, state, s, CSTParser.Macro)
-    elseif CSTParser.defines_datatype(x)
-        t = CSTParser.defines_abstract(x) ? CSTParser.Abstract :
-            CSTParser.defines_primitive(x) ? CSTParser.Primitive :
-            CSTParser.defines_mutable(x) ? CSTParser.Mutable :
-            CSTParser.Struct             
+        add_binding(name, x, state, s, nothing)
+    elseif CSTParser.defines_datatype(x)           
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, t)
+        add_binding(name, x, state, s, _DataType)
     elseif CSTParser.is_assignment(x)
         ass = x.arg1
         ass = CSTParser.rem_decl(ass)
         if ass isa CSTParser.EXPR{CSTParser.Curly}
+            #typealias
             ass = CSTParser.rem_curly(ass)
             add_binding(CSTParser.str_value(ass), x, state, s)
         else
-            assign_to_tuple(ass, x.arg2, state.loc.offset, state, s)
+            assign_to_tuple(ass, x, state.loc.offset, state, s)
         end
     elseif x isa CSTParser.EXPR{CSTParser.Using} || x isa CSTParser.EXPR{CSTParser.Import} || x isa CSTParser.EXPR{CSTParser.ImportAll}
         get_imports(x, state, s)
@@ -107,7 +104,7 @@ end
 function int_binding(x, state, s)
     if CSTParser.defines_module(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, CSTParser.ModuleH)
+        add_binding(name, x, state, s, _Module)
     elseif CSTParser.defines_function(x) || CSTParser.defines_macro(x)
         get_fcall_bindings(CSTParser.get_sig(x), state, s)
     elseif CSTParser.defines_datatype(x)
@@ -118,7 +115,7 @@ function int_binding(x, state, s)
             sig = CSTParser.rem_subtype(sig)
             sig = CSTParser.rem_where(sig)
             for arg in CSTParser.get_curly_params(sig)
-                add_binding(arg, x, state, s, DataType)
+                add_binding(arg, x, state, s, _DataType)
             end
         end
     elseif x isa CSTParser.EXPR{CSTParser.For}
@@ -204,7 +201,7 @@ function get_fcall_args(sig, getparams = true)
     while sig isa CSTParser.WhereOpCall
         for arg in sig.args
             arg isa CSTParser.PUNCTUATION && continue
-            push!(args, CSTParser.rem_curly(CSTParser.rem_subtype(arg))=>DataType)
+            push!(args, CSTParser.rem_curly(CSTParser.rem_subtype(arg)) => _DataType)
         end 
         sig = sig.arg1
     end
@@ -216,7 +213,7 @@ function get_fcall_args(sig, getparams = true)
         for i = 2:length(sig.args[1].args)
             arg = sig.args[1].args[i]
             arg isa CSTParser.PUNCTUATION && continue
-            push!(args, CSTParser.rem_subtype(arg)=>DataType)
+            push!(args, CSTParser.rem_subtype(arg) => _DataType)
         end
     end
     !getparams && empty!(args)
@@ -241,7 +238,7 @@ function get_struct_bindings(x, state, s)
     sig = CSTParser.rem_subtype(sig)
     sig = CSTParser.rem_where(sig)
     for arg in CSTParser.get_curly_params(sig)
-        add_binding(arg, x, state, s, DataType)
+        add_binding(arg, x, state, s, _DataType)
     end
     for arg in x.args[isstruct ? 3 : 4]
         if !CSTParser.defines_function(arg)
@@ -264,14 +261,14 @@ function get_arg_type(arg, args)
     if arg isa CSTParser.IDENTIFIER
         push!(args, arg=>nothing)
     elseif arg isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.op)
-        push!(args, arg.arg1=>arg.arg2)
+        push!(args, arg.arg1 => arg.arg2)
     elseif arg isa CSTParser.EXPR{CSTParser.Kw}
         if arg.args[1] isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.args[1].op)
-            push!(args, arg.args[1].arg1=>arg.args[1].arg2)
-        elseif arg.args[3] isa CSTParser.LITERAL
-            push!(args, arg.args[1]=>arg.args[3].kind)
+            push!(args, arg.args[1].arg1 => arg.args[1].arg2)
+        # elseif arg.args[3] isa CSTParser.LITERAL
+        #     push!(args, arg.args[1] => arg.args[3].kind)
         else
-            push!(args, arg.args[1]=>nothing)
+            push!(args, arg.args[1] => nothing)
         end
     end
 end
@@ -338,8 +335,8 @@ end
 function build_bindings(server, file)
     state = cat_bindings(server, file)
     # add imports
-    state.used_modules = Dict{String,Any}("Base" => Binding(Location(file.state), SIndex(file.index, file.nb), store["Base"], store["Core"]["Module"]),
-    "Core" => Binding(Location(file.state), SIndex(file.index, file.nb), store["Core"], store["Core"]["Module"]))
+    state.used_modules = Dict{String,Any}("Base" => Binding(Location(file.state), SIndex(file.index, file.nb), store["Base"], _Module),
+    "Core" => Binding(Location(file.state), SIndex(file.index, file.nb), store["Core"], _Module))
     resolve_imports(state)
     return state
 end
