@@ -11,7 +11,8 @@ function create_scope(x, state, s)
         x isa CSTParser.EXPR{CSTParser.Try} ||
         x isa CSTParser.EXPR{CSTParser.Generator} ||
         x isa CSTParser.WhereOpCall ||
-        CSTParser.defines_anon_function(x)
+        CSTParser.defines_anon_function(x) ||
+        (x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokens.EQ && x.arg1 isa CSTParser.EXPR{CSTParser.Curly})
         if def_f
             t = CSTParser.FunctionDef
         else

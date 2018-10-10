@@ -165,6 +165,19 @@ function int_binding(x, state, s)
             end
             offset += arg.fullspan
         end 
+    elseif (x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokens.EQ && x.arg1 isa CSTParser.EXPR{CSTParser.Curly})
+        offset = state.loc.offset + x.arg1.args[1].fullspan
+        for i = 2:length(x.arg1.args)
+            arg = x.arg1.args[i]
+            if !(arg isa CSTParser.PUNCTUATION) 
+                #TODO: add subtype marker
+                arg1 = CSTParser.rem_curly(CSTParser.rem_subtype(arg))
+                s.bindings += 1
+                val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg1, _DataType)
+                add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
+            end
+            offset += arg.fullspan
+        end
     end
 end
 
