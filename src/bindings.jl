@@ -3,8 +3,8 @@ mutable struct ImportBinding
     si::SIndex
     val::Union{CSTParser.AbstractEXPR,Dict}
     refs::Vector{Reference}
+    ImportBinding(loc, si, val, refs = Reference[]) = new(loc, si, val, refs)
 end
-ImportBinding(loc, si, val, refs = Reference[]) = ImportBinding(loc, si, val, refs)
 
 mutable struct Binding
     loc::Location
@@ -250,7 +250,8 @@ function get_fcall_bindings(sig, state, s)
             offset1 += arg.fullspan
         end
     end
-    !(sig isa CSTParser.EXPR) && return 
+    !(sig isa CSTParser.EXPR) || length(sig.args) < 3 && return 
+
     offset += sig.args[1].fullspan + sig.args[2].fullspan
     for i = 3:length(sig.args)-1
         arg = sig.args[i]
