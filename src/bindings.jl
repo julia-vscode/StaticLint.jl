@@ -3,8 +3,8 @@ mutable struct ImportBinding
     si::SIndex
     val::Union{CSTParser.AbstractEXPR,Dict}
     refs::Vector{Reference}
+    ImportBinding(loc, si, val, refs = Reference[]) = new(loc, si, val, refs)
 end
-ImportBinding(loc, si, val, refs = Reference[]) = ImportBinding(loc, si, val, refs)
 
 mutable struct Binding
     loc::Location
