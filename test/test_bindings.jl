@@ -91,3 +91,8 @@ a + b = a + b
 +(a::T,b::T) = a + b
 """ |> test_sl
 @test isempty(f.uref)
+
+f = """
+struct Foo end
+(foo::Foo)() = 1""" |> test_sl
+@test isempty(f.uref)

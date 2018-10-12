@@ -235,19 +235,28 @@ function get_fcall_bindings(sig, state, s)
     if sig isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(sig.op)
         sig = sig.arg1
     end
+    
     sig isa CSTParser.IDENTIFIER && return 
-    if sig isa CSTParser.EXPR{CSTParser.Call} && sig.args[1] isa CSTParser.EXPR{CSTParser.Curly}
-        offset1 = offset + sig.args[1].args[1].fullspan
-        for i = 2:length(sig.args[1].args)
-            arg = sig.args[1].args[i]
-            if !(arg isa CSTParser.PUNCTUATION)
-                #TODO: add subtype marker
-                arg1 = CSTParser.rem_subtype(arg)
-                s.bindings += 1
-                val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, _DataType)
-                add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
+    if sig isa CSTParser.EXPR{CSTParser.Call}
+        if sig.args[1] isa CSTParser.EXPR{CSTParser.InvisBrackets} && length(sig.args[1].args) == 3 && sig.args[1].args[2] isa CSTParser.BinarySyntaxOpCall && sig.args[1].args[2].op.kind == CSTParser.Tokens.DECLARATION
+            dtname = CSTParser.rem_decl(sig.args[1].args[2])
+            s.bindings += 1
+                val = Binding(Location(state.loc.file, offset + sig.args[1].args[1].fullspan), SIndex(s.index, s.bindings), dtname, _DataType)
+                add_binding(CSTParser.str_value(dtname), val, state.bindings, s.index)
+        end
+        if sig.args[1] isa CSTParser.EXPR{CSTParser.Curly}
+            offset1 = offset + sig.args[1].args[1].fullspan
+            for i = 2:length(sig.args[1].args)
+                arg = sig.args[1].args[i]
+                if !(arg isa CSTParser.PUNCTUATION)
+                    #TODO: add subtype marker
+                    arg1 = CSTParser.rem_subtype(arg)
+                    s.bindings += 1
+                    val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, _DataType)
+                    add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
+                end
+                offset1 += arg.fullspan
             end
-            offset1 += arg.fullspan
         end
     end
     !(sig isa CSTParser.EXPR) || length(sig.args) < 3 && return 
