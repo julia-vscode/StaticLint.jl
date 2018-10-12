@@ -251,14 +251,33 @@ function get_fcall_bindings(sig, state, s)
         end
     end
     !(sig isa CSTParser.EXPR) || length(sig.args) < 3 && return 
-
-    offset += sig.args[1].fullspan + sig.args[2].fullspan
-    for i = 3:length(sig.args)-1
-        arg = sig.args[i]
-        if !(arg isa CSTParser.PUNCTUATION) 
-            get_arg_type(arg, state, s, offset)
+    if sig isa CSTParser.EXPR && length(sig.args) > 2
+        offset += sig.args[1].fullspan + sig.args[2].fullspan
+        for i = 3:length(sig.args)-1
+            arg = sig.args[i]
+            if !(arg isa CSTParser.PUNCTUATION) 
+                get_arg_type(arg, state, s, offset)
+            end
+            offset += arg.fullspan
         end
-        offset += arg.fullspan
+    elseif sig isa CSTParser.UnaryOpCall
+        offset += sig.op.fullspan
+        if sig.arg isa CSTParser.EXPR{CSTParser.InvisBrackets}
+            offset += sig.arg.args[1].fullspan
+            for i = 2:length(sig.arg.args)-1
+                arg = sig.arg.args[i]
+                if !(arg isa CSTParser.PUNCTUATION) 
+                    get_arg_type(arg, state, s, offset)
+                end
+                offset += arg.fullspan
+            end
+        else
+            get_arg_type(sig.arg, state, s, offset)
+        end
+    elseif sig isa CSTParser.BinaryOpCall || sig isa CSTParser.BinarySyntaxOpCall
+        get_arg_type(sig.arg1, state, s, offset)
+        offset += sig.arg1.fullspan + sig.op.fullspan
+        get_arg_type(sig.arg2, state, s, offset)
     end
 end
 
