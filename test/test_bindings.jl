@@ -76,3 +76,17 @@ end
 """ |> test_sl
 
 @test isempty(f.uref)
+
+
+f = """
+abstract type T end
+-a = a
+-(a) = a
+-(a::T) = a
+-a::T = a
+~a = a
+a + b = a + b
++(a,b) = a + b
++(a::T,b::T) = a + b
+""" |> test_sl
+@test isempty(f.uref)
