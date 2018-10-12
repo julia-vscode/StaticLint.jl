@@ -149,16 +149,24 @@ end
 
 include("references.jl")
 include("utils.jl")
-include("symbolserver.jl")
 include("documentserver.jl")
 include("helpers.jl")
 
-const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
-const store = SymbolServer.build_base_store()
-store[".importable_mods"] = SymbolServer.collect_mods(store)
-const _Module = store["Core"]["Module"]
-const _DataType = store["Core"]["DataType"]
-const _Function = store["Core"]["Function"]
-# To be called after `using ...`
-loadpkgs() = SymbolServer.load_pkg_store(storedir, store)
+# const store = SymbolServer.build_base_store()
+# const _Module = store["Core"]["Module"]
+# const _DataType = store["Core"]["DataType"]
+# const _Function = store["Core"]["Function"]
+
+global store = nothing
+global _Module = nothing
+global _DataType = nothing
+global _Function = nothing
+
+function setstore(new_store)
+    global store = new_store
+    global _Module = store["Core"]["Module"]
+    global _DataType = store["Core"]["DataType"]
+    global _Function = store["Core"]["Function"]
+end
+
 end
