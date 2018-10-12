@@ -4,7 +4,7 @@ var1
 """ |> test_sl
 
 @test isempty(f.uref)
-@test f.rref[1].b.val == f.cst.args[1].arg2
+@test f.rref[1].b.val == f.cst.args[1]
 
 # ext_binding 
 f = """
@@ -50,11 +50,12 @@ abstract type AT2{T} end
 
 # typealias
 f = """
-TA{T} = Int{T}
+abstract type S end
+TA{T} = S{T}
 """ |> test_sl
 
-@test_broken isempty(f.uref)
-@test length(f.state.bindings[()]) == 1
+@test isempty(f.uref)
+@test length(f.state.bindings[()]) == 2
 
 
 # try block
