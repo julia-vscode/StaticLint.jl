@@ -1,5 +1,6 @@
 module StaticLint
-using CSTParser, Pkg
+using CSTParser, SymbolServer
+
 const Index = Tuple
 struct SIndex{N}
     i::NTuple{N,Int}
@@ -42,13 +43,6 @@ mutable struct Scope
     bindings::Int
 end
 Scope() = Scope(nothing, [], 0:-1, CSTParser.TopLevel, (), 0)
-function Base.display(s::Scope, depth = 0)
-    println(" "^depth, "| ", s.t.name.name, " @ ", s.index, " / ", s.offset)
-    for a in s.children
-        display(a, depth + 1)
-    end
-end
-
 
 mutable struct State
     loc::Location
@@ -63,13 +57,6 @@ mutable struct State
 end
 State() = State(Location("", 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], DocumentServer())
 State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], server)
-function Base.display(state::State)
-    println("[State ($(state.loc.file)) w/ ")
-    println("      $(length(state.bindings)) bindings") 
-    println("      $(length(state.modules)) modules")     
-    println("      $(length(state.refs)) references]")   
-end
-
 
 mutable struct File
     cst::CSTParser.EXPR
@@ -82,6 +69,7 @@ mutable struct File
     uref::Vector{Reference}
 end
 File(x::CSTParser.EXPR) = File(x, State(), Scope(), (), 0, "", [], [])
+File(x::CSTParser.EXPR, pkgs::Dict) = File(x, State("", DocumentServer(Dict(), pkgs)), Scope(), (), 0, "", [], [])
 
 function pass(x::CSTParser.LeafNode, state::State, s::Scope, index, blockref, delayed)
     state.loc.offset += x.fullspan
@@ -132,7 +120,6 @@ function pass(x::CSTParser.EXPR{CSTParser.Try}, state::State, s::Scope, index, b
     end
 end
 
-
 function pass(file::File)
     file.state.loc.offset = 0
     empty!(file.state.refs)
@@ -146,19 +133,15 @@ function pass(file::File)
     file.scope = pass(file.cst, file.state, file.scope, file.index, false, false)
 end
 
-
 include("references.jl")
 include("utils.jl")
-include("symbolserver.jl")
 include("documentserver.jl")
 include("helpers.jl")
+include("display.jl")
 
-const storedir = normpath(joinpath(dirname(@__FILE__), "../store"))
-const store = SymbolServer.build_base_store()
-store[".importable_mods"] = SymbolServer.collect_mods(store)
-const _Module = store["Core"]["Module"]
-const _DataType = store["Core"]["DataType"]
-const _Function = store["Core"]["Function"]
-# To be called after `using ...`
-loadpkgs() = SymbolServer.load_pkg_store(storedir, store)
+
+const _Module   = SymbolServer.corepackages["Core"]["Module"]
+const _DataType = SymbolServer.corepackages["Core"]["DataType"]
+const _Function = SymbolServer.corepackages["Core"]["Function"]
+
 end

@@ -1,7 +1,7 @@
 mutable struct ImportBinding
     loc::Location
     si::SIndex
-    val::Union{CSTParser.AbstractEXPR,Dict}
+    val::Union{CSTParser.AbstractEXPR,Dict,SymbolServer.SymStore}
     refs::Vector{Reference}
     ImportBinding(loc, si, val, refs = Reference[]) = new(loc, si, val, refs)
 end
@@ -9,13 +9,11 @@ end
 mutable struct Binding
     loc::Location
     si::SIndex
-    val::Union{CSTParser.AbstractEXPR,Dict}
-    t::Union{Nothing,Dict,CSTParser.AbstractEXPR}
+    val::Union{CSTParser.AbstractEXPR,Dict,SymbolServer.SymStore}
+    t::Union{Nothing,Dict,CSTParser.AbstractEXPR,SymbolServer.SymStore}
     refs::Vector{Reference}
 end
 Binding(loc, si, val, t= nothing) = Binding(loc, si, val, t, Reference[])
-Base.display(b::Binding) = println(b.si," @ ",  basename(b.loc.file), ":", b.loc.offset)
-Base.display(B::Array{Binding}) = for b in B display(b) end
 
 function add_binding(name, x, state, s, t = nothing)
     # global bindinglist
@@ -366,7 +364,7 @@ function get_imports(x, state, s)
     s.bindings += length(x.args)
 end
 
-function cat_bindings(server, file, vars = State())
+function cat_bindings(file, vars = State("", file.state.server))
     for (ind, d) in file.state.bindings
         if !haskey(vars.bindings, ind)
             vars.bindings[ind] = Dict()
@@ -394,18 +392,19 @@ function cat_bindings(server, file, vars = State())
     
     
     for incl in file.state.includes
-        cat_bindings(server, getfile(server, incl.file), vars)
+        cat_bindings(getfile(file.state.server, incl.file), vars)
     end
     return vars
 end
 
 
 
-function build_bindings(server, file)
-    state = cat_bindings(server, file)
+function build_bindings(file)
+    state = cat_bindings(file)
     # add imports
-    state.used_modules = Dict{String,Any}("Base" => Binding(Location(file.state), SIndex(file.index, file.nb), store["Base"], _Module),
-    "Core" => Binding(Location(file.state), SIndex(file.index, file.nb), store["Core"], _Module))
+    state.used_modules = Dict{String,Any}(
+        "Base" => Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], _Module),
+        "Core" => Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], _Module))
     resolve_imports(state)
     return state
 end
@@ -473,7 +472,7 @@ function resolve_import(imprt, state)
     argname = ""
     predots = 0
     
-    root = par = store
+    root = par = state.server.packages
     bindings = []
     while i <= length(x.args)
         arg = x.args[i]
@@ -494,7 +493,7 @@ function resolve_import(imprt, state)
             push!(bindings, (false, argname, par))
         elseif arg isa CSTParser.OPERATOR && arg.kind == CSTParser.Tokens.DOT
             #dot prexceding identifier
-            if par == root == store
+            if par == root == state.server.packages
                 par = imprt.si.i
             elseif par isa Tuple
                 if length(par) > 0

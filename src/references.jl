@@ -52,7 +52,7 @@ function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Uni
     if haskey(state.used_modules, name)
         push!(out, state.used_modules[name])
     else
-        for m in state.used_modules
+        for m in state.used_modules 
             if name in m[2].val[".exported"] && haskey(m[2].val, name) # lots of action here
                 push!(out, ImportBinding(m[2].loc, m[2].si, m[2].val[name]))
             end
@@ -146,14 +146,11 @@ function find_bindings_before(offset, state::State)
     return list
 end
 
-
-
-
-function cat_references(server, file, refs = [])
+function cat_references(file, refs = Reference[])
     append!(refs, file.state.refs)
     
     for incl in file.state.includes
-        cat_references(server, incl.val, refs)
+        cat_references(incl.val, refs)
     end
     return refs
 end

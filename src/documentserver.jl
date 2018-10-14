@@ -1,8 +1,9 @@
 CST(f::File) = f.cst
 mutable struct DocumentServer
     files::Dict{String,File}
+    packages::Dict{String,Any}
 end
-DocumentServer() = DocumentServer(Dict())
+DocumentServer() = DocumentServer(Dict(), SymbolServer.corepackages)
 function Base.display(server::DocumentServer)
     for (file,f) in server.files
         println(basename(file), " -> ", [(basename(i.file), i.index) for i in f.state.includes])
