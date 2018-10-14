@@ -28,7 +28,8 @@ function load_file(server, path::String, index, nb, parent)
     return file
 end
 
-function load_dir(dir::String, server::DocumentServer = DocumentServer())
+function load_dir(dir::String, pkgs = SymbolServer.corepackages)
+    server= DocumentServer(Dict(), pkgs)
     for (root, dirs, files) in walkdir(dir)
         for file in files
             if endswith(file, ".jl")

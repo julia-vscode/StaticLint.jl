@@ -437,6 +437,13 @@ function _get_field(par, arg, state)
     if par isa Dict
         if haskey(par, CSTParser.str_value(arg))
             par = par[CSTParser.str_value(arg)]
+            if par isa String # reference to dependency
+                if haskey(state.server.packages, par)
+                    return state.server.packages[par] 
+                else
+                    return 
+                end
+            end
             return par
         else
             return

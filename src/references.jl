@@ -116,7 +116,12 @@ function resolve_dot_ref(rr::Reference, state, rrefs, rlr::ResolvedRef)
     if rlr.b.val isa Dict # root (rlr.b) is an imported module
         if haskey(rlr.b.val, CSTParser.str_value(rr.val))
             b = rlr.b.val[CSTParser.str_value(rr.val)]
-            b = ImportBinding(rlr.b.loc, rlr.b.si, rlr.b.val[CSTParser.str_value(rr.val)])
+            if b isa String && haskey(state.server.packages, b)# handles reference to dependency package
+                b = state.server.packages[b]
+            else
+                return rr
+            end
+            b = ImportBinding(rlr.b.loc, rlr.b.si, b)
             rrr = ResolvedRef(rr, b)
             push!(rrefs, rrr)
             return rrr
