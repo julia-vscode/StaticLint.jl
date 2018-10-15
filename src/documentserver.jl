@@ -1,8 +1,9 @@
 CST(f::File) = f.cst
 mutable struct DocumentServer
     files::Dict{String,File}
+    packages::Dict{String,Any}
 end
-DocumentServer() = DocumentServer(Dict())
+DocumentServer() = DocumentServer(Dict(), SymbolServer.corepackages)
 function Base.display(server::DocumentServer)
     for (file,f) in server.files
         println(basename(file), " -> ", [(basename(i.file), i.index) for i in f.state.includes])
@@ -27,7 +28,8 @@ function load_file(server, path::String, index, nb, parent)
     return file
 end
 
-function load_dir(dir::String, server::DocumentServer = DocumentServer())
+function load_dir(dir::String, pkgs = SymbolServer.corepackages)
+    server= DocumentServer(Dict(), pkgs)
     for (root, dirs, files) in walkdir(dir)
         for file in files
             if endswith(file, ".jl")
