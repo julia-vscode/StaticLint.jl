@@ -74,6 +74,10 @@ function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Uni
                 ret = out[i]
             end
         end
+        if !inscope(r.si, ret.si)
+            push!(urefs, r)
+            return r
+        end
         rr = ResolvedRef(r, ret)
         push!(rrefs, rr)
         push!(ret.refs, r)

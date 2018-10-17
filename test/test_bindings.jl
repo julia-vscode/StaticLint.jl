@@ -96,3 +96,7 @@ f = """
 struct Foo end
 (foo::Foo)() = 1""" |> test_sl
 @test isempty(f.uref)
+
+f = """
+var1 = var1""" |> test_sl
+@test !isempty(f.uref)
