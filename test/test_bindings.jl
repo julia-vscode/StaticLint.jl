@@ -100,3 +100,13 @@ struct Foo end
 f = """
 var1 = var1""" |> test_sl
 @test !isempty(f.uref)
+
+
+# test module barrier
+f = """
+a = 1
+module A
+a
+end
+""" |> test_sl
+@test !isempty(f.uref)

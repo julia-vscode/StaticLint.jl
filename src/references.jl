@@ -44,43 +44,70 @@ function res_ref(name, ind, bindings)
 end
 
 function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
-    out = Any[]
+    out = Union{Binding, ImportBinding}[]
     name = CSTParser.str_value(r.val)
-    ind = r.si.i
-    append!(out,res_ref(name, ind, state.bindings))
-    
-    if haskey(state.used_modules, name)
-        push!(out, state.used_modules[name])
-    else
-        for m in state.used_modules 
-            if name in m[2].val[".exported"] && haskey(m[2].val, name) # lots of action here
-                push!(out, ImportBinding(m[2].loc, m[2].si, m[2].val[name]))
+    lbsi = get_lbsi(r, state)
+    ret = nothing
+    if haskey(state.bindings, r.si.i) && haskey(state.bindings[r.si.i], name)
+        for b in state.bindings[r.si.i][name]
+            # if ret == nothing && inscope(r.si, b.si)
+            #     ret = b
+            # elseif inscope(r.si, b.si) && lt(ret.si, b.si)
+            #     ret = b
+            # end
+            if ret == nothing
+                if r.delayed
+                    ret = b
+                elseif inscope(r.si, b.si)
+                    ret = b
+                end
+            elseif r.delayed && lt(ret.si, b.si)
+                ret = b
+            elseif inscope(r.si, b.si) && lt(ret.si, b.si)
+                ret = b
             end
         end
     end
-    
-    #get lower bound on scope
-    lbsi = get_lbsi(r, state)
+    if ret == nothing
+        ind = r.si.i
+        while length(ind) > 0 && length(ind) > length(lbsi.i) 
+            n = last(ind)
+            ind = shrink_tuple(ind)
+            if haskey(state.bindings, ind) && haskey(state.bindings[ind], name)
+                for b in state.bindings[ind][name]
+                    if ret == nothing
+                        if r.delayed
+                            ret = b
+                        elseif b.si.n <= n
+                            ret = b
+                        end
+                    elseif lt(ret.si, b.si)
+                        ret = b
+                    end
+                end
+            end
+        end
+    end
 
-    if isempty(out)
+    if ret == nothing
+        if haskey(state.used_modules, name)
+            ret = state.used_modules[name]
+        else
+            for m in state.used_modules 
+                if name in m[2].val[".exported"] && haskey(m[2].val, name)
+                    ret = ImportBinding(m[2].loc, m[2].si, m[2].val[name])
+                end
+            end
+        end
+    end
+
+    if ret == nothing
         push!(urefs, r)
         return r
     else
-        ret = first(out)
-        for i = 2:length(out)
-            if r.delayed && length(r.si.i) > length(out[i].si.i) && in_delayedscope(r.si.i, lbsi.i, out[i].si.i) && lt(ret, out[i])
-                ret = out[i]
-            elseif lt(ret, out[i]) && inscope(r.si, out[i].si)
-                ret = out[i]
-            end
-        end
-        if !(inscope(r.si, ret.si) || (r.delayed && in_delayedscope(r.si.i, lbsi.i, ret.si.i)))
-            push!(urefs, r)
-            return r
-        end
+        push!(ret.refs, r)
         rr = ResolvedRef(r, ret)
         push!(rrefs, rr)
-        push!(ret.refs, r)
         return rr
     end
 end
