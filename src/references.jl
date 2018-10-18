@@ -74,7 +74,7 @@ function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Uni
                 ret = out[i]
             end
         end
-        if !inscope(r.si, ret.si)
+        if !(inscope(r.si, ret.si) || (r.delayed && in_delayedscope(r.si.i, lbsi.i, ret.si.i)))
             push!(urefs, r)
             return r
         end
