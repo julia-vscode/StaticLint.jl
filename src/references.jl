@@ -8,7 +8,6 @@ function get_ref(x, state::State, s::Scope, blockref, delayed)
         end
     else
         if x isa CSTParser.IDENTIFIER && !(x.val in ("new", "end", "ccall"))
-            @info state.loc.offset, x.val
             # Add symbol reference (ignore some keywords)
             push!(state.refs, Reference(x, Location(state), SIndex(s.index, s.bindings), delayed))
             return false
