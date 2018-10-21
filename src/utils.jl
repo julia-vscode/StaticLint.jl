@@ -36,26 +36,10 @@ function create_scope(x, state, s)
 end
 
 function add_module_barrier(state, index, x)
-    # push!(state.bindings[".modules"], Binding(Location(state), SIndex(index, 0), x, nothing))
     push!(state.modules, Binding(Location(state), SIndex(index, 0), x, nothing))
 end
 
 inscope(asi, bsi) = inscope(asi.i, asi.n, bsi.i, bsi.n)
-# function inscope(rind, rpos, bind, bpos)
-#     nrind = length(rind)
-#     nbind = length(bind)
-#     nbind > nrind && return false
-#     i = 1
-#     while i <= nbind
-#         rind[i] != bind[i] && return false
-#         i += 1
-#     end
-#     if nrind == nbind
-#         return rpos ≥ bpos
-#     else
-#         return rind[i] ≥ bpos
-#     end
-# end
 @generated function inscope(rind::NTuple{rN,Int}, rpos::Int, bind::NTuple{bN,Int}, bpos::Int) where {bN,rN}
     if bN > rN
         return :(false)

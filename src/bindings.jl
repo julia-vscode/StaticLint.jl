@@ -113,12 +113,12 @@ function int_binding(x, state, s)
         end
     elseif x isa CSTParser.EXPR{CSTParser.For}
         if is_for_iter(x.args[2])
-            assign_to_tuple(x.args[2].arg1, x.args[2].arg2, state.loc.offset +x.args[1].fullspan, state, s)
+            assign_to_tuple(x.args[2].arg1, x.args[2], state.loc.offset +x.args[1].fullspan, state, s)
         else
             offset = state.loc.offset
             for i = 1:length(x.args[2].args)
                 if is_for_iter(x.args[2].args[i])
-                    assign_to_tuple(x.args[2].args[i].arg1, x.args[2].args[i].arg2, offset, state, s)
+                    assign_to_tuple(x.args[2].args[i].arg1, x.args[2].args[i], offset, state, s)
                 end
                 offset += x.args[2].args[i].fullspan
             end

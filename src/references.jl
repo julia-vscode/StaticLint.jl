@@ -33,16 +33,6 @@ function get_ref(x, state::State, s::Scope, blockref, delayed)
     return false
 end
 
-function res_ref(name, ind, bindings)
-    if haskey(bindings, ind) && haskey(bindings[ind], name)
-        return bindings[ind][name]
-    elseif length(ind) > 0
-        return res_ref(name, shrink_tuple(ind), bindings)
-    else
-        return []
-    end
-end
-
 function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
     out = Union{Binding, ImportBinding}[]
     name = CSTParser.str_value(r.val)
@@ -50,20 +40,18 @@ function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Uni
     ret = nothing
     if haskey(state.bindings, r.si.i) && haskey(state.bindings[r.si.i], name)
         for b in state.bindings[r.si.i][name]
-            # if ret == nothing && inscope(r.si, b.si)
-            #     ret = b
-            # elseif inscope(r.si, b.si) && lt(ret.si, b.si)
-            #     ret = b
-            # end
             if ret == nothing
                 if r.delayed
                     ret = b
                 elseif inscope(r.si, b.si)
+                # elseif b.si.n < r.si.n
                     ret = b
                 end
-            elseif r.delayed && lt(ret.si, b.si)
+            elseif lt(ret.si, b.si)
+            # elseif r.delayed && ret.si.n < b.si.n
                 ret = b
             elseif inscope(r.si, b.si) && lt(ret.si, b.si)
+            # elseif ret.si.n < b.si.n && b.si.n < r.si.n
                 ret = b
             end
         end

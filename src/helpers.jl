@@ -27,3 +27,11 @@ function find_ref(f, offset)
     end
     return nothing
 end
+function find_ref(rrefs::Vector{ResolvedRef}, offset, file)
+    for rref in rrefs
+        if rref.r.loc.file == file && rref.r.loc.offset == offset
+            return rref 
+        end
+    end
+    return nothing
+end

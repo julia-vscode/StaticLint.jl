@@ -97,6 +97,7 @@ struct Foo end
 (foo::Foo)() = 1""" |> test_sl
 @test isempty(f.uref)
 
+# test r-to-l assignment
 f = """
 var1 = var1""" |> test_sl
 @test !isempty(f.uref)
@@ -108,5 +109,21 @@ a = 1
 module A
 a
 end
+""" |> test_sl
+@test !isempty(f.uref)
+
+# test delayed
+f = """
+function func(x)
+    T
+end
+struct T end
+""" |> test_sl
+@test isempty(f.uref)
+
+f = """
+function func(x::T)
+end
+struct T end
 """ |> test_sl
 @test !isempty(f.uref)
