@@ -7,15 +7,15 @@ function infer(b, server, rrefs)
         if b.val.arg2 isa CSTParser.LITERAL
             # rhs is a literal, inference is trivial
             if b.val.arg2.kind == CSTParser.Tokenize.Tokens.STRING || b.val.arg2.kind == CSTParser.Tokenize.Tokens.TRIPLE_STRING
-                b.t = server.packages["Core"]["String"]
+                b.t = server.packages["Core"].vals["String"]
             elseif b.val.arg2.kind == CSTParser.Tokenize.Tokens.INTEGER
-                b.t = server.packages["Core"]["Int"]
+                b.t = server.packages["Core"].vals["Int"]
             elseif b.val.arg2.kind == CSTParser.Tokenize.Tokens.FLOAT
-                b.t = server.packages["Core"]["Float64"]
+                b.t = server.packages["Core"].vals["Float64"]
             elseif b.val.arg2.kind == CSTParser.Tokenize.Tokens.HEX_INT || b.val.arg2.kind == CSTParser.Tokenize.Tokens.OCT_INT || b.val.arg2.kind == CSTParser.Tokenize.Tokens.BIN_INT
-                b.t = server.packages["Core"]["UInt64"]
+                b.t = server.packages["Core"].vals["UInt64"]
             elseif b.val.arg2.kind == CSTParser.Tokenize.Tokens.CHAR
-                b.t = server.packages["Core"]["Char"]
+                b.t = server.packages["Core"].vals["Char"]
             end
         elseif b.val.arg2 isa CSTParser.IDENTIFIER
             # rhs is an ID, copy typing from that reference
@@ -37,7 +37,7 @@ function infer(b, server, rrefs)
                 if rhs_ref.b.val isa SymbolServer.structStore || rhs_ref.b.val isa SymbolServer.abstractStore || rhs_ref.b.val isa SymbolServer.primitiveStore
                     b.t = rhs_ref.b.val
                 end
-            elseif rhs_ref.b.t == server.packages["Core"]["DataType"]
+            elseif rhs_ref.b.t == server.packages["Core"].vals["DataType"]
                 b.t = rhs_ref.b
             end
         end
