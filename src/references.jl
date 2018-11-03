@@ -33,10 +33,7 @@ function get_ref(x, state::State, s::Scope, blockref, delayed)
     return false
 end
 
-function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
-    out = Union{Binding, ImportBinding}[]
-    name = CSTParser.str_value(r.val)
-    lbsi = get_lbsi(r, state)
+function resolve_current_scope(r, state, name)
     ret = nothing
     if haskey(state.bindings, r.si.i) && haskey(state.bindings[r.si.i], name)
         for b in state.bindings[r.si.i][name]
@@ -44,50 +41,59 @@ function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Uni
                 if r.delayed
                     ret = b
                 elseif inscope(r.si, b.si)
-                # elseif b.si.n < r.si.n
                     ret = b
                 end
             elseif lt(ret.si, b.si)
-            # elseif r.delayed && ret.si.n < b.si.n
                 ret = b
             elseif inscope(r.si, b.si) && lt(ret.si, b.si)
-            # elseif ret.si.n < b.si.n && b.si.n < r.si.n
                 ret = b
             end
         end
     end
-    if ret == nothing
-        ind = r.si.i
-        while length(ind) > 0 && length(ind) > length(lbsi.i) 
-            n = last(ind)
-            ind = shrink_tuple(ind)
-            if haskey(state.bindings, ind) && haskey(state.bindings[ind], name)
-                for b in state.bindings[ind][name]
-                    if ret == nothing
-                        if r.delayed
-                            ret = b
-                        elseif b.si.n <= n
-                            ret = b
-                        end
-                    elseif lt(ret.si, b.si)
+    return ret
+end
+
+function resolve_upper_scope(ret, r, state, name, lbsi) ret end
+function resolve_upper_scope(ret::Nothing, r, state, name, lbsi)
+    ind = r.si.i
+    while length(ind) > 0 && length(ind) > length(lbsi.i) 
+        n = last(ind)
+        ind = shrink_tuple(ind)
+        if haskey(state.bindings, ind) && haskey(state.bindings[ind], name)
+            for b in state.bindings[ind][name]
+                if ret == nothing
+                    if r.delayed
+                        ret = b
+                    elseif b.si.n <= n
                         ret = b
                     end
+                elseif lt(ret.si, b.si)
+                    ret = b
                 end
             end
         end
     end
+    return ret
+end
 
-    if ret == nothing
-        if haskey(state.used_modules, name)
-            ret = state.used_modules[name]
-        else
-            for m in state.used_modules 
-                if name in m[2].val[".exported"] && haskey(m[2].val, name)
-                    ret = ImportBinding(m[2].loc, m[2].si, m[2].val[name])
-                end
-            end
+function resolve_import_scope(ret, state, name) ret end
+function resolve_import_scope(ret::Nothing, state, name)
+    
+    for m in state.used_modules 
+        if m.val.name == name
+            return ImportBinding(m.loc, m.si, m.val)
+        elseif name in m.val.exported && haskey(m.val.vals, name)
+            return ImportBinding(m.loc, m.si, m.val.vals[name])
         end
     end
+end
+
+function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Union{CSTParser.IDENTIFIER,CSTParser.EXPR{CSTParser.MacroName}}
+    name = CSTParser.str_value(r.val)
+    lbsi = get_lbsi(r, state)
+    ret = resolve_current_scope(r, state, name)
+    ret = resolve_upper_scope(ret, r, state, name, lbsi)
+    ret = resolve_import_scope(ret, state, name)
 
     if ret == nothing
         push!(urefs, r)
@@ -100,7 +106,7 @@ function resolve_ref(r::Reference{T}, state::State, rrefs, urefs) where T <: Uni
     end
 end
 
-function get_lbsi(ref, state)
+function get_lbsi(ref::Reference, state::State)
     lbsi = SIndex((), 0)
     for m in state.modules
         if inscope(ref.si, m.si) && lt(lbsi, m.si)
@@ -132,9 +138,9 @@ end
 resolve_ref(rr, bindings, rrefs, urefs) = rr
 # Resolve reference given `lr.r`
 function resolve_dot_ref(rr::Reference, state, rrefs, rlr::ResolvedRef)
-    if rlr.b.val isa Dict # root (rlr.b) is an imported module
-        if haskey(rlr.b.val, CSTParser.str_value(rr.val))
-            b = rlr.b.val[CSTParser.str_value(rr.val)]            
+    if rlr.b.val isa SymbolServer.ModuleStore # root (rlr.b) is an imported module
+        if haskey(rlr.b.val.vals, CSTParser.str_value(rr.val))
+            b = rlr.b.val.vals[CSTParser.str_value(rr.val)]            
             if b isa String 
                 if haskey(state.server.packages, b)# handles reference to dependency package
                     b = state.server.packages[b]

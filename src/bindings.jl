@@ -35,7 +35,7 @@ function add_binding(name, binding::Binding, bindings::Dict, index::Tuple)
             bindings[index][name] = Binding[binding]
         end
     else
-        bindings[index] = Dict(name => Binding[binding])
+        bindings[index] = Dict{String,Vector{Binding}}(name => Binding[binding])
     end
 end
     
@@ -296,6 +296,9 @@ function get_arg_type(arg, state, s, offset)
     if arg isa CSTParser.IDENTIFIER
         t = nothing
     elseif arg isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.op)
+        if arg.arg1 isa CSTParser.EXPR{CSTParser.TupleH}
+            return get_arg_type(arg.arg1, state, s, offset)
+        end
         t = arg.arg2
         arg = arg.arg1
     elseif arg isa CSTParser.EXPR{CSTParser.Kw}
@@ -313,6 +316,18 @@ function get_arg_type(arg, state, s, offset)
     val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg, t)
     add_binding(CSTParser.str_value(arg), val, state.bindings, s.index)
     return
+end
+
+function get_arg_type(arg::CSTParser.EXPR{CSTParser.TupleH}, state, s, offset)
+    t = nothing
+    for a in arg.args
+        if a isa CSTParser.IDENTIFIER
+            s.bindings += 1
+            val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), a, t)
+            add_binding(CSTParser.str_value(a), val, state.bindings, s.index)
+        end
+        offset += a.fullspan
+    end
 end
 
 function get_arg_type(arg::CSTParser.EXPR{CSTParser.Parameters}, state, s, offset)
@@ -367,7 +382,7 @@ end
 function cat_bindings(file, vars = State("", file.state.server))
     for (ind, d) in file.state.bindings
         if !haskey(vars.bindings, ind)
-            vars.bindings[ind] = Dict()
+            vars.bindings[ind] = Dict{Tuple,Dict{String,Vector{Binding}}}()
         end
         for (n, bs) in file.state.bindings[ind]
             if !haskey(vars.bindings[ind], n)
@@ -386,8 +401,8 @@ function cat_bindings(file, vars = State("", file.state.server))
         end
         append!(vars.exports[name], bs)
     end
-    for (name,bs) in file.state.used_modules
-        vars.used_modules[name] = bs
+    for m in file.state.used_modules
+        push!(vars.used_modules, m)
     end
     
     
@@ -402,9 +417,9 @@ end
 function build_bindings(file)
     state = cat_bindings(file)
     # add imports
-    state.used_modules = Dict{String,Any}(
-        "Base" => Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], _Module),
-        "Core" => Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], _Module))
+    state.used_modules = [
+        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], _Module),
+        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], _Module)]
     resolve_imports(state)
     return state
 end
@@ -437,6 +452,20 @@ function _get_field(par, arg, state)
     if par isa Dict
         if haskey(par, CSTParser.str_value(arg))
             par = par[CSTParser.str_value(arg)]
+            if par isa String # reference to dependency
+                if haskey(state.server.packages, par)
+                    return state.server.packages[par] 
+                else
+                    return 
+                end
+            end
+            return par
+        else
+            return
+        end
+    elseif par isa SymbolServer.ModuleStore
+        if haskey(par.vals, CSTParser.str_value(arg))
+            par = par.vals[CSTParser.str_value(arg)]
             if par isa String # reference to dependency
                 if haskey(state.server.packages, par)
                     return state.server.packages[par] 
@@ -530,8 +559,8 @@ function resolve_import(imprt, state)
         add_binding(b[2], binding, state.bindings, imprt.si.i)
         
         if u 
-            if b[3] isa Dict && get(b[3],".type", "") == "module"
-                state.used_modules[b[2]] = binding
+            if b[3] isa SymbolServer.ModuleStore
+                push!(state.used_modules,binding)
             elseif b[3] isa Binding
                 ind = add_to_tuple(b[3].si.i, b[3].si.n + 1)                
                 if haskey(state.exports, ind)

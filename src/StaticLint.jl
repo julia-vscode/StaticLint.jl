@@ -37,26 +37,26 @@ end
 mutable struct Scope
     parent::Union{Nothing,Scope}
     children::Vector{Scope}
-    offset::UnitRange{Int}
+    offset::Int
     t::DataType
     index::Index
     bindings::Int
 end
-Scope() = Scope(nothing, [], 0:-1, CSTParser.TopLevel, (), 0)
+Scope() = Scope(nothing, [], 0, CSTParser.TopLevel, (), 0)
 
 mutable struct State
     loc::Location
-    bindings
+    bindings::Dict{Tuple,Dict{String,Vector{Binding}}}
     modules::Vector{Binding}
     exports::Dict{Tuple,Vector{String}}
     imports::Vector{ImportBinding}
-    used_modules::Dict{String,Binding}
+    used_modules::Vector{Binding}
     refs::Vector{Reference}
     includes::Vector{Include}
     server
 end
-State() = State(Location("", 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], DocumentServer())
-State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Dict{String,Binding}(), Reference[], Include[], server)
+State() = State(Location("", 0), Dict{Tuple,Dict}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], DocumentServer())
+State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], server)
 
 mutable struct File
     cst::CSTParser.EXPR
@@ -164,8 +164,8 @@ include("infer.jl")
 include("display.jl")
 
 
-const _Module   = SymbolServer.corepackages["Core"]["Module"]
-const _DataType = SymbolServer.corepackages["Core"]["DataType"]
-const _Function = SymbolServer.corepackages["Core"]["Function"]
+const _Module   = SymbolServer.corepackages["Core"].vals["Module"]
+const _DataType = SymbolServer.corepackages["Core"].vals["DataType"]
+const _Function = SymbolServer.corepackages["Core"].vals["Function"]
 
 end
