@@ -296,6 +296,9 @@ function get_arg_type(arg, state, s, offset)
     if arg isa CSTParser.IDENTIFIER
         t = nothing
     elseif arg isa CSTParser.BinarySyntaxOpCall && CSTParser.is_decl(arg.op)
+        if arg.arg1 isa CSTParser.EXPR{CSTParser.TupleH}
+            return get_arg_type(arg.arg1, state, s, offset)
+        end
         t = arg.arg2
         arg = arg.arg1
     elseif arg isa CSTParser.EXPR{CSTParser.Kw}
@@ -313,6 +316,18 @@ function get_arg_type(arg, state, s, offset)
     val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg, t)
     add_binding(CSTParser.str_value(arg), val, state.bindings, s.index)
     return
+end
+
+function get_arg_type(arg::CSTParser.EXPR{CSTParser.TupleH}, state, s, offset)
+    t = nothing
+    for a in arg.args
+        if a isa CSTParser.IDENTIFIER
+            s.bindings += 1
+            val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), a, t)
+            add_binding(CSTParser.str_value(a), val, state.bindings, s.index)
+        end
+        offset += a.fullspan
+    end
 end
 
 function get_arg_type(arg::CSTParser.EXPR{CSTParser.Parameters}, state, s, offset)
