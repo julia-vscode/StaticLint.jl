@@ -127,3 +127,19 @@ end
 struct T end
 """ |> test_sl
 @test !isempty(f.uref)
+
+
+# tuple args in functions
+f = """
+function func((a,b))
+    a + b
+end
+""" |> test_sl
+@test isempty(f.uref)
+
+f = """
+function func((a,b)::Tuple)
+    a + b
+end
+""" |> test_sl
+@test isempty(f.uref)
