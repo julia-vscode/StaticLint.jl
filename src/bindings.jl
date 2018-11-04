@@ -64,8 +64,8 @@ function ext_binding(x, state, s)
         else
             assign_to_tuple(ass, x, state.loc.offset, state, s)
         end
-    elseif x isa CSTParser.EXPR{CSTParser.Using} || x isa CSTParser.EXPR{CSTParser.Import} || x isa CSTParser.EXPR{CSTParser.ImportAll}
-        get_imports(x, state, s)
+    # elseif x isa CSTParser.EXPR{CSTParser.Using} || x isa CSTParser.EXPR{CSTParser.Import} || x isa CSTParser.EXPR{CSTParser.ImportAll}
+    #     get_imports(x, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.Export}
         add_export_bindings(x, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.MacroCall} && x.args[1] isa CSTParser.EXPR{CSTParser.MacroName} && length(x.args[1].args) > 1 &&  CSTParser.str_value(x.args[1].args[2]) == "enum"
@@ -374,9 +374,8 @@ function _store_search(strs, store, i = 1, bs = [])
 end
 
 function get_imports(x, state, s)
+    s.bindings += 1
     push!(state.imports, ImportBinding(Location(state), SIndex(s.index, s.bindings), x))
-    # ensure we add (at least) enough binding slots
-    s.bindings += length(x.args)
 end
 
 function cat_bindings(file, vars = State("", file.state.server))
@@ -548,15 +547,24 @@ function resolve_import(imprt, state)
         end
         i += 1
     end
+    ext_si =  SIndex(shrink_tuple(imprt.si.i), last(imprt.si.i))
     for b in bindings
         # b contains (doimport, name, val)
-        !b[1] && continue
-        if b[3] isa Binding
-            binding = Binding(imprt.loc, imprt.si, b[3].val, b[3].t)
-        else
-            binding = Binding(imprt.loc, imprt.si, b[3], nothing)
+        if !b[1]
+            if b[3] isa Binding
+                binding = Binding(imprt.loc, imprt.si, b[3].val, b[3].t)
+            else
+                binding = Binding(imprt.loc, imprt.si, b[3], nothing)
+            end
+            add_binding(b[2], binding, state.bindings, imprt.si.i)
+            continue
         end
-        add_binding(b[2], binding, state.bindings, imprt.si.i)
+        if b[3] isa Binding
+            binding = Binding(imprt.loc, ext_si, b[3].val, b[3].t)
+        else
+            binding = Binding(imprt.loc, ext_si, b[3], nothing)
+        end
+        add_binding(b[2], binding, state.bindings, ext_si.i)
         
         if u 
             if b[3] isa SymbolServer.ModuleStore
@@ -569,11 +577,11 @@ function resolve_import(imprt, state)
                         isempty(ret) && continue
                         eb = last(ret)
                         if eb isa Binding
-                            binding = Binding(imprt.loc, imprt.si, eb.val, eb.t)
+                            binding = Binding(imprt.loc, ext_si, eb.val, eb.t)
                         else
-                            binding = Binding(imprt.loc, imprt.si, eb, nothing)
+                            binding = Binding(imprt.loc, ext_si, eb, nothing)
                         end
-                        add_binding(n, binding, state.bindings, imprt.si.i)
+                        add_binding(n, binding, state.bindings, ext_si.i)
                     end
                 end
             end

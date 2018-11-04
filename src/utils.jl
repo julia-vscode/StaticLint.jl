@@ -30,6 +30,16 @@ function create_scope(x, state, s)
         push!(s.children, s1)
         int_binding(x, state, s1)
         return s1
+    elseif x isa CSTParser.EXPR{CSTParser.Using} || 
+        x isa CSTParser.EXPR{CSTParser.Import} || 
+        x isa CSTParser.EXPR{CSTParser.ImportAll}
+        t = typeof(x).parameters[1]
+        s.bindings += 1
+        index1 = cattuple(s.index,s.bindings)
+        s1 = Scope(s, Scope[], state.loc.offset .+ x.span, t, index1, 0)
+        push!(s.children, s1)
+        get_imports(x, state, s1)
+        return s1
     else
         return s
     end
