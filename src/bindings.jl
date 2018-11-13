@@ -413,12 +413,12 @@ end
 
 
 
-function build_bindings(file, server)
+function build_bindings(file)
     state = cat_bindings(file)
     # add imports
     state.used_modules = [
-        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], server.packages["Core"].vals["Module"]),
-        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], server.packages["Core"].vals["Module"])]
+        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], file.state.server.packages["Core"].vals["Module"]),
+        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], file.state.server.packages["Core"].vals["Module"])]
     resolve_imports(state)
     return state
 end
@@ -529,7 +529,7 @@ function resolve_import(imprt, state)
         elseif arg isa CSTParser.OPERATOR && arg.kind == CSTParser.Tokens.DOT
             #dot prexceding identifier
             if par == root == state.server.packages
-                par = imprt.si.i
+                par = shrink_tuple(imprt.si.i)
             elseif par isa Tuple
                 if length(par) > 0
                     par = shrink_tuple(par)

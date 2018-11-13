@@ -4,8 +4,7 @@ using Test
 const pkgs = (depot = SymbolServer.load_core();SymbolServer.import_package("StaticLint"=>"StaticLint", depot);depot["packages"])
 function test_sl(str)
     x = StaticLint.CSTParser.parse(str, true)
-    f = StaticLint.File(x)
-    f.state.server.packages = pkgs
+    f = StaticLint.File(x, pkgs)
     StaticLint.pass(f)
     state = StaticLint.build_bindings(f)
     StaticLint.resolve_refs(f.state.refs, state, f.rref, f.uref);    

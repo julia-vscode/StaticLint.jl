@@ -68,7 +68,6 @@ mutable struct File
     rref::Vector{ResolvedRef}
     uref::Vector{Reference}
 end
-File(x::CSTParser.EXPR) = File(x, State(), Scope(), (), 0, "", [], [])
 File(x::CSTParser.EXPR, pkgs::Dict) = File(x, State("", DocumentServer(Dict(), pkgs)), Scope(), (), 0, "", [], [])
 
 function pass(x::CSTParser.LeafNode, state::State, s::Scope, index, blockref, delayed)
