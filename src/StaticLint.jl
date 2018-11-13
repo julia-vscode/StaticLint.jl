@@ -163,9 +163,4 @@ include("helpers.jl")
 include("infer.jl")
 include("display.jl")
 
-
-const _Module   = SymbolServer.corepackages["Core"].vals["Module"]
-const _DataType = SymbolServer.corepackages["Core"].vals["DataType"]
-const _Function = SymbolServer.corepackages["Core"].vals["Function"]
-
 end
