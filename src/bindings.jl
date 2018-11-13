@@ -44,16 +44,16 @@ end
 function ext_binding(x, state, s)
     if CSTParser.defines_module(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, _Module)
+        add_binding(name, x, state, s, state.server.packages["Core"].vals["Module"])
     elseif CSTParser.defines_function(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, _Function)
+        add_binding(name, x, state, s, state.server.packages["Core"].vals["Function"])
     elseif CSTParser.defines_macro(x)
         name = string("@", CSTParser.str_value(CSTParser.get_name(x)))
         add_binding(name, x, state, s, nothing)
     elseif CSTParser.defines_datatype(x)           
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, _DataType)
+        add_binding(name, x, state, s, state.server.packages["Core"].vals["DataType"])
     elseif CSTParser.is_assignment(x)
         ass = x.arg1
         ass = CSTParser.rem_decl(ass)
@@ -97,7 +97,7 @@ end
 function int_binding(x, state, s)
     if CSTParser.defines_module(x)
         name = CSTParser.str_value(CSTParser.get_name(x))
-        add_binding(name, x, state, s, _Module)
+        add_binding(name, x, state, s, state.server.packages["Core"].vals["Module"])
     elseif CSTParser.defines_function(x) || CSTParser.defines_macro(x)
         get_fcall_bindings(CSTParser.get_sig(x), state, s)
     elseif CSTParser.defines_datatype(x)
@@ -108,7 +108,7 @@ function int_binding(x, state, s)
             sig = CSTParser.rem_subtype(sig)
             sig = CSTParser.rem_where(sig)
             for arg in CSTParser.get_curly_params(sig)
-                add_binding(arg, x, state, s, _DataType)
+                add_binding(arg, x, state, s, state.server.packages["Core"].vals["DataType"])
             end
         end
     elseif x isa CSTParser.EXPR{CSTParser.For}
@@ -158,7 +158,7 @@ function int_binding(x, state, s)
                 #TODO: add subtype marker
                 arg1 = CSTParser.rem_curly(CSTParser.rem_subtype(arg))
                 s.bindings += 1
-                val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg1, _DataType)
+                val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg1, state.server.packages["Core"].vals["DataType"])
                 add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
             end
             offset += arg.fullspan
@@ -171,7 +171,7 @@ function int_binding(x, state, s)
                 #TODO: add subtype marker
                 arg1 = CSTParser.rem_curly(CSTParser.rem_subtype(arg))
                 s.bindings += 1
-                val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg1, _DataType)
+                val = Binding(Location(state.loc.file, offset), SIndex(s.index, s.bindings), arg1, state.server.packages["Core"].vals["DataType"])
                 add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
             end
             offset += arg.fullspan
@@ -223,7 +223,7 @@ function get_fcall_bindings(sig, state, s)
                 #TODO: add subtype marker
                 arg1 = CSTParser.rem_curly(CSTParser.rem_subtype(arg))
                 s.bindings += 1
-                val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, _DataType)
+                val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, state.server.packages["Core"].vals["DataType"])
                 add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
             end
             offset1 += arg.fullspan
@@ -239,7 +239,7 @@ function get_fcall_bindings(sig, state, s)
         if sig.args[1] isa CSTParser.EXPR{CSTParser.InvisBrackets} && length(sig.args[1].args) == 3 && sig.args[1].args[2] isa CSTParser.BinarySyntaxOpCall && sig.args[1].args[2].op.kind == CSTParser.Tokens.DECLARATION
             dtname = CSTParser.rem_decl(sig.args[1].args[2])
             s.bindings += 1
-                val = Binding(Location(state.loc.file, offset + sig.args[1].args[1].fullspan), SIndex(s.index, s.bindings), dtname, _DataType)
+                val = Binding(Location(state.loc.file, offset + sig.args[1].args[1].fullspan), SIndex(s.index, s.bindings), dtname, state.server.packages["Core"].vals["DataType"])
                 add_binding(CSTParser.str_value(dtname), val, state.bindings, s.index)
         end
         if sig.args[1] isa CSTParser.EXPR{CSTParser.Curly}
@@ -250,7 +250,7 @@ function get_fcall_bindings(sig, state, s)
                     #TODO: add subtype marker
                     arg1 = CSTParser.rem_subtype(arg)
                     s.bindings += 1
-                    val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, _DataType)
+                    val = Binding(Location(state.loc.file, offset1), SIndex(s.index, s.bindings), arg1, state.server.packages["Core"].vals["DataType"])
                     add_binding(CSTParser.str_value(arg1), val, state.bindings, s.index)
                 end
                 offset1 += arg.fullspan
@@ -344,7 +344,7 @@ function get_struct_bindings(x, state, s)
     sig = CSTParser.rem_subtype(sig)
     sig = CSTParser.rem_where(sig)
     for arg in CSTParser.get_curly_params(sig)
-        add_binding(arg, x, state, s, _DataType)
+        add_binding(arg, x, state, s, state.server.packages["Core"].vals["DataType"])
     end
     for arg in x.args[isstruct ? 3 : 4]
         if !CSTParser.defines_function(arg)
@@ -413,12 +413,12 @@ end
 
 
 
-function build_bindings(file)
+function build_bindings(file, server)
     state = cat_bindings(file)
     # add imports
     state.used_modules = [
-        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], _Module),
-        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], _Module)]
+        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Base"], server.packages["Core"].vals["Module"]),
+        Binding(Location(file.state), SIndex(file.index, file.nb), file.state.server.packages["Core"], server.packages["Core"].vals["Module"])]
     resolve_imports(state)
     return state
 end
