@@ -3,6 +3,7 @@ mutable struct DocumentServer
     files::Dict{String,File}
     packages::Dict{String,Any}
 end
+DocumentServer() = DocumentServer(Dict(), Dict())
 
 function Base.display(server::DocumentServer)
     for (file,f) in server.files
