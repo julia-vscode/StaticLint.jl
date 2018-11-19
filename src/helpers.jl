@@ -2,6 +2,7 @@
 function collect_bindings(f, index = f.index, syms=  [])
     if haskey(f.state.bindings, index)
         for (name, bs) in f.state.bindings[index]
+            isempty(name) && continue
             for (i, b) in enumerate(bs)
                 if b.val isa CSTParser.AbstractEXPR
                     if b.val isa CSTParser.EXPR{CSTParser.ModuleH} && !(i > 1 && bs[i - 1].val == b.val)
