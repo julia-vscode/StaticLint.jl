@@ -14,7 +14,8 @@ end
 getfile(server::DocumentServer, p) = server.files[p]
 setfile(server::DocumentServer, p, x) = server.files[p] = x
 
-is_loaded(server, path) = haskey(server.files, path)
+is_loaded(server::DocumentServer, path) = haskey(server.files, path)
+is_loaded(server, path) = false
 
 can_load(server, path) = isfile(path)
 
