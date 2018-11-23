@@ -78,12 +78,18 @@ end
 
 function resolve_import_scope(ret, state, name) ret end
 function resolve_import_scope(ret::Nothing, state, name)
-    
     for m in state.used_modules 
         if m.val.name == name
             return ImportBinding(m.loc, m.si, m.val)
         elseif name in m.val.exported && haskey(m.val.vals, name)
-            return ImportBinding(m.loc, m.si, m.val.vals[name])
+            if m.val.vals[name] isa String
+                if haskey(state.server.packages, name)
+                    #Package reexports another package
+                    return ImportBinding(m.loc, m.si, state.server.packages[name])
+                end
+            else
+                return ImportBinding(m.loc, m.si, m.val.vals[name])
+            end
         end
     end
 end
@@ -108,7 +114,7 @@ end
 
 function get_lbsi(ref::Reference, state::State)
     lbsi = SIndex((), 0)
-    for m in state.modules
+    for m in state.modules.list
         if inscope(ref.si, m.si) && lt(lbsi, m.si)
             lbsi = m.si
         end

@@ -44,10 +44,16 @@ mutable struct Scope
 end
 Scope() = Scope(nothing, [], 0, CSTParser.TopLevel, (), 0)
 
+mutable struct ModuleList
+   list::Vector{Binding}
+   names::Set{String}
+end
+ModuleList() = ModuleList([], Set{String}())
+
 mutable struct State
     loc::Location
     bindings::Dict{Tuple,Dict{String,Vector{Binding}}}
-    modules::Vector{Binding}
+    modules::ModuleList
     exports::Dict{Tuple,Vector{String}}
     imports::Vector{ImportBinding}
     used_modules::Vector{Binding}
@@ -55,8 +61,8 @@ mutable struct State
     includes::Vector{Include}
     server
 end
-State() = State(Location("", 0), Dict{Tuple,Dict}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], DocumentServer())
-State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), Binding[], Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], server)
+State() = State(Location("", 0), Dict{Tuple,Dict}(), ModuleList(), Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], DocumentServer())
+State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), ModuleList(), Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], server)
 
 mutable struct File
     cst::CSTParser.EXPR
@@ -147,7 +153,8 @@ function pass(file::File)
     empty!(file.state.refs)
     empty!(file.state.includes)
     empty!(file.state.bindings)
-    empty!(file.state.modules)
+    empty!(file.state.modules.list)
+    empty!(file.state.modules.names)
     empty!(file.state.imports)
     empty!(file.state.exports)
     empty!(file.state.used_modules)

@@ -29,7 +29,7 @@ end
 function Base.display(state::State)
     println("[State ($(state.loc.file)) w/ ")
     println("      $(length(state.bindings)) bindings") 
-    println("      $(length(state.modules)) modules")     
+    println("      $(length(state.modules.list)) modules")     
     println("      $(length(state.refs)) references]")   
 end
 

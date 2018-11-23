@@ -46,7 +46,8 @@ function create_scope(x, state, s)
 end
 
 function add_module_barrier(state, index, x)
-    push!(state.modules, Binding(Location(state), SIndex(index, 0), x, nothing))
+    push!(state.modules.list, Binding(Location(state), SIndex(index, 0), x, nothing))
+    push!(state.modules.names, CSTParser.str_value(CSTParser.get_name(x)))
 end
 
 inscope(asi, bsi) = inscope(asi.i, asi.n, bsi.i, bsi.n)

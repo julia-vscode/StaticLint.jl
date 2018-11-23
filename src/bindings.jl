@@ -391,7 +391,8 @@ function cat_bindings(file, vars = State("", file.state.server))
         end
     end
     
-    append!(vars.modules, file.state.modules)
+    append!(vars.modules.list, file.state.modules.list)
+    union!(vars.modules.names, file.state.modules.names)
     append!(vars.imports, file.state.imports)
     
     for (name,bs) in file.state.exports
