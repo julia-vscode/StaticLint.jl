@@ -202,6 +202,8 @@ function get_include(x, state, s)
             end
             push!(state.includes, Include(file, path, state.loc.offset, s.index, s.bindings))
             s.bindings = file.scope.bindings
+        else
+            push!(state.linterrors, LintError(IncludeFail, deepcopy(state.loc), x))
         end
     end
 end

@@ -449,7 +449,7 @@ end
 
 
 function _get_field(par, arg, state)
-    if par isa Dict
+    if par isa Dict #package store
         if haskey(par, CSTParser.str_value(arg))
             par = par[CSTParser.str_value(arg)]
             if par isa String # reference to dependency
@@ -463,7 +463,7 @@ function _get_field(par, arg, state)
         else
             return
         end
-    elseif par isa SymbolServer.ModuleStore
+    elseif par isa SymbolServer.ModuleStore # imported module
         if haskey(par.vals, CSTParser.str_value(arg))
             par = par.vals[CSTParser.str_value(arg)]
             if par isa String # reference to dependency
@@ -485,7 +485,7 @@ function _get_field(par, arg, state)
             par = last(ret)
             return par
         end
-    else
+    elseif par isa Binding
         ind = add_to_tuple(par.si.i, par.si.n + 1)
         ret = find_binding(state.bindings, CSTParser.str_value(arg), ind, x->true) 
         if isempty(ret)
