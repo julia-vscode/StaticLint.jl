@@ -70,10 +70,7 @@ function ext_binding(x, state, s)
         add_export_bindings(x, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.MacroCall} && x.args[1] isa CSTParser.EXPR{CSTParser.MacroName} && length(x.args[1].args) > 1 &&  CSTParser.str_value(x.args[1].args[2]) == "enum"
         # Special case for enums.
-        if length(x.args) > 3 && x.args[3] isa CSTParser.IDENTIFIER
-            add_binding(CSTParser.str_value(x.args[3]), x, state, s)
-        end
-        for i = 4:length(x.args)
+        for i = 2:length(x.args)
             if x.args[i] isa CSTParser.IDENTIFIER
                 name = CSTParser.str_value(x.args[i])
                 add_binding(name, x, state, s)
