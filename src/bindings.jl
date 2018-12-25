@@ -404,7 +404,11 @@ function cat_bindings(file, vars = State("", file.state.server))
     
     
     for incl in file.state.includes
-        cat_bindings(getfile(file.state.server, incl.file), vars)
+        if is_loaded(file.state.server, incl.file)
+            cat_bindings(getfile(file.state.server, incl.file), vars)
+        else
+            @warn "Failed to include $(incl.file)"
+        end
     end
     return vars
 end
