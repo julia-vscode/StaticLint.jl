@@ -76,6 +76,11 @@ function ext_binding(x, state, s)
                 add_binding(name, x, state, s)
             end
         end
+    elseif x isa CSTParser.EXPR{CSTParser.MacroCall} && x.args[1] isa CSTParser.EXPR{CSTParser.MacroName} && length(x.args[1].args) > 1 &&  CSTParser.str_value(x.args[1].args[2]) == "label"
+        # Special case for label/goto. Needs fix to ensure @label points to Base.@label
+        if length(x.args) > 1 && x.args[2] isa CSTParser.IDENTIFIER
+            add_binding(CSTParser.str_value(x.args[2]), x, state, s)
+        end
     end
 end
 

@@ -143,3 +143,10 @@ function func((a,b)::Tuple)
 end
 """ |> test_sl
 @test isempty(f.uref)
+
+f = """
+@label a
+
+@goto a
+""" |> test_sl
+@test isempty(f.uref)
