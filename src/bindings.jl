@@ -68,18 +68,20 @@ function ext_binding(x, state, s)
     #     get_imports(x, state, s)
     elseif x isa CSTParser.EXPR{CSTParser.Export}
         add_export_bindings(x, state, s)
-    elseif x isa CSTParser.EXPR{CSTParser.MacroCall} && x.args[1] isa CSTParser.EXPR{CSTParser.MacroName} && length(x.args[1].args) > 1 &&  CSTParser.str_value(x.args[1].args[2]) == "enum"
-        # Special case for enums.
-        for i = 2:length(x.args)
-            if x.args[i] isa CSTParser.IDENTIFIER
-                name = CSTParser.str_value(x.args[i])
-                add_binding(name, x, state, s)
+    elseif x isa CSTParser.EXPR{CSTParser.MacroCall} && x.args[1] isa CSTParser.EXPR{CSTParser.MacroName} && length(x.args[1].args) > 1
+        # Special case for bindings introduces by Base macro.
+        # Needs fix to ensure macro label is pointing to Base.@enum, etc.
+        if CSTParser.str_value(x.args[1].args[2]) == "enum"
+            for i = 2:length(x.args)
+                if x.args[i] isa CSTParser.IDENTIFIER
+                    name = CSTParser.str_value(x.args[i])
+                    add_binding(name, x, state, s)
+                end
             end
-        end
-    elseif x isa CSTParser.EXPR{CSTParser.MacroCall} && x.args[1] isa CSTParser.EXPR{CSTParser.MacroName} && length(x.args[1].args) > 1 &&  CSTParser.str_value(x.args[1].args[2]) == "label"
-        # Special case for label/goto. Needs fix to ensure @label points to Base.@label
-        if length(x.args) > 1 && x.args[2] isa CSTParser.IDENTIFIER
-            add_binding(CSTParser.str_value(x.args[2]), x, state, s)
+        elseif CSTParser.str_value(x.args[1].args[2]) == "label"
+            if length(x.args) > 1 && x.args[2] isa CSTParser.IDENTIFIER
+                add_binding(CSTParser.str_value(x.args[2]), x, state, s)
+            end
         end
     end
 end

@@ -113,9 +113,16 @@ function pass(x, state::State, s::Scope, index, blockref, delayed)
         s1 = create_scope(x, state, s) # Create new scope (if needed) for traversing through `x`.
         delayed = delayed || s1.t == CSTParser.FunctionDef || x isa CSTParser.EXPR{CSTParser.Export} # Internal scope evaluation is delayed
         get_include(x, state, s1) # Check whether `x` includes a file.
-        for a in x # Traverse sub expressions of `x`.
-            ablockref = get_ref(a, state, s1, blockref, delayed)
-            pass(a, state, s1, s1.index, ablockref, delayed)
+        if x isa CSTParser.EXPR
+            for a in x.args # Traverse sub expressions of `x`.
+                ablockref = get_ref(a, state, s1, blockref, delayed)
+                pass(a, state, s1, s1.index, ablockref, delayed)
+            end
+        else
+            for a in x # Traverse sub expressions of `x`.
+                ablockref = get_ref(a, state, s1, blockref, delayed)
+                pass(a, state, s1, s1.index, ablockref, delayed)
+            end
         end
     end
     s
