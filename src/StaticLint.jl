@@ -1,178 +1,170 @@
 module StaticLint
-using CSTParser, SymbolServer
+const debug = false
+using SymbolServer
+using CSTParser
+using CSTParser: isidentifier
+using CSTParser: Scope, Binding, EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
+using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters
 
-const Index = Tuple
-struct SIndex{N}
-    i::NTuple{N,Int}
-    n::Int
-end
+const NoReference = Binding("0NoReference", nothing, nothing, [], nothing)
 
-mutable struct Location
-    file::String
-    offset::Int
-end
-
-mutable struct Reference{T}
-    val::T
-    loc::Location
-    si::SIndex
-    delayed::Bool
-end
-
-include("bindings.jl")
-include("linting.jl")
-
-mutable struct ResolvedRef{T, S}
-    r::Reference{T}
-    b::S
-end
-
-mutable struct Include{T}
-    val::T
-    file::String
-    offset::Int
-    index::Index
-    pos::Int
-end
-
-mutable struct Scope
-    parent::Union{Nothing,Scope}
-    children::Vector{Scope}
-    offset::Int
-    t::DataType
-    index::Index
-    bindings::Int
-end
-Scope() = Scope(nothing, [], 0, CSTParser.TopLevel, (), 0)
-
-mutable struct ModuleList
-   list::Vector{Binding}
-   names::Set{String}
-end
-ModuleList() = ModuleList([], Set{String}())
 
 mutable struct State
-    loc::Location
-    bindings::Dict{Tuple,Dict{String,Vector{Binding}}}
-    modules::ModuleList
-    exports::Dict{Tuple,Vector{String}}
-    imports::Vector{ImportBinding}
-    used_modules::Vector{Binding}
-    refs::Vector{Reference}
-    includes::Vector{Include}
-    linterrors::Vector{LintError}
+    file
+    scope::Scope
+    delayed::Union{Nothing,Scope}
+    ignorewherescope::Bool
+    quoted::Bool
+    urefs::Dict{Scope,Vector{EXPR}}
     server
 end
-State() = State(Location("", 0), Dict{Tuple,Dict}(), ModuleList(), Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], LintError[], DocumentServer())
-State(path::String, server) = State(Location(path, 0), Dict{Tuple,Any}(), ModuleList(), Dict{Tuple,Vector}(),ImportBinding[], Binding[], Reference[], Include[], LintError[], server)
 
-mutable struct File
-    cst::CSTParser.EXPR
-    state::State
-    scope::Scope
-    index::Index
-    nb::Int
-    parent::String
-    rref::Vector{ResolvedRef}
-    uref::Vector{Reference}
+function (state::State)(x)
+    delayed = state.delayed # store previous delayed eval scope
+    ignorewherescope = state.ignorewherescope
+    isquoted = state.quoted
+    if quoted(x)
+        state.quoted = true
+    end
+    if state.quoted && unquoted(x)
+        state.quoted = false
+    end
+    state.ignorewherescope = state.ignorewherescope || x.typ === WhereOpCall
+    # imports
+    if x.typ === Using || x.typ === Import
+        resolve_import(x, state)
+    end
+    if x.typ === Export # Allow delayed resolution
+        state.delayed = state.scope
+    end
+    
+    #bindings
+    add_binding(x, state)
+
+    #macros
+    handle_macro(x, state)
+
+    # scope
+    s0 = state.scope
+    if x.typ === FileH
+        x.scope = state.scope
+    elseif x.scope isa Scope
+        if CSTParser.defines_function(x)
+            state.delayed = state.scope # Allow delayed resolution
+        end
+        x.scope != s0 && (x.scope.parent = s0)
+        state.scope = x.scope
+        if x.typ === ModuleH # Add default modules to a new module
+            state.scope.modules = Dict{String,Any}()
+            state.scope.modules["Base"] = getsymbolserver(state.server)["Base"]
+            state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
+        end
+    end
+    followinclude(x, state) # follow include
+    if state.quoted
+        if isidentifier(x) && !hasref(x)
+            x.ref = NoReference
+        end
+    elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || x.typ === x_Str || (x.typ === BinaryOpCall && x.args[2].kind === CSTParser.Tokens.DOT)
+        resolved = resolve_ref(x, state.scope)
+        if !resolved && state.delayed !== nothing
+            if haskey(state.urefs, state.scope)
+                push!(state.urefs[state.scope], x)
+            else
+                state.urefs[state.scope] = EXPR[x]
+            end
+        end
+    end
+    
+    # traverse across children (evaluation order)
+    if (x.typ === CSTParser.BinaryOpCall && CSTParser.is_assignment(x) && !CSTParser.is_func_call(x)) || x.typ === CSTParser.Filter
+        state(x.args[3])
+        state(x.args[2])
+        state(x.args[1])
+    elseif x.typ === CSTParser.WhereOpCall
+        @inbounds for i = 3:length(x.args)
+            state(x.args[i])
+        end
+        state(x.args[1])
+        state(x.args[2])
+    elseif x.typ === CSTParser.Generator
+        @inbounds for i = 2:length(x.args)
+            state(x.args[i])
+        end
+        state(x.args[1])
+    elseif x.args !== nothing
+        @inbounds for a in x.args
+            state(a)
+        end
+    end
+
+    
+    debug && printstyled("<Leaving: $(typeof(x)) ", color = :light_green)
+    debug && (state.scope != s0 ? printstyled("$(keys(state.scope.names))\n", color = :red) : printstyled("\n"))
+    
+    # return to previous states
+    state.scope = s0 
+    state.delayed = delayed 
+    state.ignorewherescope = ignorewherescope 
+    state.quoted = isquoted
+    return state.scope
 end
-File(x::CSTParser.EXPR, pkgs::Dict) = File(x, State("", DocumentServer(Dict(), pkgs)), Scope(), (), 0, "", [], [])
 
-function pass(x::CSTParser.LeafNode, state::State, s::Scope, index, blockref, delayed)
-    state.loc.offset += x.fullspan
-end
-
-function pass(x, state::State, s::Scope, index, blockref, delayed)
-    if x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokenize.Tokens.EQ && !(CSTParser.defines_function(x) || (x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokens.EQ && x.arg1 isa CSTParser.EXPR{CSTParser.Curly}))
-        # do rhs first
-        offset = state.loc.offset
-        state.loc.offset += x.arg1.fullspan
-        ablockref = get_ref(x.op, state, s, blockref, delayed)
-        pass(x.op, state, s, s.index, ablockref, delayed)
-        ablockref = get_ref(x.arg2, state, s, blockref, delayed)
-        pass(x.arg2, state, s, s.index, ablockref, delayed)
-
-        state.loc.offset = offset
-        ext_binding(x, state, s) # Get external bindings generated by `x`.
-        s1 = create_scope(x, state, s) # Create new scope (if needed) for traversing through `x`.
-        ablockref = get_ref(x.arg1, state, s1, blockref, delayed)
-        pass(x.arg1, state, s1, s1.index, ablockref, delayed)
-        state.loc.offset += x.op.fullspan + x.arg2.fullspan
-    elseif x isa CSTParser.BinarySyntaxOpCall && x.op.kind == CSTParser.Tokens.DECLARATION
-        ablockref = get_ref(x.arg1, state, s, blockref, delayed)
-        pass(x.arg1, state, s, s.index, ablockref, delayed)
-
-        ablockref = get_ref(x.op, state, s, blockref, delayed)
-        pass(x.op, state, s, s.index, ablockref, delayed)
-        
-        delayed = false
-        ablockref = get_ref(x.arg2, state, s, blockref, delayed)
-        pass(x.arg2, state, s, s.index, ablockref, delayed)
-    else
-        ext_binding(x, state, s) # Get external bindings generated by `x`.
-        s1 = create_scope(x, state, s) # Create new scope (if needed) for traversing through `x`.
-        delayed = delayed || s1.t == CSTParser.FunctionDef || x isa CSTParser.EXPR{CSTParser.Export} # Internal scope evaluation is delayed
-        get_include(x, state, s1) # Check whether `x` includes a file.
-        if x isa CSTParser.EXPR
-            for a in x.args # Traverse sub expressions of `x`.
-                ablockref = get_ref(a, state, s1, blockref, delayed)
-                pass(a, state, s1, s1.index, ablockref, delayed)
+function add_binding(x, state)
+    if x.binding isa Binding
+        debug && printstyled("Binding: $(x.binding.name)\n", color = :blue)
+        if x.typ === Macro
+            state.scope.names[string("@", x.binding.name)] = x.binding
+            mn = CSTParser.get_name(x)
+            if mn.typ === IDENTIFIER
+                mn.ref = x
             end
         else
-            for a in x # Traverse sub expressions of `x`.
-                ablockref = get_ref(a, state, s1, blockref, delayed)
-                pass(a, state, s1, s1.index, ablockref, delayed)
+            if haskey(state.scope.names, x.binding.name)
+                x.binding.overwrites = state.scope.names[x.binding.name]
             end
+            state.scope.names[x.binding.name] = x.binding
         end
-    end
-    s
-end
-
-function pass(x::CSTParser.EXPR{CSTParser.Kw}, state::State, s::Scope, index, blockref, delayed)
-    if x.args[1] isa CSTParser.IDENTIFIER
-        state.loc.offset += x.args[1].fullspan + x.args[2].fullspan
-        pass(x.args[3], state, s, s.index, blockref, delayed)
-    else
-        for a in x
-            ablockref = get_ref(a, state, s, blockref, delayed)
-            pass(a, state, s, s.index, ablockref, delayed)
-        end
-        s
-    end        
-end
-
-function pass(x::CSTParser.EXPR{CSTParser.Try}, state::State, s::Scope, index, blockref, delayed)
-    s1 = create_scope(x, state, s)
-    it = 1
-    for a in x
-        if it == 4 && a isa CSTParser.IDENTIFIER
-            add_binding(CSTParser.str_value(a), a, state, s1)
-        end
-        ablockref = get_ref(a, state, s1, blockref, delayed)
-        pass(a, state, s1, s1.index, ablockref, delayed)
-        it += 1
+        infer_type(x.binding, state.server)
+    elseif x.binding isa SymbolServer.SymStore
+        state.scope.names[x.val] = x.binding
     end
 end
 
-function pass(file::File)
-    file.state.loc.offset = 0
-    empty!(file.state.refs)
-    empty!(file.state.includes)
-    empty!(file.state.bindings)
-    empty!(file.state.modules.list)
-    empty!(file.state.modules.names)
-    empty!(file.state.imports)
-    empty!(file.state.exports)
-    empty!(file.state.used_modules)
-    empty!(file.state.linterrors)
-    file.scope = Scope(nothing, Scope[], file.cst.span, CSTParser.TopLevel, file.index, file.nb)
-    file.scope = pass(file.cst, file.state, file.scope, file.index, false, false)
+function followinclude(x, state::State)
+    if x.typ === Call && x.args[1].typ === IDENTIFIER && x.args[1].val == "include"
+        path = get_path(x)
+        if isempty(path)
+        elseif hasfile(state.server, path)
+        elseif canloadfile(state.server, path)
+            loadfile(state.server, path)
+        elseif hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
+            path = joinpath(dirname(getpath(state.file)), path)
+        elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
+            path = joinpath(dirname(getpath(state.file)), path)
+            loadfile(state.server, path,)
+        else
+            path = ""
+        end
+        if !isempty(path)
+            # (printstyled(">>>>Following include", color = :yellow);printstyled(" $(path)\n"))
+            oldfile = state.file
+            state.file = getfile(state.server, path)
+            setroot(state.file, getroot(oldfile))
+            state(getcst(state.file))
+            state.file = oldfile
+        else
+            # (printstyled(">>>>Can't follow include", color = :red);printstyled(" $(Expr(x)) from $(dirname(state.path))\n"))
+            # error handling for broken `include` here
+        end
+    end
 end
 
+include("server.jl")
+include("imports.jl")
 include("references.jl")
+include("macros.jl")
+include("checks.jl")
+include("type_inf.jl")
 include("utils.jl")
-include("documentserver.jl")
-include("helpers.jl")
-include("display.jl")
-
 end
