@@ -1,5 +1,4 @@
 module StaticLint
-const debug = false
 using SymbolServer
 using CSTParser
 using CSTParser: isidentifier
@@ -21,7 +20,7 @@ end
 
 function (state::State)(x)
     delayed = state.delayed # store previous delayed eval scope
-    ignorewherescope = state.ignorewherescope
+    # ignorewherescope = state.ignorewherescope
     isquoted = state.quoted
     if quoted(x)
         state.quoted = true
@@ -29,7 +28,7 @@ function (state::State)(x)
     if state.quoted && unquoted(x)
         state.quoted = false
     end
-    state.ignorewherescope = state.ignorewherescope || x.typ === WhereOpCall
+    # state.ignorewherescope = state.ignorewherescope || x.typ === WhereOpCall
     # imports
     if x.typ === Using || x.typ === Import
         resolve_import(x, state)
@@ -45,6 +44,7 @@ function (state::State)(x)
     handle_macro(x, state)
 
     # scope
+    clear_scope(x)
     s0 = state.scope
     if x.typ === FileH
         x.scope = state.scope
@@ -77,7 +77,7 @@ function (state::State)(x)
     end
     
     # traverse across children (evaluation order)
-    if (x.typ === CSTParser.BinaryOpCall && CSTParser.is_assignment(x) && !CSTParser.is_func_call(x)) || x.typ === CSTParser.Filter
+    if (x.typ === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || x.args[2].typ === CSTParser.Tokens.DECLARATION))
         state(x.args[3])
         state(x.args[2])
         state(x.args[1])
@@ -93,26 +93,21 @@ function (state::State)(x)
         end
         state(x.args[1])
     elseif x.args !== nothing
-        @inbounds for a in x.args
-            state(a)
+        @inbounds for i in 1:length(x.args)
+            state(x.args[i])
         end
     end
-
-    
-    debug && printstyled("<Leaving: $(typeof(x)) ", color = :light_green)
-    debug && (state.scope != s0 ? printstyled("$(keys(state.scope.names))\n", color = :red) : printstyled("\n"))
     
     # return to previous states
-    state.scope = s0 
-    state.delayed = delayed 
-    state.ignorewherescope = ignorewherescope 
+    state.scope != s0 && (state.scope = s0)
+    state.delayed != delayed && (state.delayed = delayed)
+    # state.ignorewherescope = ignorewherescope 
     state.quoted = isquoted
     return state.scope
 end
 
 function add_binding(x, state)
     if x.binding isa Binding
-        debug && printstyled("Binding: $(x.binding.name)\n", color = :blue)
         if x.typ === Macro
             state.scope.names[string("@", x.binding.name)] = x.binding
             mn = CSTParser.get_name(x)
@@ -125,7 +120,7 @@ function add_binding(x, state)
             end
             state.scope.names[x.binding.name] = x.binding
         end
-        infer_type(x.binding, state.server)
+        infer_type(x.binding, state.scope, state.server)
     elseif x.binding isa SymbolServer.SymStore
         state.scope.names[x.val] = x.binding
     end
@@ -151,6 +146,7 @@ function followinclude(x, state::State)
             oldfile = state.file
             state.file = getfile(state.server, path)
             setroot(state.file, getroot(oldfile))
+            getcst(state.file).scope = nothing
             state(getcst(state.file))
             state.file = oldfile
         else
@@ -167,4 +163,5 @@ include("macros.jl")
 include("checks.jl")
 include("type_inf.jl")
 include("utils.jl")
+export parse_and_pass
 end

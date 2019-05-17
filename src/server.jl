@@ -6,10 +6,6 @@ mutable struct File
     source::String
     cst::EXPR
     root::Union{Nothing,File}
-    # parent::Union{Nothing,File}
-    # root::Union{Nothing,File}
-    # state::State
-    # finalscope::Scope
     server
 end
 

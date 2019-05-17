@@ -1,11 +1,12 @@
-using StaticLint
+using StaticLint, SymbolServer
 using CSTParser, Test
+
 sserver = SymbolServerProcess()
 SymbolServer.getstore(sserver)
 server = StaticLint.FileServer(Dict(), Set(), sserver.depot);
 
 function get_ids(x, ids = [])
-    if x isa CSTParser.IDENTIFIER
+    if x.typ == CSTParser.IDENTIFIER
         push!(ids, x)
     else
         for a in x
@@ -17,8 +18,8 @@ end
 
 function parse_and_pass(s)
     cst = CSTParser.parse(s, true)
-    scope = StaticLint.Scope(nothing, Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]))
-    cst.meta.scope = scope.x
+    scope = StaticLint.Scope(nothing, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]))
+    cst.scope = scope
     state = StaticLint.State("", scope, nothing, false, false, Dict(), server)
     state(cst)
     return cst
@@ -27,7 +28,7 @@ end
 function check_resolved(s)
     cst = parse_and_pass(s)
     IDs = get_ids(cst)
-    [(i.meta.ref !== nothing) for i in IDs]
+    [(i.ref !== nothing) for i in IDs]
 end
 
 
@@ -124,10 +125,10 @@ end
 [i for i in 1:1 if i]
 """)  == [true, true, true]
 
-@test check_resolved("""
-@deprecate f(a) sin(a)
-f
-""")  == [true, true, true, true, true, true]
+# @test check_resolved("""
+# @deprecate f(a) sin(a)
+# f
+# """)  == [true, true, true, true, true, true]
 
 @test check_resolved("""
 @deprecate f sin
@@ -158,5 +159,88 @@ using .SubMod: f
 f
 end
 """) == [true, true, true, true, true, true]
+
+@test check_resolved("""
+struct T
+    field
+end
+function f(arg::T)
+    arg.field
+end
+""") == [true, true, true, true, true, true, true]
+
+@test check_resolved("""
+f(arg) = arg
+""") == [1, 1, 1]
+
+@testset "inference" begin
+    @test parse_and_pass("f(arg) = arg")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+    @test parse_and_pass("function f end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+    @test parse_and_pass("struct T end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test parse_and_pass("mutable struct T end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test parse_and_pass("abstract type T end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test parse_and_pass("primitive type T 8 end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test parse_and_pass("x = 1")[1][1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Int"]
+    @test parse_and_pass("x = 1.0")[1][1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Float64"]
+    @test parse_and_pass("x = \"text\"")[1][1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["String"]
+    @test parse_and_pass("module A end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
+    @test parse_and_pass("baremodule A end")[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
+
+    # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+    let cst = parse_and_pass("""
+        struct T end
+        function f(x::T) x end""")
+        @test cst[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test cst[2].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test cst[2][2][3].binding.t == cst[1].binding
+        @test cst[2][3][1].ref == cst[2][2][3].binding
+    end
+    let cst = parse_and_pass("""
+        struct T end
+        T() = 1
+        function f(x::T) x end""")
+        @test cst[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test cst[3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test cst[3][2][3].binding.t == cst[1].binding
+        @test cst[3][3][1].ref == cst[3][2][3].binding
+    end
+    
+    let cst = parse_and_pass("""
+        struct T end
+        t = T()""")
+        @test cst[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test cst[3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test cst[3][2][3].binding.t == cst[1].binding
+        @test cst[3][3][1].ref == cst[3][2][3].binding
+    end
+
+    let cst = parse_and_pass("""
+        module A
+        module B
+        x = 1
+        end
+        module C
+        import ..B
+        B.x
+        end
+        end""")
+        @test cst[1][3][2][3][2][3][1].ref == cst[1][3][1][3][1][1].binding
+    end
+
+    let cst = parse_and_pass("""
+        struct T0
+            x
+        end
+        struct T1
+            field::T0
+        end
+        function f(arg::T1)
+            arg.field.x
+        end""");
+        @test cst[3][3][1][1][1].ref == cst[3][2][3].binding
+        @test cst[3][3][1][1][3][1].ref == cst[2][3][1].binding
+        @test cst[3][3][1][3][1].ref == cst[1][3][1].binding
+    end
+end
 
 end

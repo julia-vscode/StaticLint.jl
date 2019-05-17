@@ -10,14 +10,14 @@ function handle_macro(x::EXPR, state)
                 CSTParser.setbinding!(x.args[2], x)
                 CSTParser.mark_sig_args!(x.args[2])
                 s0 = state.scope # store previous scope
-                ignorewherescope = state.ignorewherescope
+                # ignorewherescope = state.ignorewherescope
                 state.scope = Scope(s0, Dict(), nothing)
                 x.scope = state.scope # tag new scope to generating expression
-                state.ignorewherescope = true
+                # state.ignorewherescope = true
                 state(x.args[2])
                 state(x.args[3])
                 state.scope = s0
-                state.ignorewherescope = ignorewherescope
+                # state.ignorewherescope = ignorewherescope
             elseif isidentifier(x.args[2])
                 CSTParser.setbinding!(x.args[2], x)
             end
@@ -41,3 +41,8 @@ end
 function _points_to_Base_macro(x::EXPR, name, state)
     length(x.args) == 2 && isidentifier(x.args[2]) && x.args[2].val == name && x.args[2].ref == getsymbolserver(state.server)["Base"].vals[string("@", name)]
 end
+
+function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
+    length(x.args) == 2 && isidentifier(x.args[2]) && x.args[2].val == name && x.args[2].ref == getsymbolserver(state.server)[module_name].vals[string("@", name)]
+end
+

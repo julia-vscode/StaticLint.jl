@@ -19,6 +19,9 @@ function resolve_import(x, state)
         elseif arg.typ === PUNCTUATION && arg.kind == CSTParser.Tokens.COMMA
             # end of chain, make available
             if i > 2 && isidentifier(x.args[i-1]) && par != nothing
+                if par isa Binding #mark reference to binding
+                    push!(par.refs, x.args[i-1])
+                end
                 x.args[i-1].binding = Binding(x.args[i-1].val, par, _typeof(par), [], nothing)
                 if _import_ismodule(par) && u
                     if state.scope.modules isa Dict
@@ -52,6 +55,9 @@ function resolve_import(x, state)
             return
         end
         if i == n && par != nothing
+            if par isa Binding #mark reference to binding
+                push!(par.refs, x.args[i])
+            end
             x.args[i].binding = Binding(x.args[i].val, par, _typeof(par), [], nothing)
             if _import_ismodule(par) && u
                 if state.scope.modules isa Dict

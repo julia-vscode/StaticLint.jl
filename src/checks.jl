@@ -11,14 +11,14 @@ function check_call(x, b)
     fsig = CSTParser.rem_where_decl(CSTParser.get_sig(b.val))
     xn = length(x.args)
     fn = length(fsig.args)
-    @info Expr(fsig)
+    
     for i = 2:xn
     end
     if b.overwrites !== nothing && CSTParser.defines_function(b.overwrites.val)
         check_call(x, b.overwrites)
     end
 end
-getsymbolserver
+
 function _typeof(x, state)
     if x.typ in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
         return getsymbolserver(state.server)["Core"].vals["DataType"]
