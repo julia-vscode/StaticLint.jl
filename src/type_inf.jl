@@ -17,7 +17,7 @@ function infer_type(binding::CSTParser.Binding, scope, server)
                         resolve_ref(callname, scope)
                         if hasref(callname)
                             rb = get_root_method(callname.ref, server)
-                            if (rb isa Binding && rb.t == getsymbolserver(server)["Core"].vals["DataType"]) || rb isa SymbolServer.structStore
+                            if (rb isa Binding && (rb.t == getsymbolserver(server)["Core"].vals["DataType"] || rb.val isa SymbolServer.structStore)) || rb isa SymbolServer.structStore
                                 binding.t = rb
                             end
                         end
