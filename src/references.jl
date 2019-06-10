@@ -53,10 +53,14 @@ function resolve_ref(x, scope::Scope)
         x1 = x.args[2]
         mn = string("@", x1.val)
     elseif x.typ === x_Str
-        x1 = x.args[1]
-        mn = string("@", x1.val)
+        if x.args[1].typ === IDENTIFIER
+            x1 = x.args[1]
+            mn = string("@", x1.val, "_str")
+        else
+            return false
+        end
     else
-        error(x.typ)
+        return false
     end
     
     if haskey(scope.names, mn)
@@ -69,7 +73,7 @@ function resolve_ref(x, scope::Scope)
             resolved && break
         end
     end
-    if !hasref(x) && !(scope.parent isa EXPR)
+    if !hasref(x) && !scope.ismodule &&!(scope.parent isa EXPR)
         return resolve_ref(x, scope.parent)
     end
     return resolved
@@ -89,15 +93,9 @@ function resolve_getindex(x::EXPR, scope::Scope)
             resolved = resolve_getindex(x.args[3].args[1], x.args[1].args[3].args[1].ref)
         end
     end
-    # resolved = resolve_ref(x.args[1], scope)
-    # if resolved && x.args[3].typ === Quotenode && x.args[3].args[1].typ === IDENTIFIER
-    #     if x.args[1].typ === IDENTIFIER
-    #         resolved = resolve_getindex(x.args[3].args[1], x.args[1].ref)
-    #     elseif x.args[1].typ === BinaryOpCall && x.args[2].kind === CSTParser.Tokens.DOT
-    #     end
-    # end
     return resolved
 end
+
 function resolve_getindex(x::EXPR, b::Binding)
     hasref(x) && return true
     resolved = false
@@ -106,9 +104,9 @@ function resolve_getindex(x::EXPR, b::Binding)
     elseif b.val isa SymbolServer.ModuleStore
         resolved = resolve_getindex(x, b.val)
     elseif b.val isa EXPR && b.val.typ === ModuleH
-        resolve_getindex(x, b.val)
+        resolved = resolve_getindex(x, b.val)
     elseif b.val isa Binding && b.val.val isa EXPR && b.val.val.typ === ModuleH
-        resolve_getindex(x, b.val.val)
+        resolved = resolve_getindex(x, b.val.val)
     end
     return resolved
 end
@@ -142,7 +140,6 @@ function resolve_getindex(x::EXPR, parent::SymbolServer.SymStore)
             x.ref = parent.vals[x.val]
             resolved = true
         elseif parent isa SymbolServer.structStore && x.val in parent.fields
-
         end
     end
     return resolved

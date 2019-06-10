@@ -20,7 +20,6 @@ end
 
 function (state::State)(x)
     delayed = state.delayed # store previous delayed eval scope
-    # ignorewherescope = state.ignorewherescope
     isquoted = state.quoted
     if quoted(x)
         state.quoted = true
@@ -28,7 +27,6 @@ function (state::State)(x)
     if state.quoted && unquoted(x)
         state.quoted = false
     end
-    # state.ignorewherescope = state.ignorewherescope || x.typ === WhereOpCall
     # imports
     if x.typ === Using || x.typ === Import
         resolve_import(x, state)
@@ -42,7 +40,7 @@ function (state::State)(x)
 
     #macros
     handle_macro(x, state)
-
+    checks(x)
     # scope
     clear_scope(x)
     s0 = state.scope
@@ -59,12 +57,18 @@ function (state::State)(x)
             state.scope.modules["Base"] = getsymbolserver(state.server)["Base"]
             state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
         end
+        if (x.typ === CSTParser.ModuleH || x.typ === CSTParser.BareModule) && x.binding !== nothing # Add reference to out of scope binding (i.e. itself)
+            x.args[2].ref = x.binding
+            push!(x.binding.refs, x.args[2])
+        end
     end
     followinclude(x, state) # follow include
     if state.quoted
         if isidentifier(x) && !hasref(x)
             x.ref = NoReference
         end
+    elseif x.typ === CSTParser.Quotenode && length(x.args) == 2 && x.args[1].kind === CSTParser.Tokens.COLON && x.args[2].typ === CSTParser.IDENTIFIER
+        x.args[2].ref = NoReference
     elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || x.typ === x_Str || (x.typ === BinaryOpCall && x.args[2].kind === CSTParser.Tokens.DOT)
         resolved = resolve_ref(x, state.scope)
         if !resolved && state.delayed !== nothing
@@ -75,9 +79,8 @@ function (state::State)(x)
             end
         end
     end
-    
     # traverse across children (evaluation order)
-    if (x.typ === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || x.args[2].typ === CSTParser.Tokens.DECLARATION))
+    if x.typ === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || x.args[2].typ === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && x.args[1].typ === CSTParser.Curly)
         state(x.args[3])
         state(x.args[2])
         state(x.args[1])
@@ -101,7 +104,6 @@ function (state::State)(x)
     # return to previous states
     state.scope != s0 && (state.scope = s0)
     state.delayed != delayed && (state.delayed = delayed)
-    # state.ignorewherescope = ignorewherescope 
     state.quoted = isquoted
     return state.scope
 end
@@ -112,7 +114,7 @@ function add_binding(x, state)
             state.scope.names[string("@", x.binding.name)] = x.binding
             mn = CSTParser.get_name(x)
             if mn.typ === IDENTIFIER
-                mn.ref = x
+                mn.ref = x.binding
             end
         else
             if haskey(state.scope.names, x.binding.name)
@@ -142,7 +144,6 @@ function followinclude(x, state::State)
             path = ""
         end
         if !isempty(path)
-            # (printstyled(">>>>Following include", color = :yellow);printstyled(" $(path)\n"))
             oldfile = state.file
             state.file = getfile(state.server, path)
             setroot(state.file, getroot(oldfile))
@@ -163,5 +164,4 @@ include("macros.jl")
 include("checks.jl")
 include("type_inf.jl")
 include("utils.jl")
-export parse_and_pass
 end

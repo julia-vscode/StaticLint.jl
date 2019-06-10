@@ -18,7 +18,7 @@ end
 
 function parse_and_pass(s)
     cst = CSTParser.parse(s, true)
-    scope = StaticLint.Scope(nothing, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]))
+    scope = StaticLint.Scope(nothing, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]), false)
     cst.scope = scope
     state = StaticLint.State("", scope, nothing, false, false, Dict(), server)
     state(cst)
@@ -209,9 +209,7 @@ f(arg) = arg
         struct T end
         t = T()""")
         @test cst[1].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-        @test cst[3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-        @test cst[3][2][3].binding.t == cst[1].binding
-        @test cst[3][3][1].ref == cst[3][2][3].binding
+        @test cst[2][1].binding.t == cst[1].binding
     end
 
     let cst = parse_and_pass("""
@@ -241,6 +239,36 @@ f(arg) = arg
         @test cst[3][3][1][1][3][1].ref == cst[2][3][1].binding
         @test cst[3][3][1][3][1].ref == cst[1][3][1].binding
     end
-end
 
+    let cst = parse_and_pass("""
+        sin(a,b,c,d)""")
+        StaticLint.check_call_args(cst[1])
+        @test cst[1].val == "Error, incorrect number of arguments"
+    end
+   
+    
+    let cst = parse_and_pass("""
+        raw"whatever"
+        """)
+        @test cst[1][1].ref !== nothing
+    end
+    let cst = parse_and_pass("""
+        macro mac_str() end
+        mac"whatever"
+        """)
+        @test cst[2][1].ref == cst[1].binding
+    end
+    
+    # let cst = parse_and_pass("""
+    #     module M
+    #     struct T end
+    #     end
+    #     using .M
+    #     M.T
+    #     function f(a::M.T) end
+    #     """)
+    #     cst[4][2][3].binding.t
+    # end
+
+end
 end

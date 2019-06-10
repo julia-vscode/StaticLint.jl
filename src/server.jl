@@ -38,7 +38,7 @@ getsymbolserver(server::FileServer) = server.symbolserver
 
 function scopepass(file)
     server = file.server
-    getcst(file).scope = Scope(nothing, Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]))
+    getcst(file).scope = Scope(nothing, Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false)
     state = State(file, getcst(file).scope, nothing, false, false, Dict(), server)
     state(getcst(file))
     for uref in state.urefs

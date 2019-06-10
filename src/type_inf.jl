@@ -22,7 +22,6 @@ function infer_type(binding::CSTParser.Binding, scope, server)
                             end
                         end
                     end
-                    binding.t = getsymbolserver(server)["Core"].vals["Function"]
                 elseif binding.val.args[3].kind === CSTParser.Tokens.INTEGER
                     binding.t = getsymbolserver(server)["Core"].vals["Int"]
                 elseif binding.val.args[3].kind === CSTParser.Tokens.FLOAT
@@ -33,15 +32,18 @@ function infer_type(binding::CSTParser.Binding, scope, server)
                     binding.t = binding.val.args[3].ref.t
                 end
             elseif binding.val.args[2].kind === CSTParser.Tokens.DECLARATION
-                if CSTParser.isidentifier(binding.val.args[3])
-                    t = binding.val.args[3]
-                elseif binding.val.args[3].typ === CSTParser.Curly
-                    t = binding.val.args[3].args[1]
-                    # TODO: must subsequently check t is parameterised.
-                else 
-                    return
+                t = binding.val.args[3]
+                if CSTParser.isidentifier(t)
+                    resolve_ref(t, scope)
                 end
-                resolved = resolve_ref(t, scope)
+                if t.typ === CSTParser.Curly
+                    t = t.args[1]
+                    resolve_ref(t, scope)
+                end
+                if t.typ === CSTParser.BinaryOpCall && t.args[2].kind === CSTParser.Tokens.DOT && t.args[3].args isa Vector && length(t.args[3].args) > 0
+                    t = t.args[3].args[1]
+                end             
+
                 if t.ref isa CSTParser.Binding
                     rb = get_root_method(t.ref, server)
                     if rb isa Binding && rb.t == getsymbolserver(server)["Core"].vals["DataType"]
