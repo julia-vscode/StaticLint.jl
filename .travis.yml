@@ -12,5 +12,10 @@ notifications:
 matrix:
  allow_failures:
  - julia: nightly
+branches:
+  only:
+  - master
+  - /release-.*/
+  - /v(\d+)\.(\d+)\.(\d+)/ 
 after_success:
   - julia -e 'using Pkg; cd(Pkg.dir("StaticLint")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
