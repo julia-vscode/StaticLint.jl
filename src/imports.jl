@@ -1,6 +1,4 @@
-
-
-function resolve_import(x, state)
+function resolve_import(x, state::State)
     u = x.typ === Using
     i = 2
     n = length(x.args)
@@ -41,9 +39,9 @@ function resolve_import(x, state)
                     end
                 elseif u && par isa Binding && par.val isa EXPR && par.val.typ === CSTParser.ModuleH
                     if state.scope.modules isa Dict
-                        state.scope.modules[x.args[i].val] = par.val.scope
+                        state.scope.modules[x.args[i-1].val] = par.val.scope
                     else
-                        state.scope.modules = Dict(x.args[i].val => par.val.scope)
+                        state.scope.modules = Dict(x.args[i-1].val => par.val.scope)
                     end
                 end
             end

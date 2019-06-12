@@ -269,6 +269,13 @@ f(arg) = arg
     #     """)
     #     cst[4][2][3].binding.t
     # end
+    let cst = parse_and_pass("""
+        module Reparse
+        end
+        using .Reparse, CSTParser
+        """)
+        @test cst[2][3].ref.val == cst[1].binding
+    end
 
 end
 end
