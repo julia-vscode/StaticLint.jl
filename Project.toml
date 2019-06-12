@@ -8,7 +8,7 @@ SymbolServer = "cf896787-08d5-524d-9de7-132aaa0cb996"
 
 [compat]
 CSTParser = "0.6"
-SymbolServer = "0.1.3"
+SymbolServer = "0.2"
 julia = "1"
 
 [extras]
