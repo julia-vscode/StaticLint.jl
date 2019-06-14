@@ -259,16 +259,17 @@ f(arg) = arg
         @test cst[2][1].ref == cst[1].binding
     end
     
-    # let cst = parse_and_pass("""
-    #     module M
-    #     struct T end
-    #     end
-    #     using .M
-    #     M.T
-    #     function f(a::M.T) end
-    #     """)
-    #     cst[4][2][3].binding.t
-    # end
+    let cst = parse_and_pass("""
+        [i * j for i = 1:10 for j = i:10]
+        """)
+        @test cst[1][2][1][3][3][1].ref == cst[1][2][1][1][3][1].binding
+    end
+    let cst = parse_and_pass("""
+        [i * j for i = 1:10, j = 1:10 for k = i:10]
+        """)
+        @test cst[1][2][1][3][3][1].ref == cst[1][2][1][1][3][1].binding
+    end
+    
     let cst = parse_and_pass("""
         module Reparse
         end

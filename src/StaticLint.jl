@@ -61,6 +61,9 @@ function (state::State)(x)
             x.args[2].ref = x.binding
             push!(x.binding.refs, x.args[2])
         end
+        if x.typ === CSTParser.Flatten && x.args[1].typ === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && x.args[1].args[1].typ === CSTParser.Generator
+            x.args[1].args[1].scope = nothing
+        end
     end
     followinclude(x, state) # follow include
     if state.quoted
@@ -95,6 +98,14 @@ function (state::State)(x)
             state(x.args[i])
         end
         state(x.args[1])
+    elseif x.typ === CSTParser.Flatten && x.args !== nothing && length(x.args) === 1 && x.args[1].args !== nothing && length(x.args[1]) >= 3 && length(x.args[1].args[1]) >= 3
+        for i = 3:length(x.args[1].args[1].args)
+            state(x.args[1].args[1].args[i])
+        end
+        for i = 3:length(x.args[1].args)
+            state(x.args[1].args[i])
+        end
+        state(x.args[1].args[1].args[1])
     elseif x.args !== nothing
         @inbounds for i in 1:length(x.args)
             state(x.args[i])
