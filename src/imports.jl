@@ -7,7 +7,7 @@ function resolve_import(x, state::State)
     bindings = []
     while i <= length(x.args)
         arg = x.args[i]
-        if isidentifier(arg)
+        if isidentifier(arg) || arg.typ === CSTParser.MacroName
             if x.args[i].ref !== nothing
                 par = x.args[i].ref
             else
@@ -23,7 +23,7 @@ function resolve_import(x, state::State)
                     push!(par.refs, x.args[i-1])
                 end
                 if x.args[i-1].binding === nothing
-                    x.args[i-1].binding = Binding(x.args[i-1].val, par, _typeof(par), [], nothing)
+                    x.args[i-1].binding = Binding(CSTParser.str_value(x.args[i-1]), par, _typeof(par), [], nothing)
                 end
                 if u && par isa SymbolServer.ModuleStore
                     if state.scope.modules isa Dict
@@ -73,7 +73,7 @@ function resolve_import(x, state::State)
                 push!(par.refs, x.args[i])
             end
             if x.args[i].binding === nothing
-                x.args[i].binding = Binding(x.args[i].val, par, _typeof(par), [], nothing)
+                x.args[i].binding = Binding(CSTParser.str_value(x.args[i]), par, _typeof(par), [], nothing)
             end
             if u && par isa SymbolServer.ModuleStore
                 if state.scope.modules isa Dict

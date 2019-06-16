@@ -278,5 +278,20 @@ f(arg) = arg
         @test cst[2][3].ref.val == cst[1].binding
     end
 
+    let cst = parse_and_pass("""
+        module A
+        A
+        end
+        """)
+        @test cst.scope.names["A"] == cst[1].scope.names["A"]
+        @test cst[1][2].ref == cst[1].binding
+        @test cst[1][3][1].ref == cst[1].binding
+    end
+    let cst = parse_and_pass("""
+        using Test: @test
+        """)
+        @test cst[1][4].binding !== nothing
+    end
+    
 end
 end

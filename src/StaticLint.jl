@@ -58,8 +58,9 @@ function (state::State)(x)
             state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
         end
         if (x.typ === CSTParser.ModuleH || x.typ === CSTParser.BareModule) && x.binding !== nothing # Add reference to out of scope binding (i.e. itself)
-            x.args[2].ref = x.binding
-            push!(x.binding.refs, x.args[2])
+            if x.binding !== nothing
+                state.scope.names[x.binding.name] = x.binding
+            end
         end
         if x.typ === CSTParser.Flatten && x.args[1].typ === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && x.args[1].args[1].typ === CSTParser.Generator
             x.args[1].args[1].scope = nothing
