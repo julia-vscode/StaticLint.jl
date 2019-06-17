@@ -239,12 +239,6 @@ f(arg) = arg
         @test cst[3][3][1][1][3][1].ref == cst[2][3][1].binding
         @test cst[3][3][1][3][1].ref == cst[1][3][1].binding
     end
-
-    let cst = parse_and_pass("""
-        sin(a,b,c,d)""")
-        StaticLint.check_call_args(cst[1])
-        @test cst[1].val == "Error, incorrect number of arguments"
-    end
    
     
     let cst = parse_and_pass("""
@@ -292,6 +286,33 @@ f(arg) = arg
         """)
         @test cst[1][4].binding !== nothing
     end
-    
+    let cst = parse_and_pass("""
+        sin(1,2,3)
+        """)
+        @test cst[1].ref === StaticLint.IncorrectCallNargs
+    end
+    let cst = parse_and_pass("""
+        for i in length(1) end
+        for i in 1.1 end
+        for i in 1 end
+        for i in 1:1 end
+        """)
+        @test cst[1][2].ref === StaticLint.IncorrectIterSpec
+        @test cst[2][2].ref === StaticLint.IncorrectIterSpec
+        @test cst[3][2].ref === StaticLint.IncorrectIterSpec
+        @test cst[4][2].ref === nothing
+    end
+
+    let cst = parse_and_pass("""
+        [i for i in length(1) end]
+        [i for i in 1.1 end]
+        [i for i in 1 end]
+        [i for i in 1:1 end]
+        """)
+        @test cst[1][2][3].ref === StaticLint.IncorrectIterSpec
+        @test cst[2][2][3].ref === StaticLint.IncorrectIterSpec
+        @test cst[3][2][3].ref === StaticLint.IncorrectIterSpec
+        @test cst[4][2][3].ref === nothing
+    end
 end
 end

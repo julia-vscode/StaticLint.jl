@@ -40,7 +40,7 @@ function (state::State)(x)
 
     #macros
     handle_macro(x, state)
-    checks(x)
+    
     # scope
     clear_scope(x)
     s0 = state.scope
@@ -112,7 +112,8 @@ function (state::State)(x)
             state(x.args[i])
         end
     end
-    
+    checks(x, state.server)
+
     # return to previous states
     state.scope != s0 && (state.scope = s0)
     state.delayed != delayed && (state.delayed = delayed)
