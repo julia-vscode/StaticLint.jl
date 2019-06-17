@@ -314,5 +314,9 @@ f(arg) = arg
         @test cst[3][2][3].ref === StaticLint.IncorrectIterSpec
         @test cst[4][2][3].ref === nothing
     end
+
+    let cst = parse_and_pass("a == nothing")
+        @test cst[1][2].ref === StaticLint.NothingEquality 
+    end
 end
 end

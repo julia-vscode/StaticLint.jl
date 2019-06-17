@@ -1,4 +1,4 @@
-@enum(LintCodes,IncorrectCallNargs,IncorrectIterSpec)
+@enum(LintCodes,IncorrectCallNargs,IncorrectIterSpec,NothingEquality)
 
 function _typeof(x, state)
     if x.typ in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
@@ -15,6 +15,7 @@ end
 function checks(x, server)
     check_call_args(x)
     check_loop_iter(x, server)
+    check_nothing_equality(x, server)
 end
 
 function check_call_args(x::EXPR)
@@ -46,7 +47,7 @@ end
 
 function check_loop_iter(x::EXPR, server)
     if x.typ === CSTParser.For
-        if length(x.args) > 1 && x.args[2].typ === CSTParser.BinaryOpCall 
+        if length(x.args) > 1 && x.args[2].typ === CSTParser.BinaryOpCall && x.args[2].ref === nothing
             rng = x.args[2].args[3]
             if rng.typ === CSTParser.LITERAL && rng.kind == CSTParser.Tokens.FLOAT || rng.kind == CSTParser.Tokens.INTEGER
                 x.args[2].ref = IncorrectIterSpec
@@ -56,16 +57,23 @@ function check_loop_iter(x::EXPR, server)
         end
     elseif x.typ === CSTParser.Generator
         for i = 3:length(x.args)
-            if x.args[i].typ === CSTParser.BinaryOpCall
+            if x.args[i].typ === CSTParser.BinaryOpCall && x.args[i].ref === nothing
                 rng = x.args[i].args[3]
                 if rng.typ === CSTParser.LITERAL && rng.kind == CSTParser.Tokens.FLOAT || rng.kind == CSTParser.Tokens.INTEGER
                     x.args[i].ref = IncorrectIterSpec
-                elseif rng.typ === CSTParser.Call && rng.args[1].ref === getsymbolserver(server)["Base"].vals["length"]
+                elseif rng.typ === CSTParser.Call && rng.args[1].val == "length" && rng.args[1].ref === getsymbolserver(server)["Base"].vals["length"]
                     x.args[i].ref = IncorrectIterSpec
                 end
             end
         end
     end
+end
+
+function check_nothing_equality(x::EXPR, server)
+    if x.typ === CSTParser.BinaryOpCall && x.args[2].kind === CSTParser.Tokens.EQEQ && x.args[3].val == "nothing" && x.args[3].ref === getsymbolserver(server)["Core"].vals["nothing"]
+        x.args[2].ref = NothingEquality
+    end
+    
 end
 
 function _get_call_nargs(x::EXPR)
