@@ -13,7 +13,7 @@ function _typeof(x, state)
 end
 
 function checks(x, server)
-    check_call_args(x)
+    # check_call_args(x)
     check_loop_iter(x, server)
     check_nothing_equality(x, server)
 end
