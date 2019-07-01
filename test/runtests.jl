@@ -289,7 +289,7 @@ f(arg) = arg
     let cst = parse_and_pass("""
         sin(1,2,3)
         """)
-        @test cst[1].ref === StaticLint.IncorrectCallNargs
+        @test_broken cst[1].ref === StaticLint.IncorrectCallNargs
     end
     let cst = parse_and_pass("""
         for i in length(1) end
