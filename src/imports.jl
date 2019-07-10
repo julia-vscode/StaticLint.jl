@@ -68,7 +68,7 @@ function resolve_import(x, state::State)
         else
             return
         end
-        if i == n && par != nothing# && x.args[i].ref === nothing
+        if i == n && par != nothing && x.args[i].typ === IDENTIFIER # && x.args[i].ref === nothing
             if par isa Binding #mark reference to binding
                 push!(par.refs, x.args[i])
             end
