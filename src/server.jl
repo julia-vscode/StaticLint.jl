@@ -38,8 +38,8 @@ getsymbolserver(server::FileServer) = server.symbolserver
 
 function scopepass(file)
     server = file.server
-    getcst(file).scope = Scope(nothing, Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false)
-    state = State(file, getcst(file).scope, nothing, false, false, Dict(), server)
+    setscope!(getcst(file), Scope(nothing, Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false))
+    state = State(file, scopeof(getcst(file)), nothing, false, false, Dict(), server)
     state(getcst(file))
     for uref in state.urefs
         for r in uref[2]
@@ -88,16 +88,16 @@ function Base.display(s::FileServer)
 end
 
 function get_path(x::EXPR)
-    if x.typ === Call && length(x.args) == 4
+    if typof(x) === Call && length(x.args) == 4
         parg = x.args[3]
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
             return normpath(path)
-        elseif parg.typ === Call && parg.args[1].typ === IDENTIFIER && CSTParser.str_value(parg.args[1]) == "joinpath"
+        elseif typof(parg) === Call && typof(parg.args[1]) === IDENTIFIER && CSTParser.str_value(parg.args[1]) == "joinpath"
             path = ""
             for i = 2:length(parg.args)
                 arg = parg.args[i]
-                if arg.typ === PUNCTUATION
+                if typof(arg) === PUNCTUATION
                 elseif CSTParser.is_lit_string(arg)
                     path = string(path, "/", CSTParser.str_value(arg))
                 else

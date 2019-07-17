@@ -16,25 +16,25 @@ function resolve_ref(x1, m::SymbolServer.ModuleStore)
     hasref(x1) && return true
     if isidentifier(x1)
         x = x1
-        if x.val == m.name
-            x.ref = m
+        if valof(x) == m.name
+            setref!(x, m)
             return true
-        elseif x.val in m.exported && haskey(m.vals, x.val)
-            x.ref = m.vals[x.val]
+        elseif valof(x) in m.exported && haskey(m.vals, valof(x))
+            setref!(x, m.vals[valof(x)])
             return true
         end
-    elseif x1.typ === MacroName
+    elseif typof(x1) === MacroName
         x = x1.args[2]
-        mn = string("@", x.val)
+        mn = string("@", valof(x))
         if mn in m.exported
-            x.ref = m.vals[mn]
+            setref!(x, m.vals[mn])
             return true
         end
-    elseif x1.typ === x_Str
+    elseif typof(x1) === x_Str
         mac = x1
-        mn = string("@", mac.args[1].val, "_str")
+        mn = string("@", valof(mac.args[1]), "_str")
         if mn in m.exported && haskey(m.vals, mn)
-            mac.args[1].ref = m.vals[mn]
+            setref!(mac.args[1], m.vals[mn])
             return true
         end
     end
@@ -44,18 +44,18 @@ end
 function resolve_ref(x, scope::Scope)
     hasref(x) && return true
     resolved = false
-    if x.typ === BinaryOpCall && x.args[2].kind === CSTParser.Tokens.DOT
+    if typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT
         return resolve_getindex(x, scope)
     elseif isidentifier(x)
-        mn = x.val
+        mn = valof(x)
         x1 = x
-    elseif x.typ === MacroName
+    elseif typof(x) === MacroName
         x1 = x.args[2]
-        mn = string("@", x1.val)
-    elseif x.typ === x_Str
-        if x.args[1].typ === IDENTIFIER
+        mn = string("@", valof(x1))
+    elseif typof(x) === x_Str
+        if typof(x.args[1]) === IDENTIFIER
             x1 = x.args[1]
-            mn = string("@", x1.val, "_str")
+            mn = string("@", valof(x1), "_str")
         else
             return false
         end
@@ -64,7 +64,7 @@ function resolve_ref(x, scope::Scope)
     end
     
     if haskey(scope.names, mn)
-        x1.ref = scope.names[mn]
+        setref!(x1, scope.names[mn])
         push!(scope.names[mn].refs, x1)
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
@@ -73,8 +73,8 @@ function resolve_ref(x, scope::Scope)
             resolved && break
         end
     end
-    if !hasref(x) && !scope.ismodule &&!(scope.parent isa EXPR)
-        return resolve_ref(x, scope.parent)
+    if !hasref(x) && !scope.ismodule &&!(parentof(scope) isa EXPR)
+        return resolve_ref(x, parentof(scope))
     end
     return resolved
 end
@@ -82,15 +82,15 @@ end
 function resolve_getindex(x::EXPR, scope::Scope)
     hasref(x) && return true
     resolved = false
-    if x.args[1].typ === IDENTIFIER
+    if typof(x.args[1]) === IDENTIFIER
         resolved = resolve_ref(x.args[1], scope)
-        if resolved && x.args[3].typ === Quotenode && x.args[3].args[1].typ === IDENTIFIER
-            resolved = resolve_getindex(x.args[3].args[1], x.args[1].ref)
+        if resolved && typof(x.args[3]) === Quotenode && typof(x.args[3].args[1]) === IDENTIFIER
+            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1]))
         end
-    elseif x.args[1].typ === BinaryOpCall && x.args[1].args[2].kind === CSTParser.Tokens.DOT
+    elseif typof(x.args[1]) === BinaryOpCall && kindof(x.args[1].args[2]) === CSTParser.Tokens.DOT
         resolved = resolve_ref(x.args[1], scope)
-        if resolved && x.args[3].typ === Quotenode && x.args[3].args[1].typ === IDENTIFIER
-            resolved = resolve_getindex(x.args[3].args[1], x.args[1].args[3].args[1].ref)
+        if resolved && typof(x.args[3]) === Quotenode && typof(x.args[3].args[1]) === IDENTIFIER
+            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1].args[3].args[1]))
         end
     end
     return resolved
@@ -103,9 +103,9 @@ function resolve_getindex(x::EXPR, b::Binding)
         resolved = resolve_getindex(x, b.t.val)
     elseif b.val isa SymbolServer.ModuleStore
         resolved = resolve_getindex(x, b.val)
-    elseif b.val isa EXPR && b.val.typ === ModuleH
+    elseif b.val isa EXPR && typof(b.val) === ModuleH
         resolved = resolve_getindex(x, b.val)
-    elseif b.val isa Binding && b.val.val isa EXPR && b.val.val.typ === ModuleH
+    elseif b.val isa Binding && b.val.val isa EXPR && typof(b.val.val) === ModuleH
         resolved = resolve_getindex(x, b.val.val)
     end
     return resolved
@@ -119,12 +119,12 @@ function resolve_getindex(x::EXPR, parent_type::EXPR)
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x)
-        if (parent_type.typ === ModuleH || parent_type.typ === BareModule) && parent_type.scope isa Scope
-            resolved = resolve_ref(x, parent_type.scope)
+        if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
+            resolved = resolve_ref(x, scopeof(parent_type))
         elseif CSTParser.defines_struct(parent_type)
-            if haskey(parent_type.scope.names, x.val) 
-                x.ref = parent_type.scope.names[x.val]
-                push!(parent_type.binding.refs, x)
+            if haskey(scopeof(parent_type).names, valof(x)) 
+                setref!(x, scopeof(parent_type).names[valof(x)])
+                push!(bindingof(parent_type).refs, x)
                 resolved = true
             end
         end
@@ -136,18 +136,18 @@ function resolve_getindex(x::EXPR, parent::SymbolServer.SymStore)
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x)
-        if parent isa SymbolServer.ModuleStore && haskey(parent.vals, x.val)
-            x.ref = parent.vals[x.val]
+        if parent isa SymbolServer.ModuleStore && haskey(parent.vals, valof(x))
+            setref!(x, parent.vals[valof(x)])
             resolved = true
-        elseif parent isa SymbolServer.structStore && x.val in parent.fields
+        elseif parent isa SymbolServer.structStore && valof(x) in parent.fields
         end
     end
     return resolved
 end
 
-resolvable_macroname(x) = x.typ === MacroName && length(x.args) == 2 && isidentifier(x.args[2]) && x.args[2].ref === nothing
+resolvable_macroname(x) = typof(x) === MacroName && length(x.args) == 2 && isidentifier(x.args[2]) && refof(x.args[2]) === nothing
 
 function hasref(x::EXPR)
-    x.ref !== nothing && x.ref !== NoReference
+    refof(x) !== nothing && refof(x) !== NoReference
 end
 

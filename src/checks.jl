@@ -1,11 +1,11 @@
 @enum(LintCodes,IncorrectCallNargs,IncorrectIterSpec,NothingEquality)
 
 function _typeof(x, state)
-    if x.typ in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
+    if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
         return getsymbolserver(state.server)["Core"].vals["DataType"]
-    elseif x.typ in (CSTParser.ModuleH, CSTParser.BareModule)
+    elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
         return getsymbolserver(state.server)["Core"].vals["Module"]
-    elseif x.typ in (CSTParser.ModuleH, CSTParser.BareModule)
+    elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
         return getsymbolserver["Core"].vals["Module"]
     elseif CSTParser.defines_function(x)
         return return getsymbolserver(state.server)["Core"].vals["Function"]
@@ -19,9 +19,9 @@ function checks(x, server)
 end
 
 function check_call_args(x::EXPR)
-    if x.typ === Call
-        if x.args[1].typ === IDENTIFIER && hasref(x.args[1])
-            func = x.args[1].ref
+    if typof(x) === Call
+        if typof(x.args[1]) === IDENTIFIER && hasref(x.args[1])
+            func = refof(x.args[1])
         else
             func = nothing
         end
@@ -39,30 +39,30 @@ function check_call_args(x::EXPR)
                 end
             end
             if !ok
-                x.ref = IncorrectCallNargs
+                setref!(x, IncorrectCallNargs)
             end
         end
     end
 end
 
 function check_loop_iter(x::EXPR, server)
-    if x.typ === CSTParser.For
-        if length(x.args) > 1 && x.args[2].typ === CSTParser.BinaryOpCall && x.args[2].ref === nothing
+    if typof(x) === CSTParser.For
+        if length(x.args) > 1 && typof(x.args[2]) === CSTParser.BinaryOpCall && refof(x.args[2]) === nothing
             rng = x.args[2].args[3]
-            if rng.typ === CSTParser.LITERAL && rng.kind == CSTParser.Tokens.FLOAT || rng.kind == CSTParser.Tokens.INTEGER
-                x.args[2].ref = IncorrectIterSpec
-            elseif rng.typ === CSTParser.Call && rng.args[1].ref === getsymbolserver(server)["Base"].vals["length"]
-                x.args[2].ref = IncorrectIterSpec
+            if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
+                setref!(x.args[2], IncorrectIterSpec)
+            elseif typof(rng) === CSTParser.Call && refof(rng.args[1]) === getsymbolserver(server)["Base"].vals["length"]
+                setref!(x.args[2], IncorrectIterSpec)
             end
         end
-    elseif x.typ === CSTParser.Generator
+    elseif typof(x) === CSTParser.Generator
         for i = 3:length(x.args)
-            if x.args[i].typ === CSTParser.BinaryOpCall && x.args[i].ref === nothing
+            if typof(x.args[i]) === CSTParser.BinaryOpCall && refof(x.args[i]) === nothing
                 rng = x.args[i].args[3]
-                if rng.typ === CSTParser.LITERAL && rng.kind == CSTParser.Tokens.FLOAT || rng.kind == CSTParser.Tokens.INTEGER
-                    x.args[i].ref = IncorrectIterSpec
-                elseif rng.typ === CSTParser.Call && rng.args[1].val == "length" && rng.args[1].ref === getsymbolserver(server)["Base"].vals["length"]
-                    x.args[i].ref = IncorrectIterSpec
+                if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
+                    setref!(x.args[i], IncorrectIterSpec)
+                elseif typof(rng) === CSTParser.Call && valof(rng.args[1]) == "length" && refof(rng.args[1]) === getsymbolserver(server)["Base"].vals["length"]
+                    setref!(x.args[i], IncorrectIterSpec)
                 end
             end
         end
@@ -70,8 +70,8 @@ function check_loop_iter(x::EXPR, server)
 end
 
 function check_nothing_equality(x::EXPR, server)
-    if x.typ === CSTParser.BinaryOpCall && x.args[2].kind === CSTParser.Tokens.EQEQ && x.args[3].val == "nothing" && x.args[3].ref === getsymbolserver(server)["Core"].vals["nothing"]
-        x.args[2].ref = NothingEquality
+    if typof(x) === CSTParser.BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.EQEQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)["Core"].vals["nothing"]
+        setref!(x.args[2], NothingEquality)
     end
     
 end
@@ -79,10 +79,10 @@ end
 function _get_call_nargs(x::EXPR)
     cnt = 0
     for i = 2:length(x.args)
-        if x.args[i].typ === PUNCTUATION
-        elseif x.args[i].typ === CSTParser.Parameters
+        if typof(x.args[i]) === PUNCTUATION
+        elseif typof(x.args[i]) === CSTParser.Parameters
             for j = 1:length(x.args[i].args)
-                if x.args[i].args[j].typ !== PUNCTUATION
+                if typof(x.args[i].args[j]) !== PUNCTUATION
                     cnt += 1
                 end
             end
@@ -94,10 +94,10 @@ function _get_call_nargs(x::EXPR)
 end
 
 function _get_top_binding(x::EXPR, name::String)
-    if x.scope isa Scope
-        return _get_top_binding(x.scope)
-    elseif x.parent isa EXPR
-        return _get_top_binding(x.parent, name)
+    if scopeof(x) isa Scope
+        return _get_top_binding(scopeof(x))
+    elseif parentof(x) isa EXPR
+        return _get_top_binding(parentof(x), name)
     else
         return nothing
     end
@@ -106,8 +106,8 @@ end
 function _get_top_binding(s::Scope, name::String)
     if haskey(s.names, name)
         return s.names[name]
-    elseif s.parent isa Scope
-        return _get_top_binding(s.parent, name)
+    elseif parentof(s) isa Scope
+        return _get_top_binding(parentof(s), name)
     else
         return nothing
     end

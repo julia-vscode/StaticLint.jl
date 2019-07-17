@@ -1,5 +1,5 @@
-quoted(x) = x.typ === Quote || x.typ === Quotenode
-unquoted(x) = x.typ === UnaryOpCall && x.args[1].typ === OPERATOR && x.args[1].kind == CSTParser.Tokens.EX_OR
+quoted(x) = typof(x) === Quote || typof(x) === Quotenode
+unquoted(x) = typof(x) === UnaryOpCall && typof(x.args[1]) === OPERATOR && kindof(x.args[1]) == CSTParser.Tokens.EX_OR
 
 function get_ids(x, q = false, ids = [])
     if quoted(x)
@@ -19,7 +19,7 @@ function get_ids(x, q = false, ids = [])
 end
 
 function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
-    if x.binding !== nothing
+    if bindingof(x) !== nothing
         push!(bindings, x)
     end
     if StaticLint.hasref(x)
@@ -34,11 +34,11 @@ function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
 end
 
 function remove_ref(x::EXPR)
-    if hasref(x) && x.ref isa Binding
-        for ia in enumerate(x.ref.refs)
+    if hasref(x) && refof(x) isa Binding
+        for ia in enumerate(refof(x).refs)
             if ia[2] == x
-                deleteat!(x.ref.refs, ia[1])
-                x.ref = nothing
+                deleteat!(refof(x).refs, ia[1])
+                setref!(x, nothing)
                 return
             end
         end
@@ -47,10 +47,10 @@ function remove_ref(x::EXPR)
 end
 
 function clear_binding(x::EXPR)
-    if x.binding isa Binding
-        for r in x.binding.refs
+    if bindingof(x) isa Binding
+        for r in bindingof(x).refs
             if r isa EXPR
-                r.ref = nothing
+                setref!(r, nothing)
             elseif r isa Binding
                 clear_binding(r)
             end
@@ -60,9 +60,9 @@ function clear_binding(x::EXPR)
 end
 function clear_scope(x::EXPR)
     if x.scope isa Scope
-        x.scope.parent = nothing
+        setparent!(x.scope, nothing)
         empty!(x.scope.names)
-        if x.typ === FileH && x.scope.modules isa Dict && haskey(x.scope.modules, "Base") && haskey(x.scope.modules, "Core")
+        if typof(x) === FileH && x.scope.modules isa Dict && haskey(x.scope.modules, "Base") && haskey(x.scope.modules, "Core")
             m1 = x.scope.modules["Base"]
             m2 = x.scope.modules["Core"]
             empty!(x.scope.modules)
@@ -75,16 +75,16 @@ function clear_scope(x::EXPR)
 end
 
 function clear_ref(x::EXPR)
-    if x.ref isa Binding
-        for i in 1:length(x.ref.refs)
-            if x.ref.refs[i] == x
-                deleteat!(x.ref.refs, i)
+    if refof(x) isa Binding
+        for i in 1:length(refof(x).refs)
+            if refof(x).refs[i] == x
+                deleteat!(refof(x).refs, i)
                 break
             end
         end
-        x.ref = nothing
-    elseif x.ref !== nothing
-        x.ref = nothing
+        setref!(x, nothing)
+    elseif refof(x) !== nothing
+        setref!(x, nothing)
     end
 end
 function clear_meta(x::EXPR)

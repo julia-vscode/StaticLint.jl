@@ -4,6 +4,23 @@ using CSTParser
 using CSTParser: isidentifier
 using CSTParser: Scope, Binding, EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
 using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters
+using CSTParser: setparent!, setscope!
+# to be removed after CSTParser change
+kindof(x::EXPR) = x.kind
+kindof(t::CSTParser.Tokens.AbstractToken) = t.kind
+valof(x::EXPR) = x.val
+typof(x::EXPR) = x.typ
+parentof(x::EXPR) = x.parent
+parentof(s::Scope) = s.parent
+scopeof(x::EXPR) = x.scope
+bindingof(x::EXPR) = x.binding
+refof(x::EXPR) = x.ref
+
+function setref!(x::EXPR, r)
+    x.ref = r
+    return x
+end
+
 
 const NoReference = Binding("0NoReference", nothing, nothing, [], nothing)
 
@@ -28,10 +45,10 @@ function (state::State)(x)
         state.quoted = false
     end
     # imports
-    if x.typ === Using || x.typ === Import
+    if typof(x) === Using || typof(x) === Import
         resolve_import(x, state)
     end
-    if x.typ === Export # Allow delayed resolution
+    if typof(x) === Export # Allow delayed resolution
         state.delayed = state.scope
     end
     
@@ -44,36 +61,36 @@ function (state::State)(x)
     # scope
     clear_scope(x)
     s0 = state.scope
-    if x.typ === FileH
-        x.scope = state.scope
-    elseif x.scope isa Scope
+    if typof(x) === FileH
+        setscope!(x, state.scope)
+    elseif scopeof(x) isa Scope
         if CSTParser.defines_function(x)
             state.delayed = state.scope # Allow delayed resolution
         end
-        x.scope != s0 && (x.scope.parent = s0)
-        state.scope = x.scope
-        if x.typ === ModuleH # Add default modules to a new module
+        scopeof(x) != s0 && setparent!(scopeof(x), s0)
+        state.scope = scopeof(x)
+        if typof(x) === ModuleH # Add default modules to a new module
             state.scope.modules = Dict{String,Any}()
             state.scope.modules["Base"] = getsymbolserver(state.server)["Base"]
             state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
         end
-        if (x.typ === CSTParser.ModuleH || x.typ === CSTParser.BareModule) && x.binding !== nothing # Add reference to out of scope binding (i.e. itself)
-            if x.binding !== nothing
-                state.scope.names[x.binding.name] = x.binding
+        if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
+            if bindingof(x) !== nothing
+                state.scope.names[bindingof(x).name] = bindingof(x)
             end
         end
-        if x.typ === CSTParser.Flatten && x.args[1].typ === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && x.args[1].args[1].typ === CSTParser.Generator
-            x.args[1].args[1].scope = nothing
+        if typof(x) === CSTParser.Flatten && typof(x.args[1]) === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && typof(x.args[1].args[1]) === CSTParser.Generator
+            setscope!(x.args[1].args[1], nothing)
         end
     end
     followinclude(x, state) # follow include
     if state.quoted
         if isidentifier(x) && !hasref(x)
-            x.ref = NoReference
+            setref!(x, NoReference)
         end
-    elseif x.typ === CSTParser.Quotenode && length(x.args) == 2 && x.args[1].kind === CSTParser.Tokens.COLON && x.args[2].typ === CSTParser.IDENTIFIER
-        x.args[2].ref = NoReference
-    elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || x.typ === x_Str || (x.typ === BinaryOpCall && x.args[2].kind === CSTParser.Tokens.DOT)
+    elseif typof(x) === CSTParser.Quotenode && length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.COLON && typof(x.args[2]) === CSTParser.IDENTIFIER
+        setref!(x.args[2], NoReference)
+    elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
         resolved = resolve_ref(x, state.scope)
         if !resolved && state.delayed !== nothing
             if haskey(state.urefs, state.scope)
@@ -84,22 +101,22 @@ function (state::State)(x)
         end
     end
     # traverse across children (evaluation order)
-    if x.typ === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || x.args[2].typ === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && x.args[1].typ === CSTParser.Curly)
+    if typof(x) === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || typof(x.args[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x.args[1]) === CSTParser.Curly)
         state(x.args[3])
         state(x.args[2])
         state(x.args[1])
-    elseif x.typ === CSTParser.WhereOpCall
+    elseif typof(x) === CSTParser.WhereOpCall
         @inbounds for i = 3:length(x.args)
             state(x.args[i])
         end
         state(x.args[1])
         state(x.args[2])
-    elseif x.typ === CSTParser.Generator
+    elseif typof(x) === CSTParser.Generator
         @inbounds for i = 2:length(x.args)
             state(x.args[i])
         end
         state(x.args[1])
-    elseif x.typ === CSTParser.Flatten && x.args !== nothing && length(x.args) === 1 && x.args[1].args !== nothing && length(x.args[1]) >= 3 && length(x.args[1].args[1]) >= 3
+    elseif typof(x) === CSTParser.Flatten && x.args !== nothing && length(x.args) === 1 && x.args[1].args !== nothing && length(x.args[1]) >= 3 && length(x.args[1].args[1]) >= 3
         for i = 3:length(x.args[1].args[1].args)
             state(x.args[1].args[1].args[i])
         end
@@ -122,27 +139,27 @@ function (state::State)(x)
 end
 
 function add_binding(x, state)
-    if x.binding isa Binding
-        if x.typ === Macro
-            state.scope.names[string("@", x.binding.name)] = x.binding
+    if bindingof(x) isa Binding
+        if typof(x) === Macro
+            state.scope.names[string("@", bindingof(x).name)] = bindingof(x)
             mn = CSTParser.get_name(x)
-            if mn.typ === IDENTIFIER
-                mn.ref = x.binding
+            if typof(mn) === IDENTIFIER
+                setref!(mn, bindingof(x))
             end
         else
-            if haskey(state.scope.names, x.binding.name)
-                x.binding.overwrites = state.scope.names[x.binding.name]
+            if haskey(state.scope.names, bindingof(x).name)
+                bindingof(x).overwrites = state.scope.names[bindingof(x).name]
             end
-            state.scope.names[x.binding.name] = x.binding
+            state.scope.names[bindingof(x).name] = bindingof(x)
         end
-        infer_type(x.binding, state.scope, state.server)
-    elseif x.binding isa SymbolServer.SymStore
-        state.scope.names[x.val] = x.binding
+        infer_type(bindingof(x), state.scope, state.server)
+    elseif bindingof(x) isa SymbolServer.SymStore
+        state.scope.names[valof(x)] = bindingof(x)
     end
 end
 
 function followinclude(x, state::State)
-    if x.typ === Call && x.args[1].typ === IDENTIFIER && x.args[1].val == "include"
+    if typof(x) === Call && typof(x.args[1]) === IDENTIFIER && valof(x.args[1]) == "include"
         path = get_path(x)
         if isempty(path)
         elseif hasfile(state.server, path)
@@ -160,7 +177,7 @@ function followinclude(x, state::State)
             oldfile = state.file
             state.file = getfile(state.server, path)
             setroot(state.file, getroot(oldfile))
-            getcst(state.file).scope = nothing
+            setscope!(getcst(state.file), nothing)
             state(getcst(state.file))
             state.file = oldfile
         else
