@@ -73,6 +73,9 @@ function (state::State)(x)
             state.scope.modules = Dict{String,Any}()
             state.scope.modules["Base"] = getsymbolserver(state.server)["Base"]
             state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
+        elseif typof(x) === BareModule
+            state.scope.modules = Dict{String,Any}()
+            state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
         end
         if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
             if bindingof(x) !== nothing
