@@ -55,6 +55,8 @@ function (state::State)(x)
     #bindings
     add_binding(x, state)
 
+    mark_globals(x, state)
+
     #macros
     handle_macro(x, state)
     
@@ -95,7 +97,7 @@ function (state::State)(x)
         setref!(x.args[2], NoReference)
     elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
         resolved = resolve_ref(x, state.scope)
-        if !resolved && state.delayed !== nothing
+        if !resolved && (state.delayed !== nothing || isglobal(valof(x), state.scope))
             if haskey(state.urefs, state.scope)
                 push!(state.urefs[state.scope], x)
             else
@@ -142,22 +144,45 @@ function (state::State)(x)
 end
 
 function add_binding(x, state)
+    scope = state.scope
     if bindingof(x) isa Binding
+        # check for global marker
+        if isglobal(bindingof(x).name, scope)
+            scope = _get_global_scope(state.scope)
+        end
+
         if typof(x) === Macro
-            state.scope.names[string("@", bindingof(x).name)] = bindingof(x)
+            scope.names[string("@", bindingof(x).name)] = bindingof(x)
             mn = CSTParser.get_name(x)
             if typof(mn) === IDENTIFIER
                 setref!(mn, bindingof(x))
             end
         else
-            if haskey(state.scope.names, bindingof(x).name)
-                bindingof(x).overwrites = state.scope.names[bindingof(x).name]
+            if haskey(scope.names, bindingof(x).name)
+                bindingof(x).overwrites = scope.names[bindingof(x).name]
             end
-            state.scope.names[bindingof(x).name] = bindingof(x)
+            scope.names[bindingof(x).name] = bindingof(x)
         end
-        infer_type(bindingof(x), state.scope, state.server)
+        infer_type(bindingof(x), scope, state.server)
     elseif bindingof(x) isa SymbolServer.SymStore
-        state.scope.names[valof(x)] = bindingof(x)
+        scope.names[valof(x)] = bindingof(x)
+    end
+end
+
+isglobal(name, scope) = haskey(scope.names, "#globals") && name in scope.names["#globals"].refs
+
+function mark_globals(x, state)
+    if typof(x) === CSTParser.Global
+        if !haskey(state.scope.names, "#globals")
+            state.scope.names["#globals"] = CSTParser.Binding("#globals", nothing, nothing, String[], nothing)
+        end
+        if x.args isa Vector{EXPR}
+            for i = 2:length(x.args)
+                if typof(x.args[i]) === CSTParser.IDENTIFIER && !haskey(state.scope.names, valof(x.args[i]))
+                    push!(state.scope.names["#globals"].refs, valof(x.args[i]))
+                end
+            end
+        end
     end
 end
 

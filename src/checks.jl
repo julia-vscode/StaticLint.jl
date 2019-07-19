@@ -112,3 +112,11 @@ function _get_top_binding(s::Scope, name::String)
         return nothing
     end
 end
+
+function _get_global_scope(s::Scope)
+    if !s.ismodule && parentof(s) isa Scope && parentof(s) != s
+        return _get_global_scope(parentof(s))
+    else
+        return s
+    end
+end

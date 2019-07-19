@@ -29,7 +29,8 @@ function handle_macro(x::EXPR, state)
                     CSTParser.setbinding!(x.args[i], x)
                 end
             end
-        elseif _points_to_Base_macro(x.args[1], "nospecialize", state)
+        # elseif _points_to_Base_macro(x.args[1], "nospecialize", state)
+        elseif length(x.args[1].args) == 2 && isidentifier(x.args[1].args[2]) && valof(x.args[1].args[2]) == "nospecialize"
             for i = 2:length(x.args)
                 if !(typof(x.args[i]) === PUNCTUATION)
                     if bindingof(x.args[i]) !== nothing
