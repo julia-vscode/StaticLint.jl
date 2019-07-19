@@ -1,18 +1,18 @@
-function resolve_ref(x, m::File)
+function resolve_ref(x, m::File, visited_scopes = 0)
     hasref(x) && return true
     return false
 end
 
-function resolve_ref(x, m::Nothing) 
+function resolve_ref(x, m::Nothing, visited_scopes = 0)
     hasref(x) && return true
     return false
 end
-function resolve_ref(x, m::T) where T
+function resolve_ref(x, m::T, visited_scopes = 0) where T
     hasref(x) && return true
     @warn "unhandled $T"
     return false
 end
-function resolve_ref(x1, m::SymbolServer.ModuleStore)
+function resolve_ref(x1, m::SymbolServer.ModuleStore, visited_scopes = 0)
     hasref(x1) && return true
     if isidentifier(x1)
         x = x1
@@ -41,14 +41,10 @@ function resolve_ref(x1, m::SymbolServer.ModuleStore)
     return false
 end
 
-function resolve_ref(x, scope::Scope, visited_scopes = nothing)
-    if visited_scopes === nothing
-        visited_scopes = [scope]
-    elseif scope in visited_scopes
+function resolve_ref(x, scope::Scope, visited_scopes = 0)
+    if visited_scopes > 50
         @info "Warning: circular reference found while resolving reference."
         return
-    else
-        push!(visited_scopes, scope)
     end
     hasref(x) && return true
     resolved = false
@@ -77,12 +73,12 @@ function resolve_ref(x, scope::Scope, visited_scopes = nothing)
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
         for m in scope.modules
-            resolved = resolve_ref(x, m[2])
+            resolved = resolve_ref(x, m[2], visited_scopes)
             resolved && break
         end
     end
     if !hasref(x) && !scope.ismodule &&!(parentof(scope) isa EXPR)
-        return resolve_ref(x, parentof(scope))
+        return resolve_ref(x, parentof(scope), visited_scopes)
     end
     return resolved
 end
