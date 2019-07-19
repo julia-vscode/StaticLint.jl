@@ -64,7 +64,7 @@ function (state::State)(x)
     if typof(x) === FileH
         setscope!(x, state.scope)
     elseif scopeof(x) isa Scope
-        if CSTParser.defines_function(x)
+        if CSTParser.defines_function(x) || CSTParser.defines_macro(x)
             state.delayed = state.scope # Allow delayed resolution
         end
         scopeof(x) != s0 && setparent!(scopeof(x), s0)

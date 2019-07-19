@@ -13,37 +13,10 @@ function resolve_import(x, state::State)
             else
                 par = _get_field(par, arg, state)
             end
-            # if par == nothing
-            #     return
-            # end
         elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.COMMA
             # end of chain, make available
-            if i > 2 && isidentifier(x.args[i-1]) && par != nothing# && x.args[i-1].ref === nothing
-                if par isa Binding #mark reference to binding
-                    push!(par.refs, x.args[i-1])
-                end
-                if bindingof(x.args[i-1]) === nothing
-                    x.args[i-1].binding = Binding(CSTParser.str_value(x.args[i-1]), par, _typeof(par), [], nothing)
-                end
-                if u && par isa SymbolServer.ModuleStore
-                    if state.scope.modules isa Dict
-                        state.scope.modules[valof(x.args[i-1])] = par
-                    else
-                        state.scope.modules = Dict(valof(x.args[i-1]) => par)
-                    end
-                elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore 
-                    if state.scope.modules isa Dict
-                        state.scope.modules[valof(x.args[i-1])] = par.val
-                    else
-                        state.scope.modules = Dict(valof(x.args[i-1]) => par.val)
-                    end
-                elseif u && par isa Binding && par.val isa EXPR && typof(par.val) === CSTParser.ModuleH
-                    if state.scope.modules isa Dict
-                        state.scope.modules[valof(x.args[i-1])] = scopeof(par.val)
-                    else
-                        state.scope.modules = Dict(valof(x.args[i-1]) => scopeof(par.val))
-                    end
-                end
+            if i > 2
+                _mark_import_arg(x.args[i - 1], par, state, u)
             end
             par = root
         elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON            
@@ -68,37 +41,44 @@ function resolve_import(x, state::State)
         else
             return
         end
-        if i == n && par != nothing && (typof(x.args[i]) === IDENTIFIER || typof(x.args[i]) === MacroName)# && x.args[i].ref === nothing
-            if par isa Binding #mark reference to binding
-                push!(par.refs, x.args[i])
-            end
-            if bindingof(x.args[i]) === nothing
-                x.args[i].binding = Binding(CSTParser.str_value(x.args[i]), par, _typeof(par), [], nothing)
-            end
-            if u && par isa SymbolServer.ModuleStore
-                if state.scope.modules isa Dict
-                    state.scope.modules[valof(x.args[i])] = par
-                else
-                    state.scope.modules = Dict(valof(x.args[i]) => par)
-                end
-            elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore 
-                if state.scope.modules isa Dict
-                    state.scope.modules[valof(x.args[i])] = par.val
-                else
-                    state.scope.modules = Dict(valof(x.args[i]) => par.val)
-                end
-            elseif u && par isa Binding && par.val isa EXPR && typof(par.val) === CSTParser.ModuleH
-                if state.scope.modules isa Dict
-                    state.scope.modules[valof(x.args[i])] = scopeof(par.val)
-                else
-                    state.scope.modules = Dict(valof(x.args[i]) => scopeof(par.val))
-                end
-            end
+        if i == n 
+            _mark_import_arg(x.args[i], par, state, u)
         end
         i += 1
     end
     
 end
+
+function _mark_import_arg(arg, par, state, u)
+    if par != nothing && (typof(arg) === IDENTIFIER || typof(arg) === MacroName)
+        if par isa Binding #mark reference to binding
+            push!(par.refs, arg)
+        end
+        if bindingof(arg) === nothing
+            arg.binding = Binding(CSTParser.str_value(arg), par, _typeof(par), [], nothing)
+        end
+        if u && par isa SymbolServer.ModuleStore
+            if state.scope.modules isa Dict
+                state.scope.modules[valof(arg)] = par
+            else
+                state.scope.modules = Dict(valof(arg) => par)
+            end
+        elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore 
+            if state.scope.modules isa Dict
+                state.scope.modules[valof(arg)] = par.val
+            else
+                state.scope.modules = Dict(valof(arg) => par.val)
+            end
+        elseif u && par isa Binding && par.val isa EXPR && typof(par.val) === CSTParser.ModuleH
+            if state.scope.modules isa Dict
+                state.scope.modules[valof(arg)] = scopeof(par.val)
+            else
+                state.scope.modules = Dict(valof(arg) => scopeof(par.val))
+            end
+        end
+    end
+end
+
 
 function _get_field(par, arg, state)
     if par isa Dict{String, SymbolServer.ModuleStore} #package store
