@@ -41,7 +41,15 @@ function resolve_ref(x1, m::SymbolServer.ModuleStore)
     return false
 end
 
-function resolve_ref(x, scope::Scope)
+function resolve_ref(x, scope::Scope, visited_scopes = nothing)
+    if visited_scopes === nothing
+        visited_scopes = [scope]
+    elseif scope in visited_scopes
+        @info "Warning: circular reference found while resolving reference."
+        return
+    else
+        push!(visited_scopes, scope)
+    end
     hasref(x) && return true
     resolved = false
     if typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT
