@@ -19,7 +19,7 @@ function resolve_import(x, state::State)
                 _mark_import_arg(x.args[i - 1], par, state, u)
             end
             par = root
-        elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON            
+        elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
             root = par
             if par != nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
                 setref!(x.args[i-1], par)
@@ -75,6 +75,13 @@ function _mark_import_arg(arg, par, state, u)
             else
                 state.scope.modules = Dict(valof(arg) => scopeof(par.val))
             end
+        elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && typof(par.val.val) === CSTParser.ModuleH
+            if state.scope.modules isa Dict
+                state.scope.modules[valof(arg)] = scopeof(par.val.val)
+            else
+                state.scope.modules = Dict(valof(arg) => scopeof(par.val.val))
+            end
+            
         end
     end
 end
