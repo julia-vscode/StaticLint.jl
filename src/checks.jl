@@ -1,4 +1,4 @@
-@enum(LintCodes,IncorrectCallNargs,IncorrectIterSpec,NothingEquality)
+@enum(LintCodes,IncorrectCallNargs,IncorrectIterSpec,NothingEquality,NothingNotEq)
 
 function _typeof(x, state)
     if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
@@ -70,10 +70,13 @@ function check_loop_iter(x::EXPR, server)
 end
 
 function check_nothing_equality(x::EXPR, server)
-    if typof(x) === CSTParser.BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.EQEQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)["Core"].vals["nothing"]
-        setref!(x.args[2], NothingEquality)
+    if typof(x) === CSTParser.BinaryOpCall
+        if kindof(x.args[2]) === CSTParser.Tokens.EQEQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)["Core"].vals["nothing"]
+            setref!(x.args[2], NothingEquality)
+        elseif kindof(x.args[2]) === CSTParser.Tokens.NOT_EQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)["Core"].vals["nothing"]
+            setref!(x.args[2], NothingNotEq)
+        end
     end
-    
 end
 
 function _get_call_nargs(x::EXPR)
