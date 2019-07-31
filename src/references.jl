@@ -143,7 +143,7 @@ function resolve_getindex(x::EXPR, parent::SymbolServer.SymStore)
         if parent isa SymbolServer.ModuleStore && haskey(parent.vals, valof(x))
             setref!(x, parent.vals[valof(x)])
             resolved = true
-        elseif parent isa SymbolServer.structStore && valof(x) in parent.fields
+        elseif parent isa SymbolServer.DataTypeStore && valof(x) in parent.fields
         end
     end
     return resolved
