@@ -91,7 +91,7 @@ function (state::State)(x)
     elseif typof(x) === CSTParser.Quotenode && length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.COLON && typof(x.args[2]) === CSTParser.IDENTIFIER
         setref!(x.args[2], NoReference)
     elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
-        resolved = resolve_ref(x, state.scope)
+        resolved = resolve_ref(x, state.scope, state)
         if !resolved && (state.delayed || isglobal(valof(x), state.scope))
             push!(state.urefs, x)
         end
@@ -154,7 +154,7 @@ function add_binding(x, state)
             end
             scope.names[bindingof(x).name] = bindingof(x)
         end
-        infer_type(bindingof(x), scope, state.server)
+        infer_type(bindingof(x), scope, state)
     elseif bindingof(x) isa SymbolServer.SymStore
         scope.names[valof(x)] = bindingof(x)
     end

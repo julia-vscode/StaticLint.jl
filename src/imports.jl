@@ -90,15 +90,7 @@ end
 function _get_field(par, arg, state)
     if par isa Dict{String, SymbolServer.ModuleStore} #package store
         if haskey(par, CSTParser.str_value(arg))
-            par = par[CSTParser.str_value(arg)]
-            if par isa String # reference to dependency
-                if haskey(getsymbolserver(state.server), par)
-                    return getsymbolserver(state.server)[par] 
-                else
-                    return
-                end
-            end
-            return par
+            return par[CSTParser.str_value(arg)]
         end
     elseif par isa Scope
         if haskey(par.names, valof(arg))
@@ -112,12 +104,8 @@ function _get_field(par, arg, state)
         elseif par.val isa SymbolServer.ModuleStore
             if haskey(par.val.vals, CSTParser.str_value(arg))
                 par = par.val.vals[CSTParser.str_value(arg)]
-                if par isa String # reference to dependency
-                    if haskey(getsymbolserver(state.server), par)
-                        return getsymbolserver(state.server)[par] 
-                    else
-                        return 
-                    end
+                if par isa SymbolServer.PackageRef # reference to dependency
+                    return SymbolServer._lookup(par, getsymbolserver(state.server))
                 end
                 return par
             end
@@ -125,12 +113,8 @@ function _get_field(par, arg, state)
     elseif par isa SymbolServer.ModuleStore # imported module
         if haskey(par.vals, CSTParser.str_value(arg))
             par = par.vals[CSTParser.str_value(arg)]
-            if par isa String # reference to dependency
-                if haskey(getsymbolserver(state.server), par)
-                    return getsymbolserver(state.server)[par] 
-                else
-                    return 
-                end
+            if par isa SymbolServer.PackageRef # reference to dependency
+                return SymbolServer._lookup(par, getsymbolserver(state.server))
             end
             return par
         end

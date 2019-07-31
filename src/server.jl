@@ -44,7 +44,7 @@ function scopepass(file)
     for uref in state.urefs
         s = retrieve_delayed_scope(uref)
         if s !== nothing
-            resolve_ref(uref, s)
+            resolve_ref(uref, s, state)
         end
     end
 end
