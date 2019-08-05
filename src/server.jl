@@ -39,11 +39,12 @@ getsymbolserver(server::FileServer) = server.symbolserver
 function scopepass(file)
     server = file.server
     setscope!(getcst(file), Scope(nothing, Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false))
-    state = State(file, scopeof(getcst(file)), nothing, false, false, Dict(), server)
+    state = State(file, scopeof(getcst(file)), false, false, false, EXPR[], server)
     state(getcst(file))
     for uref in state.urefs
-        for r in uref[2]
-            resolve_ref(r, uref[1])
+        s = retrieve_delayed_scope(uref)
+        if s !== nothing
+            resolve_ref(uref, s, state)
         end
     end
 end

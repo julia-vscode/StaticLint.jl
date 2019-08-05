@@ -28,33 +28,31 @@ const NoReference = Binding("0NoReference", nothing, nothing, [], nothing)
 mutable struct State
     file
     scope::Scope
-    delayed::Union{Nothing,Scope}
+    delayed::Bool
     ignorewherescope::Bool
     quoted::Bool
-    urefs::Dict{Scope,Vector{EXPR}}
+    urefs::Vector{EXPR}
     server
 end
 
 function (state::State)(x)
-    delayed = state.delayed # store previous delayed eval scope
+    delayed = state.delayed # store states
     isquoted = state.quoted
+
     if quoted(x)
         state.quoted = true
-    end
-    if state.quoted && unquoted(x)
+    elseif state.quoted && unquoted(x)
         state.quoted = false
     end
     # imports
     if typof(x) === Using || typof(x) === Import
         resolve_import(x, state)
-    end
-    if typof(x) === Export # Allow delayed resolution
-        state.delayed = state.scope
+    elseif typof(x) === Export # Allow delayed resolution
+        state.delayed = true
     end
     
     #bindings
     add_binding(x, state)
-
     mark_globals(x, state)
 
     #macros
@@ -67,7 +65,7 @@ function (state::State)(x)
         setscope!(x, state.scope)
     elseif scopeof(x) isa Scope
         if CSTParser.defines_function(x) || CSTParser.defines_macro(x)
-            state.delayed = state.scope # Allow delayed resolution
+            state.delayed = true # Allow delayed resolution
         end
         scopeof(x) != s0 && setparent!(scopeof(x), s0)
         state.scope = scopeof(x)
@@ -80,11 +78,8 @@ function (state::State)(x)
             state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
         end
         if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
-            if bindingof(x) !== nothing
-                state.scope.names[bindingof(x).name] = bindingof(x)
-            end
-        end
-        if typof(x) === CSTParser.Flatten && typof(x.args[1]) === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && typof(x.args[1].args[1]) === CSTParser.Generator
+            state.scope.names[bindingof(x).name] = bindingof(x)
+        elseif typof(x) === CSTParser.Flatten && typof(x.args[1]) === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && typof(x.args[1].args[1]) === CSTParser.Generator
             setscope!(x.args[1].args[1], nothing)
         end
     end
@@ -96,13 +91,9 @@ function (state::State)(x)
     elseif typof(x) === CSTParser.Quotenode && length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.COLON && typof(x.args[2]) === CSTParser.IDENTIFIER
         setref!(x.args[2], NoReference)
     elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
-        resolved = resolve_ref(x, state.scope)
-        if !resolved && (state.delayed !== nothing || isglobal(valof(x), state.scope))
-            if haskey(state.urefs, state.scope)
-                push!(state.urefs[state.scope], x)
-            else
-                state.urefs[state.scope] = EXPR[x]
-            end
+        resolved = resolve_ref(x, state.scope, state)
+        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
+            push!(state.urefs, x)
         end
     end
     # traverse across children (evaluation order)
@@ -138,7 +129,7 @@ function (state::State)(x)
 
     # return to previous states
     state.scope != s0 && (state.scope = s0)
-    state.delayed != delayed && (state.delayed = delayed)
+    state.delayed = delayed
     state.quoted = isquoted
     return state.scope
 end
@@ -163,7 +154,7 @@ function add_binding(x, state)
             end
             scope.names[bindingof(x).name] = bindingof(x)
         end
-        infer_type(bindingof(x), scope, state.server)
+        infer_type(bindingof(x), scope, state)
     elseif bindingof(x) isa SymbolServer.SymStore
         scope.names[valof(x)] = bindingof(x)
     end

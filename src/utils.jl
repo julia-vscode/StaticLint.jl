@@ -115,3 +115,27 @@ function get_root_method(b::Binding, server, b1 = nothing, bs = Binding[])
         return b
     end
 end
+
+function retrieve_delayed_scope(x)
+    if (CSTParser.defines_function(x) || CSTParser.defines_macro(x)) && scopeof(x) !== nothing
+        if parentof(scopeof(x)) !== nothing
+            return parentof(scopeof(x))
+        else
+            return scopeof(x)
+        end
+    elseif typof(x) === Export
+        return retrieve_scope(x)
+    elseif parentof(x) !== nothing
+        return retrieve_delayed_scope(parentof(x))
+    end
+    return nothing
+end
+
+function retrieve_scope(x)
+    if scopeof(x) != nothing
+        return scopeof(x)
+    elseif parentof(x) isa EXPR
+        return retrieve_scope(parentof(x))
+    end
+    return 
+end

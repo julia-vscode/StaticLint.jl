@@ -1,18 +1,18 @@
-function resolve_ref(x, m::File, visited_scopes = 0)
+function resolve_ref(x, m::File, state::State, visited_scopes = 0)
     hasref(x) && return true
     return false
 end
 
-function resolve_ref(x, m::Nothing, visited_scopes = 0)
+function resolve_ref(x, m::Nothing, state::State, visited_scopes = 0)
     hasref(x) && return true
     return false
 end
-function resolve_ref(x, m::T, visited_scopes = 0) where T
+function resolve_ref(x, m::T, state::State, visited_scopes = 0) where T
     hasref(x) && return true
     @warn "unhandled $T"
     return false
 end
-function resolve_ref(x1, m::SymbolServer.ModuleStore, visited_scopes = 0)
+function resolve_ref(x1, m::SymbolServer.ModuleStore, state::State, visited_scopes = 0)
     hasref(x1) && return true
     if isidentifier(x1)
         x = x1
@@ -20,8 +20,19 @@ function resolve_ref(x1, m::SymbolServer.ModuleStore, visited_scopes = 0)
             setref!(x, m)
             return true
         elseif valof(x) in m.exported && haskey(m.vals, valof(x))
-            setref!(x, m.vals[valof(x)])
-            return true
+            val = m.vals[valof(x)]
+            if val isa SymbolServer.PackageRef
+                val1 = SymbolServer._lookup(val, getsymbolserver(state.server))
+                if val1 !== nothing
+                    setref!(x, val1)
+                    return true
+                else
+                    return false
+                end
+            else
+                setref!(x, val)
+                return true
+            end
         end
     elseif typof(x1) === MacroName
         x = x1.args[2]
@@ -41,7 +52,7 @@ function resolve_ref(x1, m::SymbolServer.ModuleStore, visited_scopes = 0)
     return false
 end
 
-function resolve_ref(x, scope::Scope, visited_scopes = 0)
+function resolve_ref(x, scope::Scope, state::State, visited_scopes = 0)
     if visited_scopes > 50
         @info "Warning: circular reference found while resolving reference."
         return
@@ -49,7 +60,7 @@ function resolve_ref(x, scope::Scope, visited_scopes = 0)
     hasref(x) && return true
     resolved = false
     if typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT
-        return resolve_getindex(x, scope)
+        return resolve_getindex(x, scope, state)
     elseif isidentifier(x)
         mn = valof(x)
         x1 = x
@@ -73,58 +84,58 @@ function resolve_ref(x, scope::Scope, visited_scopes = 0)
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
         for m in scope.modules
-            resolved = resolve_ref(x, m[2], visited_scopes)
+            resolved = resolve_ref(x, m[2], state, visited_scopes)
             resolved && break
         end
     end
     if !hasref(x) && !scope.ismodule &&!(parentof(scope) isa EXPR)
-        return resolve_ref(x, parentof(scope), visited_scopes)
+        return resolve_ref(x, parentof(scope), state, visited_scopes)
     end
     return resolved
 end
 
-function resolve_getindex(x::EXPR, scope::Scope)
+function resolve_getindex(x::EXPR, scope::Scope, state::State)
     hasref(x) && return true
     resolved = false
     if typof(x.args[1]) === IDENTIFIER
-        resolved = resolve_ref(x.args[1], scope)
+        resolved = resolve_ref(x.args[1], scope, state)
         if resolved && typof(x.args[3]) === Quotenode && typof(x.args[3].args[1]) === IDENTIFIER
-            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1]))
+            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1]), state)
         end
     elseif typof(x.args[1]) === BinaryOpCall && kindof(x.args[1].args[2]) === CSTParser.Tokens.DOT
-        resolved = resolve_ref(x.args[1], scope)
+        resolved = resolve_ref(x.args[1], scope, state)
         if resolved && typof(x.args[3]) === Quotenode && typof(x.args[3].args[1]) === IDENTIFIER
-            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1].args[3].args[1]))
+            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1].args[3].args[1]), state)
         end
     end
     return resolved
 end
 
-function resolve_getindex(x::EXPR, b::Binding)
+function resolve_getindex(x::EXPR, b::Binding, state::State)
     hasref(x) && return true
     resolved = false
     if b.t isa Binding
-        resolved = resolve_getindex(x, b.t.val)
+        resolved = resolve_getindex(x, b.t.val, state)
     elseif b.val isa SymbolServer.ModuleStore
-        resolved = resolve_getindex(x, b.val)
+        resolved = resolve_getindex(x, b.val, state)
     elseif b.val isa EXPR && typof(b.val) === ModuleH
-        resolved = resolve_getindex(x, b.val)
+        resolved = resolve_getindex(x, b.val, state)
     elseif b.val isa Binding && b.val.val isa EXPR && typof(b.val.val) === ModuleH
-        resolved = resolve_getindex(x, b.val.val)
+        resolved = resolve_getindex(x, b.val.val, state)
     end
     return resolved
 end
 
-function resolve_getindex(x::EXPR, parent_type)
+function resolve_getindex(x::EXPR, parent_type, state::State)
     hasref(x) && return true
     return false
 end
-function resolve_getindex(x::EXPR, parent_type::EXPR)
+function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x)
         if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
-            resolved = resolve_ref(x, scopeof(parent_type))
+            resolved = resolve_ref(x, scopeof(parent_type), state)
         elseif CSTParser.defines_struct(parent_type)
             if haskey(scopeof(parent_type).names, valof(x)) 
                 setref!(x, scopeof(parent_type).names[valof(x)])
@@ -136,14 +147,19 @@ function resolve_getindex(x::EXPR, parent_type::EXPR)
     return resolved
 end
 
-function resolve_getindex(x::EXPR, parent::SymbolServer.SymStore)
+function resolve_getindex(x::EXPR, parent::SymbolServer.SymStore, state::State)
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x)
         if parent isa SymbolServer.ModuleStore && haskey(parent.vals, valof(x))
-            setref!(x, parent.vals[valof(x)])
+            val = parent.vals[valof(x)]
+            if val isa SymbolServer.PackageRef
+                val = SymbolServer._lookup(val, getsymbolserver(state.server))
+                val === nothing && return false
+            end
+            setref!(x, val)
             resolved = true
-        elseif parent isa SymbolServer.structStore && valof(x) in parent.fields
+        elseif parent isa SymbolServer.DataTypeStore && valof(x) in parent.fields
         end
     end
     return resolved
