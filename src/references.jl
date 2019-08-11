@@ -64,6 +64,12 @@ function resolve_ref(x, scope::Scope, state::State, visited_scopes = 0)
     elseif isidentifier(x)
         mn = valof(x)
         x1 = x
+        @info mn
+        if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
+            @info 1
+            setref!(x, NoReference)
+            return true
+        end
     elseif typof(x) === MacroName
         x1 = x.args[2]
         mn = string("@", valof(x1))
@@ -171,3 +177,12 @@ function hasref(x::EXPR)
     refof(x) !== nothing && refof(x) !== NoReference
 end
 
+function _in_macro_def(x)
+    if typof(x) === CSTParser.Macro
+        return true
+    elseif parentof(x) isa EXPR
+        return _in_macro_def(parentof(x))
+    else
+        return false
+    end
+end

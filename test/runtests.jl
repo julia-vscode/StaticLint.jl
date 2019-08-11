@@ -320,5 +320,18 @@ f(arg) = arg
     let cst = parse_and_pass("a == nothing")
         @test refof(cst[1][2]) === StaticLint.NothingEquality 
     end
+
+    let cst = parse_and_pass("""
+        __source__
+        __module__
+        macro m()
+            __source__
+            __module__
+        end""")
+        @test cst[1].ref === nothing
+        @test cst[2].ref === nothing
+        @test cst[3][3][1].ref == StaticLint.NoReference
+        @test cst[3][3][2].ref == StaticLint.NoReference
+    end
 end
 end
