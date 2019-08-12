@@ -64,7 +64,6 @@ function resolve_ref(x, scope::Scope, state::State, visited_scopes = 0)
     elseif isidentifier(x)
         mn = valof(x)
         x1 = x
-        @info mn
         if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
             @info 1
             setref!(x, NoReference)
