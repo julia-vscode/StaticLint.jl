@@ -65,7 +65,6 @@ function resolve_ref(x, scope::Scope, state::State, visited_scopes = 0)
         mn = valof(x)
         x1 = x
         if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
-            @info 1
             setref!(x, NoReference)
             return true
         end
@@ -89,12 +88,12 @@ function resolve_ref(x, scope::Scope, state::State, visited_scopes = 0)
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
         for m in scope.modules
-            resolved = resolve_ref(x, m[2], state, visited_scopes)
+            resolved = resolve_ref(x, m[2], state, visited_scopes + 1)
             resolved && break
         end
     end
     if !hasref(x) && !scope.ismodule &&!(parentof(scope) isa EXPR)
-        return resolve_ref(x, parentof(scope), state, visited_scopes)
+        return resolve_ref(x, parentof(scope), state, visited_scopes + 1)
     end
     return resolved
 end
