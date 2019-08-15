@@ -5,6 +5,7 @@ using CSTParser: isidentifier
 using CSTParser: Scope, Binding, EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
 using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters
 using CSTParser: setparent!, setscope!
+using Pkg
 # to be removed after CSTParser change
 kindof(x::EXPR) = x.kind
 kindof(t::CSTParser.Tokens.AbstractToken) = t.kind
