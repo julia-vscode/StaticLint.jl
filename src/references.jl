@@ -55,7 +55,7 @@ end
 function resolve_ref(x, scope::Scope, state::State, visited_scopes = 0)
     if visited_scopes > 50
         @info "Warning: circular reference found while resolving reference."
-        return
+        return false
     end
     hasref(x) && return true
     resolved = false
