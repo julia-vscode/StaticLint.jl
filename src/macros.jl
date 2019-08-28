@@ -35,6 +35,14 @@ function handle_macro(x::EXPR, state)
                     CSTParser.setbinding!(x.args[i], x)
                 end
             end
+        elseif _points_to_Base_macro(x.args[1], "goto", state)
+            if length(x.args) == 2 && typof(x.args[2]) === CSTParser.IDENTIFIER
+                setref!(x.args[2], NoReference)
+            end
+        elseif _points_to_Base_macro(x.args[1], "label", state)
+            if length(x.args) == 2 && typof(x.args[2]) === CSTParser.IDENTIFIER
+                CSTParser.setbinding!(x.args[2])
+            end
         # elseif _points_to_Base_macro(x.args[1], "nospecialize", state)
         elseif length(x.args[1].args) == 2 && isidentifier(x.args[1].args[2]) && valof(x.args[1].args[2]) == "nospecialize"
             for i = 2:length(x.args)
