@@ -26,6 +26,12 @@ function handle_macro(x::EXPR, state)
                     if bindingof(x.args[i]) !== nothing
                         break
                     end
+                    if i == 3 && typof(x.args[i]) === CSTParser.Begin
+                        for j in 1:length(x.args[i].args[2].args)
+                            CSTParser.setbinding!(x.args[i].args[2].args[j], x)
+                        end
+                        break
+                    end
                     CSTParser.setbinding!(x.args[i], x)
                 end
             end

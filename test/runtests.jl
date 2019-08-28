@@ -138,13 +138,6 @@ f
 """)  == [true, true, true, true]
 
 @test check_resolved("""
-@enum(E,a,b)
-E
-a
-b
-""")  == [true, true, true, true, true, true, true]
-
-@test check_resolved("""
 module Mod
 f = 1
 end
@@ -334,4 +327,30 @@ f(arg) = arg
         @test cst[3][3][2].ref == StaticLint.NoReference
     end
 end
+
+@testset "macros" begin
+    @test check_resolved("""
+    @enum(E,a,b)
+    E
+    a
+    b
+    """)  == [true, true, true, true, true, true, true]
+    end
+
+    @test check_resolved("""
+    @enum E a b 
+    E
+    a
+    b
+    """)  == [true, true, true, true, true, true, true]
+
+    @test check_resolved("""
+    @enum E begin
+        a
+        b
+    end
+    E
+    a
+    b
+    """)  == [true, true, true, true, true, true, true]
 end
