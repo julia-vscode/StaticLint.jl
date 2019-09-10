@@ -143,7 +143,8 @@ function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)
         elseif CSTParser.defines_struct(parent_type)
             if haskey(scopeof(parent_type).names, valof(x)) 
                 setref!(x, scopeof(parent_type).names[valof(x)])
-                push!(bindingof(parent_type).refs, x)
+                push!(scopeof(parent_type).names[valof(x)].refs, x)
+                # push!(bindingof(parent_type).refs, x)
                 resolved = true
             end
         end

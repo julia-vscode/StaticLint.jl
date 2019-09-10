@@ -315,6 +315,18 @@ f(arg) = arg
     end
 
     let cst = parse_and_pass("""
+        struct Graph
+            children:: T
+        end
+        
+        function test()
+            g = Graph()
+            f = g.children
+        end""")
+        @test cst[2][3][2][3][3][1] in bindingof(cst[1][3][1]).refs
+    end
+
+    let cst = parse_and_pass("""
         __source__
         __module__
         macro m()
