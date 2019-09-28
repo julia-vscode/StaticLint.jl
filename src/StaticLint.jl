@@ -2,28 +2,12 @@ module StaticLint
 using SymbolServer
 using CSTParser
 using CSTParser: isidentifier
-using CSTParser: Scope, Binding, EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
-using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters
-using CSTParser: setparent!, setscope!
-# to be removed after CSTParser change
-kindof(x::EXPR) = x.kind
-kindof(t::CSTParser.Tokens.AbstractToken) = t.kind
-valof(x::EXPR) = x.val
-typof(x::EXPR) = x.typ
-parentof(x::EXPR) = x.parent
-parentof(s::Scope) = s.parent
-scopeof(x::EXPR) = x.scope
-bindingof(x::EXPR) = x.binding
-refof(x::EXPR) = x.ref
+using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
+using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef
+using CSTParser: setparent!, kindof, valof, typof, parentof
 
-function setref!(x::EXPR, r)
-    x.ref = r
-    return x
-end
-
-
-const NoReference = Binding("0NoReference", nothing, nothing, [], nothing)
-
+include("bindings.jl")
+# const NoReference = Binding(EXPR, nothing, nothing, [], nothing, nothing)
 
 mutable struct State
     file
@@ -45,21 +29,25 @@ function (state::State)(x)
         state.quoted = false
     end
     # imports
-    if typof(x) === Using || typof(x) === Import
-        resolve_import(x, state)
-    elseif typof(x) === Export # Allow delayed resolution
-        state.delayed = true
-    end
+    # if typof(x) === Using || typof(x) === Import
+    #     resolve_import(x, state)
+    # elseif typof(x) === Export # Allow delayed resolution
+    #     state.delayed = true
+    # end
     
     #bindings
-    add_binding(x, state)
-    mark_globals(x, state)
+    mark_binding!(x, state)
+    # add_binding(x, state)
+    # mark_globals(x, state)
 
     #macros
-    handle_macro(x, state)
+    # handle_macro(x, state)
     
     # scope
     clear_scope(x)
+    if scopeof(x) === nothing && introduces_scope(x, state)
+        setscope!(x, Scope(x))
+    end
     s0 = state.scope
     if typof(x) === FileH
         setscope!(x, state.scope)
@@ -84,18 +72,18 @@ function (state::State)(x)
         end
     end
     followinclude(x, state) # follow include
-    if state.quoted
-        if isidentifier(x) && !hasref(x)
-            setref!(x, NoReference)
-        end
-    elseif typof(x) === CSTParser.Quotenode && length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.COLON && typof(x.args[2]) === CSTParser.IDENTIFIER
-        setref!(x.args[2], NoReference)
-    elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
-        resolved = resolve_ref(x, state.scope, state)
-        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
-            push!(state.urefs, x)
-        end
-    end
+    # if state.quoted
+    #     if isidentifier(x) && !hasref(x)
+    #         setref!(x, NoReference)
+    #     end
+    # elseif typof(x) === CSTParser.Quotenode && length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.COLON && typof(x.args[2]) === CSTParser.IDENTIFIER
+    #     setref!(x.args[2], NoReference)
+    # elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
+    #     resolved = resolve_ref(x, state.scope, state)
+    #     if !resolved && (state.delayed || isglobal(valof(x), state.scope))
+    #         push!(state.urefs, x)
+    #     end
+    # end
     # traverse across children (evaluation order)
     if typof(x) === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || typof(x.args[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x.args[1]) === CSTParser.Curly)
         state(x.args[3])
@@ -125,7 +113,7 @@ function (state::State)(x)
             state(x.args[i])
         end
     end
-    checks(x, state.server)
+    # checks(x, state.server)
 
     # return to previous states
     state.scope != s0 && (state.scope = s0)
@@ -165,7 +153,7 @@ isglobal(name, scope) = haskey(scope.names, "#globals") && name in scope.names["
 function mark_globals(x, state)
     if typof(x) === CSTParser.Global
         if !haskey(state.scope.names, "#globals")
-            state.scope.names["#globals"] = CSTParser.Binding("#globals", nothing, nothing, String[], nothing)
+            state.scope.names["#globals"] = Binding("#globals", nothing, nothing, String[], nothing)
         end
         if x.args isa Vector{EXPR}
             for i = 2:length(x.args)

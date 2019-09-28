@@ -1,5 +1,5 @@
-function infer_type(binding::CSTParser.Binding, scope, state)
-    if binding isa CSTParser.Binding
+function infer_type(binding::Binding, scope, state)
+    if binding isa Binding
         binding.t !== nothing && return
         if binding.val isa EXPR && (typof(binding.val) === CSTParser.ModuleH || typof(binding.val) === CSTParser.BareModule)
             binding.t = getsymbolserver(state.server)["Core"].vals["Module"]
@@ -28,7 +28,7 @@ function infer_type(binding::CSTParser.Binding, scope, state)
                     binding.t = getsymbolserver(state.server)["Core"].vals["Float64"]
                 elseif kindof(binding.val.args[3]) === CSTParser.Tokens.STRING || typof(binding.val.args[3]) === CSTParser.Tokens.TRIPLE_STRING
                     binding.t = getsymbolserver(state.server)["Core"].vals["String"]
-                elseif typof(binding.val.args[3]) === IDENTIFIER && refof(binding.val.args[3]) isa CSTParser.Binding
+                elseif typof(binding.val.args[3]) === IDENTIFIER && refof(binding.val.args[3]) isa Binding
                     binding.t = refof(binding.val.args[3]).t
                 end
             elseif kindof(binding.val.args[2]) === CSTParser.Tokens.DECLARATION
@@ -44,7 +44,7 @@ function infer_type(binding::CSTParser.Binding, scope, state)
                     t = t.args[3].args[1]
                 end             
 
-                if refof(t) isa CSTParser.Binding
+                if refof(t) isa Binding
                     rb = get_root_method(refof(t), state.server)
                     if rb isa Binding && rb.t == getsymbolserver(state.server)["Core"].vals["DataType"]
                         binding.t = rb

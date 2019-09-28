@@ -59,17 +59,17 @@ function clear_binding(x::EXPR)
     end
 end
 function clear_scope(x::EXPR)
-    if x.scope isa Scope
-        setparent!(x.scope, nothing)
-        empty!(x.scope.names)
-        if typof(x) === FileH && x.scope.modules isa Dict && haskey(x.scope.modules, "Base") && haskey(x.scope.modules, "Core")
-            m1 = x.scope.modules["Base"]
-            m2 = x.scope.modules["Core"]
-            empty!(x.scope.modules)
-            x.scope.modules["Base"] = m1
-            x.scope.modules["Core"] = m2
+    if hasmeta(x) && scopeof(x) isa Scope
+        setparent!(scopeof(x), nothing)
+        empty!(scopeof(x).names)
+        if typof(x) === FileH && scopeof(x).modules isa Dict && haskey(scopeof(x).modules, "Base") && haskey(scopeof(x).modules, "Core")
+            m1 = scopeof(x).modules["Base"]
+            m2 = scopeof(x).modules["Core"]
+            empty!(scopeof(x).modules)
+            scopeof(x).modules["Base"] = m1
+            scopeof(x).modules["Core"] = m2
         else
-            x.scope.modules = nothing
+            scopeof(x).modules = nothing
         end
     end
 end

@@ -172,9 +172,9 @@ end
 
 resolvable_macroname(x) = typof(x) === MacroName && length(x.args) == 2 && isidentifier(x.args[2]) && refof(x.args[2]) === nothing
 
-function hasref(x::EXPR)
-    refof(x) !== nothing && refof(x) !== NoReference
-end
+# function hasref(x::EXPR)
+#     refof(x) !== nothing && refof(x) !== NoReference
+# end
 
 function _in_macro_def(x)
     if typof(x) === CSTParser.Macro
