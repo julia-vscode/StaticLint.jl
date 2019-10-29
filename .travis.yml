@@ -19,6 +19,9 @@ branches:
 matrix:
   allow_failures:
   - julia: nightly
+  - julia: 1.3
+    os: windows
+    arch: x86
 codecov: true
 
 jobs:
