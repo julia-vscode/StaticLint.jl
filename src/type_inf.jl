@@ -1,35 +1,35 @@
 function infer_type(binding::Binding, scope, state)
     if binding isa Binding
-        binding.t !== nothing && return
+        binding.type !== nothing && return
         if binding.val isa EXPR && (typof(binding.val) === CSTParser.ModuleH || typof(binding.val) === CSTParser.BareModule)
-            binding.t = getsymbolserver(state.server)["Core"].vals["Module"]
+            binding.type = getsymbolserver(state.server)["Core"].vals["Module"]
         elseif binding.val isa EXPR && typof(binding.val) === CSTParser.FunctionDef
-            binding.t = getsymbolserver(state.server)["Core"].vals["Function"]
+            binding.type = getsymbolserver(state.server)["Core"].vals["Function"]
         elseif binding.val isa EXPR && (typof(binding.val) === CSTParser.Struct || typof(binding.val) === CSTParser.Mutable || typof(binding.val) === CSTParser.Abstract  || typof(binding.val) === CSTParser.Primitive)
-            binding.t = getsymbolserver(state.server)["Core"].vals["DataType"]
+            binding.type = getsymbolserver(state.server)["Core"].vals["DataType"]
         elseif binding.val isa EXPR && typof(binding.val) === BinaryOpCall
             if kindof(binding.val.args[2]) === CSTParser.Tokens.EQ
                 if CSTParser.is_func_call(binding.val.args[1])
-                    binding.t = getsymbolserver(state.server)["Core"].vals["Function"]
+                    binding.type = getsymbolserver(state.server)["Core"].vals["Function"]
                 elseif CSTParser.is_func_call(binding.val.args[3])
                     callname = CSTParser.get_name(binding.val.args[3])
                     if CSTParser.isidentifier(callname)
                         resolve_ref(callname, scope, state)
                         if hasref(callname)
                             rb = get_root_method(refof(callname), state.server)
-                            if (rb isa Binding && (rb.t == getsymbolserver(state.server)["Core"].vals["DataType"] || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
-                                binding.t = rb
+                            if (rb isa Binding && (rb.type == getsymbolserver(state.server)["Core"].vals["DataType"] || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
+                                binding.type = rb
                             end
                         end
                     end
                 elseif kindof(binding.val.args[3]) === CSTParser.Tokens.INTEGER
-                    binding.t = getsymbolserver(state.server)["Core"].vals["Int"]
+                    binding.type = getsymbolserver(state.server)["Core"].vals["Int"]
                 elseif kindof(binding.val.args[3]) === CSTParser.Tokens.FLOAT
-                    binding.t = getsymbolserver(state.server)["Core"].vals["Float64"]
+                    binding.type = getsymbolserver(state.server)["Core"].vals["Float64"]
                 elseif kindof(binding.val.args[3]) === CSTParser.Tokens.STRING || typof(binding.val.args[3]) === CSTParser.Tokens.TRIPLE_STRING
-                    binding.t = getsymbolserver(state.server)["Core"].vals["String"]
+                    binding.type = getsymbolserver(state.server)["Core"].vals["String"]
                 elseif typof(binding.val.args[3]) === IDENTIFIER && refof(binding.val.args[3]) isa Binding
-                    binding.t = refof(binding.val.args[3]).t
+                    binding.type = refof(binding.val.args[3]).type
                 end
             elseif kindof(binding.val.args[2]) === CSTParser.Tokens.DECLARATION
                 t = binding.val.args[3]
@@ -46,13 +46,13 @@ function infer_type(binding::Binding, scope, state)
 
                 if refof(t) isa Binding
                     rb = get_root_method(refof(t), state.server)
-                    if rb isa Binding && rb.t == getsymbolserver(state.server)["Core"].vals["DataType"]
-                        binding.t = rb
+                    if rb isa Binding && rb.type == getsymbolserver(state.server)["Core"].vals["DataType"]
+                        binding.type = rb
                     else
-                        binding.t = refof(t)
+                        binding.type = refof(t)
                     end
                 elseif refof(t) isa SymbolServer.DataTypeStore
-                    binding.t = refof(t)
+                    binding.type = refof(t)
                 end
             end
         end

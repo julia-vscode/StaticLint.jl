@@ -55,7 +55,7 @@ function clear_binding(x::EXPR)
                 clear_binding(r)
             end
         end
-        x.binding = nothing
+        x.meta.binding = nothing
     end
 end
 function clear_scope(x::EXPR)
@@ -76,10 +76,12 @@ end
 
 function clear_ref(x::EXPR)
     if refof(x) isa Binding
-        for i in 1:length(refof(x).refs)
-            if refof(x).refs[i] == x
-                deleteat!(refof(x).refs, i)
-                break
+        if refof(x).refs isa Vector
+            for i in 1:length(refof(x).refs)
+                if refof(x).refs[i] == x
+                    deleteat!(refof(x).refs, i)
+                    break
+                end
             end
         end
         setref!(x, nothing)
@@ -87,10 +89,16 @@ function clear_ref(x::EXPR)
         setref!(x, nothing)
     end
 end
+function clear_error(x::EXPR)
+    if hasmeta(x) && x.meta.error !== nothing 
+        x.meta.error = nothing
+    end
+end
 function clear_meta(x::EXPR)
     clear_binding(x)
     clear_ref(x)
     clear_scope(x)
+    clear_error(x)
     if x.args !== nothing
         for a in x.args
             clear_meta(a)
@@ -105,12 +113,12 @@ function get_root_method(b, server)
 end
 
 function get_root_method(b::Binding, server, b1 = nothing, bs = Binding[])
-    if b.overwrites === nothing || b == b.overwrites || !(b.overwrites isa Binding)
+    if b.prev === nothing || b == b.prev || !(b.prev isa Binding)
         return b
-    elseif b.overwrites.t == getsymbolserver(server)["Core"].vals["Function"]
-        return get_root_method(b.overwrites, server, b, bs)
-    elseif b.overwrites.t == getsymbolserver(server)["Core"].vals["DataType"]
-        return b.overwrites
+    elseif b.prev.type == getsymbolserver(server)["Core"].vals["Function"]
+        return get_root_method(b.prev, server, b, bs)
+    elseif b.prev.type == getsymbolserver(server)["Core"].vals["DataType"]
+        return b.prev
     else
         return b
     end
@@ -132,10 +140,40 @@ function retrieve_delayed_scope(x)
 end
 
 function retrieve_scope(x)
-    if scopeof(x) != nothing
+    if scopeof(x) !== nothing
         return scopeof(x)
     elseif parentof(x) isa EXPR
         return retrieve_scope(parentof(x))
     end
     return 
+end
+
+
+function find_return_statements(x::EXPR)
+    rets = EXPR[]
+    if CSTParser.defines_function(x)
+        find_return_statements(x.args[3], true, rets)
+    end
+    return rets
+end
+
+function find_return_statements(x::EXPR, last_stmt , rets)
+    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
+        push!(rets, x)
+        return rets, false
+    end 
+
+    if typof(x) === CSTParser.Return
+        push!(rets, x)
+        return rets, true
+    end
+
+
+    if x.args isa Vector{EXPR}
+        for i = 1:length(x.args)
+            _, stop_iter = find_return_statements(x.args[i], last_stmt && (i == length(x.args) || (typof(x) === CSTParser.If && typof(x.args[i]) === CSTParser.Block)), rets)
+            stop_iter && break
+        end
+    end
+    return rets, false
 end

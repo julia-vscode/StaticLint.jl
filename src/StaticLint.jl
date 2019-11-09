@@ -6,11 +6,36 @@ using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
 using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef
 using CSTParser: setparent!, kindof, valof, typof, parentof
 
-include("bindings.jl")
-# const NoReference = Binding(EXPR, nothing, nothing, [], nothing, nothing)
 
-mutable struct State
-    file
+const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
+include("bindings.jl")
+include("scope.jl")
+
+mutable struct Meta
+    binding::Union{Nothing,Binding}
+    scope::Union{Nothing,Scope}
+    ref::Union{Nothing,Binding,SymbolServer.SymStore}
+    error
+end
+
+Meta() = Meta(nothing, nothing, nothing, nothing)
+
+function Base.show(io::IO, m::Meta)
+    m.binding !== nothing && show(io, m.binding)
+    m.ref !== nothing && printstyled(io, " * ", color = :red)
+    m.scope !== nothing && printstyled(io, " new scope", color = :green)
+    m.error !== nothing && printstyled(io, " lint ", color = :red)
+end
+hasmeta(x::EXPR) = x.meta isa Meta
+hasbinding(m::Meta) = m.binding isa Binding
+hasref(m::Meta) = m.ref !== nothing
+hasscope(m::Meta) = m.scope isa Scope
+scopeof(m::Meta) = m.scope
+bindingof(m::Meta) = m.binding
+
+mutable struct State{T}
+    file::T
+    targetfile::Union{Nothing,T}
     scope::Scope
     delayed::Bool
     ignorewherescope::Bool
@@ -19,7 +44,7 @@ mutable struct State
     server
 end
 
-function (state::State)(x)
+function (state::State)(x::EXPR)
     delayed = state.delayed # store states
     isquoted = state.quoted
 
@@ -29,62 +54,52 @@ function (state::State)(x)
         state.quoted = false
     end
     # imports
-    # if typof(x) === Using || typof(x) === Import
-    #     resolve_import(x, state)
-    # elseif typof(x) === Export # Allow delayed resolution
-    #     state.delayed = true
-    # end
+    if typof(x) === Using || typof(x) === Import
+        resolve_import(x, state)
+    elseif typof(x) === Export # Allow delayed resolution
+        state.delayed = true
+    end
     
     #bindings
-    mark_binding!(x, state)
-    # add_binding(x, state)
-    # mark_globals(x, state)
+    mark_bindings!(x, state)
+    add_binding(x, state)
+    mark_globals(x, state)
 
     #macros
-    # handle_macro(x, state)
+    handle_macro(x, state)
     
     # scope
-    clear_scope(x)
-    if scopeof(x) === nothing && introduces_scope(x, state)
-        setscope!(x, Scope(x))
-    end
-    s0 = state.scope
-    if typof(x) === FileH
-        setscope!(x, state.scope)
-    elseif scopeof(x) isa Scope
-        if CSTParser.defines_function(x) || CSTParser.defines_macro(x)
-            state.delayed = true # Allow delayed resolution
-        end
-        scopeof(x) != s0 && setparent!(scopeof(x), s0)
-        state.scope = scopeof(x)
-        if typof(x) === ModuleH # Add default modules to a new module
-            state.scope.modules = Dict{String,Any}()
-            state.scope.modules["Base"] = getsymbolserver(state.server)["Base"]
-            state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
-        elseif typof(x) === BareModule
-            state.scope.modules = Dict{String,Any}()
-            state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
-        end
-        if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
-            state.scope.names[bindingof(x).name] = bindingof(x)
-        elseif typof(x) === CSTParser.Flatten && typof(x.args[1]) === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && typof(x.args[1].args[1]) === CSTParser.Generator
-            setscope!(x.args[1].args[1], nothing)
+    s0 = scopes(x, state)
+
+    followinclude(x, state)
+    if (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT) || typof(x) === CSTParser.Kw
+        resolved = resolve_ref(x, state.scope, state)
+        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
+            push!(state.urefs, x)
         end
     end
-    followinclude(x, state) # follow include
-    # if state.quoted
-    #     if isidentifier(x) && !hasref(x)
-    #         setref!(x, NoReference)
-    #     end
-    # elseif typof(x) === CSTParser.Quotenode && length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.COLON && typof(x.args[2]) === CSTParser.IDENTIFIER
-    #     setref!(x.args[2], NoReference)
-    # elseif (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT)
-    #     resolved = resolve_ref(x, state.scope, state)
-    #     if !resolved && (state.delayed || isglobal(valof(x), state.scope))
-    #         push!(state.urefs, x)
-    #     end
-    # end
-    # traverse across children (evaluation order)
+    if (state.targetfile !== nothing && state.file != state.targetfile) && 
+        s0 != state.scope && !(typof(state.scope.expr) === CSTParser.ModuleH || typof(state.scope.expr) === CSTParser.BareModule)
+        # when not in the target file only traverse across the top-level 
+        # (including modules)
+    else
+        traverse(x, state)
+    end
+
+    # return to previous states
+    state.scope != s0 && (state.scope = s0)
+    state.delayed = delayed
+    state.quoted = isquoted
+    return state.scope
+end
+
+"""
+    traverse(x, state)
+
+Iterates across the child nodes of an EXPR in execution order (rather than
+storage order) calling `state` on each node.
+"""
+function traverse(x::EXPR, state)
     if typof(x) === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || typof(x.args[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x.args[1]) === CSTParser.Curly)
         state(x.args[3])
         state(x.args[2])
@@ -113,58 +128,18 @@ function (state::State)(x)
             state(x.args[i])
         end
     end
-    # checks(x, state.server)
-
-    # return to previous states
-    state.scope != s0 && (state.scope = s0)
-    state.delayed = delayed
-    state.quoted = isquoted
-    return state.scope
 end
 
-function add_binding(x, state)
-    scope = state.scope
-    if bindingof(x) isa Binding
-        # check for global marker
-        if isglobal(bindingof(x).name, scope)
-            scope = _get_global_scope(state.scope)
-        end
 
-        if typof(x) === Macro
-            scope.names[string("@", bindingof(x).name)] = bindingof(x)
-            mn = CSTParser.get_name(x)
-            if typof(mn) === IDENTIFIER
-                setref!(mn, bindingof(x))
-            end
-        else
-            if haskey(scope.names, bindingof(x).name)
-                bindingof(x).overwrites = scope.names[bindingof(x).name]
-            end
-            scope.names[bindingof(x).name] = bindingof(x)
-        end
-        infer_type(bindingof(x), scope, state)
-    elseif bindingof(x) isa SymbolServer.SymStore
-        scope.names[valof(x)] = bindingof(x)
-    end
-end
+"""
+    followinclude(x, state)
 
-isglobal(name, scope) = haskey(scope.names, "#globals") && name in scope.names["#globals"].refs
+Checks whether the arguments of a call to `include` can be resolved to a path.
+If successful it checks whether a file with that path is loaded on the server  
+or a file exists on the disc that can be loaded.
+If this is successful it traverses the code associated with the loaded file.
 
-function mark_globals(x, state)
-    if typof(x) === CSTParser.Global
-        if !haskey(state.scope.names, "#globals")
-            state.scope.names["#globals"] = Binding("#globals", nothing, nothing, String[], nothing)
-        end
-        if x.args isa Vector{EXPR}
-            for i = 2:length(x.args)
-                if typof(x.args[i]) === CSTParser.IDENTIFIER && !haskey(state.scope.names, valof(x.args[i]))
-                    push!(state.scope.names["#globals"].refs, valof(x.args[i]))
-                end
-            end
-        end
-    end
-end
-
+"""
 function followinclude(x, state::State)
     if typof(x) === Call && typof(x.args[1]) === IDENTIFIER && valof(x.args[1]) == "include"
         path = get_path(x)
@@ -198,7 +173,7 @@ include("server.jl")
 include("imports.jl")
 include("references.jl")
 include("macros.jl")
-include("checks.jl")
+include("linting/checks.jl")
 include("type_inf.jl")
 include("utils.jl")
 end
