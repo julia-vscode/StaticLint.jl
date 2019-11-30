@@ -39,20 +39,12 @@ mutable struct State{T}
     scope::Scope
     delayed::Bool
     ignorewherescope::Bool
-    quoted::Bool
     urefs::Vector{EXPR}
     server
 end
 
 function (state::State)(x::EXPR)
     delayed = state.delayed # store states
-    isquoted = state.quoted
-
-    if quoted(x)
-        state.quoted = true
-    elseif state.quoted && unquoted(x)
-        state.quoted = false
-    end
     # imports
     if typof(x) === Using || typof(x) === Import
         resolve_import(x, state)
@@ -89,7 +81,6 @@ function (state::State)(x::EXPR)
     # return to previous states
     state.scope != s0 && (state.scope = s0)
     state.delayed = delayed
-    state.quoted = isquoted
     return state.scope
 end
 

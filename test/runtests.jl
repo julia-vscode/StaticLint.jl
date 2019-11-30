@@ -22,7 +22,7 @@ function parse_and_pass(s)
     cst = CSTParser.parse(s, true)
     scope = StaticLint.Scope(nothing, cst, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]), false)
     StaticLint.setscope!(cst, scope)
-    state = StaticLint.State("", "", scope, false, false, false, [], server)
+    state = StaticLint.State("", "", scope, false, false, [], server)
     
     state(cst)
     return cst
