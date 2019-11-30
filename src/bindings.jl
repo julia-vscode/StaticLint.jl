@@ -267,6 +267,27 @@ function add_binding(x, state, scope = state.scope)
                 scope.names[name] = bindingof(x)
                 bindingof(x).prev.next = bindingof(x)
             else
+                # Checks for bindings which overwrite other module's bindings
+                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && typof(parentof(parentof(bindingof(x).name))) === BinaryOpCall && typof(parentof(parentof(bindingof(x).name))[1]) === IDENTIFIER # Only checks 1 level (e.g. M.name)
+                    s1 = scope
+                    while true
+                        if s1.modules !== nothing
+                            if haskey(s1.modules, valof(parentof(parentof(bindingof(x).name))[1])) # this scope (s1) has a module with matching name
+                                # haskey(s1.modules[valof(parentof(parentof(bindingof(x).name))[1])].vals, name)
+                                mod = s1.modules[valof(parentof(parentof(bindingof(x).name))[1])]
+                                if mod isa SymbolServer.ModuleStore && haskey(mod.vals, name)
+                                    bindingof(x).prev = mod.vals[name]
+                                end
+                            end
+                            break # We've reached a scope that loads modules, no need to keep searching upwards
+                        end
+                        if parentof(s1) === nothing
+                            break
+                        else
+                            s1 = parentof(s1)
+                        end
+                    end
+                end
                 scope.names[name] = bindingof(x)
             end
         end

@@ -163,7 +163,20 @@ function check_call(x, server)
                 b = b.next
             end
             while true
-                if b.type == getsymbolserver(server)["Core"].vals["Function"]
+                if !(b isa Binding) # Needs to be cleaned up
+                    if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
+                        for m in b.methods
+                            m_counts = func_nargs(m)
+                            if compare_f_call(m_counts, call_counts)
+                                return
+                            end
+                        end
+                        break
+                    else
+                        return
+                    end
+                elseif b.type == getsymbolserver(server)["Core"].vals["Function"]
+                # if b.type == getsymbolserver(server)["Core"].vals["Function"]
                     m_counts = func_nargs(b.val)
                 elseif b.type == getsymbolserver(server)["Core"].vals["DataType"]
                     m_counts = struct_nargs(b.val)
