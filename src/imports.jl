@@ -21,12 +21,12 @@ function resolve_import(x, state::State)
             par = root
         elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
             root = par
-            if par != nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
+            if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
                 setref!(x.args[i-1], par)
             end
         elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.DOT
             #dot between identifiers
-            if par != nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
+            if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
                 setref!(x.args[i-1], par)
             end
         elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.DOT
@@ -50,12 +50,15 @@ function resolve_import(x, state::State)
 end
 
 function _mark_import_arg(arg, par, state, u)
-    if par != nothing && (typof(arg) === IDENTIFIER || typof(arg) === MacroName)
+    if par !== nothing && (typof(arg) === IDENTIFIER || typof(arg) === MacroName)
         if par isa Binding #mark reference to binding
             push!(par.refs, arg)
         end
         if bindingof(arg) === nothing
-            arg.binding = Binding(CSTParser.str_value(arg), par, _typeof(par), [], nothing)
+            if !hasmeta(arg)
+                arg.meta = Meta()
+            end
+            arg.meta.binding = Binding(arg, par, _typeof(par), [], nothing, nothing)
         end
         if u && par isa SymbolServer.ModuleStore
             if state.scope.modules isa Dict

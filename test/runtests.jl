@@ -1,9 +1,9 @@
 using StaticLint, SymbolServer
 using CSTParser, Test
-using StaticLint: scopeof, bindingof, refof
+using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
 sserver = SymbolServerProcess()
-SymbolServer.getstore(sserver)
+SymbolServer.disc_load_project(sserver)
 @info join(collect(keys(sserver.depot)), ", ")
 server = StaticLint.FileServer(Dict(), Set(), sserver.depot);
 
@@ -20,9 +20,10 @@ end
 
 function parse_and_pass(s)
     cst = CSTParser.parse(s, true)
-    scope = StaticLint.Scope(nothing, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]), false)
+    scope = StaticLint.Scope(nothing, cst, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]), false)
     StaticLint.setscope!(cst, scope)
-    state = StaticLint.State("", scope, false, false, false, [], server)
+    state = StaticLint.State("", "", scope, false, false, [], server)
+    
     state(cst)
     return cst
 end
@@ -30,7 +31,7 @@ end
 function check_resolved(s)
     cst = parse_and_pass(s)
     IDs = get_ids(cst)
-    [(i.ref !== nothing) for i in IDs]
+    [(refof(i) !== nothing) for i in IDs]
 end
 
 
@@ -169,42 +170,42 @@ f(arg) = arg
 """) == [1, 1, 1]
 
 @testset "inference" begin
-    @test bindingof(parse_and_pass("f(arg) = arg")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-    @test bindingof(parse_and_pass("function f end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-    @test bindingof(parse_and_pass("struct T end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("mutable struct T end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("abstract type T end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("primitive type T 8 end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("x = 1")[1][1]).t == StaticLint.getsymbolserver(server)["Core"].vals["Int"]
-    @test bindingof(parse_and_pass("x = 1.0")[1][1]).t == StaticLint.getsymbolserver(server)["Core"].vals["Float64"]
-    @test bindingof(parse_and_pass("x = \"text\"")[1][1]).t == StaticLint.getsymbolserver(server)["Core"].vals["String"]
-    @test bindingof(parse_and_pass("module A end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
-    @test bindingof(parse_and_pass("baremodule A end")[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
+    @test bindingof(parse_and_pass("f(arg) = arg")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+    @test bindingof(parse_and_pass("function f end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+    @test bindingof(parse_and_pass("struct T end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test bindingof(parse_and_pass("mutable struct T end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test bindingof(parse_and_pass("abstract type T end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test bindingof(parse_and_pass("primitive type T 8 end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+    @test bindingof(parse_and_pass("x = 1")[1][1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Int"]
+    @test bindingof(parse_and_pass("x = 1.0")[1][1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Float64"]
+    @test bindingof(parse_and_pass("x = \"text\"")[1][1]).type == StaticLint.getsymbolserver(server)["Core"].vals["String"]
+    @test bindingof(parse_and_pass("module A end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
+    @test bindingof(parse_and_pass("baremodule A end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
 
     # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
     let cst = parse_and_pass("""
         struct T end
         function f(x::T) x end""")
-        @test bindingof(cst[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-        @test bindingof(cst[2]).t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-        @test bindingof(cst[2][2][3]).t == bindingof(cst[1])
+        @test bindingof(cst[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test bindingof(cst[2]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test bindingof(cst[2][2][3]).type == bindingof(cst[1])
         @test refof(cst[2][3][1]) == bindingof(cst[2][2][3])
     end
     let cst = parse_and_pass("""
         struct T end
         T() = 1
         function f(x::T) x end""")
-        @test bindingof(cst[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-        @test bindingof(cst[3]).t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-        @test bindingof(cst[3][2][3]).t == bindingof(cst[1])
+        @test bindingof(cst[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test bindingof(cst[3]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test bindingof(cst[3][2][3]).type == bindingof(cst[1])
         @test refof(cst[3][3][1]) == bindingof(cst[3][2][3])
     end
     
     let cst = parse_and_pass("""
         struct T end
         t = T()""")
-        @test bindingof(cst[1]).t == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-        @test bindingof(cst[2][1]).t == bindingof(cst[1])
+        @test bindingof(cst[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test bindingof(cst[2][1]).type == bindingof(cst[1])
     end
 
     let cst = parse_and_pass("""
@@ -284,7 +285,8 @@ f(arg) = arg
     let cst = parse_and_pass("""
         sin(1,2,3)
         """)
-        @test_broken refof(cst[1]) === StaticLint.IncorrectCallNargs
+        check_all(cst, server)
+        @test errorof(cst[1]) === StaticLint.IncorrectCallNargs
     end
     let cst = parse_and_pass("""
         for i in length(1) end
@@ -292,10 +294,11 @@ f(arg) = arg
         for i in 1 end
         for i in 1:1 end
         """)
-        @test refof(cst[1][2]) === StaticLint.IncorrectIterSpec
-        @test refof(cst[2][2]) === StaticLint.IncorrectIterSpec
-        @test refof(cst[3][2]) === StaticLint.IncorrectIterSpec
-        @test refof(cst[4][2]) === nothing
+        check_all(cst, server)
+        @test errorof(cst[1][2]) === StaticLint.IncorrectIterSpec
+        @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
+        @test errorof(cst[3][2]) === StaticLint.IncorrectIterSpec
+        @test errorof(cst[4][2]) === nothing
     end
 
     let cst = parse_and_pass("""
@@ -304,14 +307,16 @@ f(arg) = arg
         [i for i in 1 end]
         [i for i in 1:1 end]
         """)
-        @test refof(cst[1][2][3]) === StaticLint.IncorrectIterSpec
-        @test refof(cst[2][2][3]) === StaticLint.IncorrectIterSpec
-        @test refof(cst[3][2][3]) === StaticLint.IncorrectIterSpec
-        @test refof(cst[4][2][3]) === nothing
+        check_all(cst, server)
+        @test errorof(cst[1][2][3]) === StaticLint.IncorrectIterSpec
+        @test errorof(cst[2][2][3]) === StaticLint.IncorrectIterSpec
+        @test errorof(cst[3][2][3]) === StaticLint.IncorrectIterSpec
+        @test errorof(cst[4][2][3]) === nothing
     end
 
     let cst = parse_and_pass("a == nothing")
-        @test refof(cst[1][2]) === StaticLint.NothingEquality 
+        check_all(cst, server)
+        @test errorof(cst[1][2]) === StaticLint.NothingEquality 
     end
 
     let cst = parse_and_pass("""
@@ -333,10 +338,10 @@ f(arg) = arg
             __source__
             __module__
         end""")
-        @test cst[1].ref === nothing
-        @test cst[2].ref === nothing
-        @test cst[3][3][1].ref == StaticLint.NoReference
-        @test cst[3][3][2].ref == StaticLint.NoReference
+        @test refof(cst[1]) === nothing
+        @test refof(cst[2]) === nothing
+        @test refof(cst[3][3][1]) !== nothing
+        @test refof(cst[3][3][2]) !== nothing
     end
 end
 
