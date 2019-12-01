@@ -3,8 +3,6 @@ using CSTParser, Test
 using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
 sserver = SymbolServerProcess()
-SymbolServer.disc_load_project(sserver)
-@info join(collect(keys(sserver.depot)), ", ")
 server = StaticLint.FileServer(Dict(), Set(), sserver.depot);
 
 function get_ids(x, ids = [])
@@ -19,14 +17,14 @@ function get_ids(x, ids = [])
 end
 
 function parse_and_pass(s)
-    cst = CSTParser.parse(s, true)
-    scope = StaticLint.Scope(nothing, cst, Dict(), Dict{String,Any}("Base" => StaticLint.getsymbolserver(server)["Base"], "Core" => StaticLint.getsymbolserver(server)["Core"]), false)
-    StaticLint.setscope!(cst, scope)
-    state = StaticLint.State("", "", scope, false, false, [], server)
-    
-    state(cst)
-    return cst
+    empty!(server.files)
+    f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
+    StaticLint.setroot(f, f)
+    StaticLint.setfile(server, "", f)
+    StaticLint.scopepass(f)
+    return f.cst
 end
+
 
 function check_resolved(s)
     cst = parse_and_pass(s)
@@ -285,7 +283,7 @@ f(arg) = arg
     let cst = parse_and_pass("""
         sin(1,2,3)
         """)
-        check_all(cst, server)
+        check_all(cst, StaticLint.LintOptions(),server)
         @test errorof(cst[1]) === StaticLint.IncorrectCallNargs
     end
     let cst = parse_and_pass("""
@@ -294,7 +292,7 @@ f(arg) = arg
         for i in 1 end
         for i in 1:1 end
         """)
-        check_all(cst, server)
+        check_all(cst, StaticLint.LintOptions(),server)
         @test errorof(cst[1][2]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[3][2]) === StaticLint.IncorrectIterSpec
@@ -307,7 +305,7 @@ f(arg) = arg
         [i for i in 1 end]
         [i for i in 1:1 end]
         """)
-        check_all(cst, server)
+        check_all(cst, StaticLint.LintOptions(),server)
         @test errorof(cst[1][2][3]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[2][2][3]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[3][2][3]) === StaticLint.IncorrectIterSpec
@@ -315,7 +313,7 @@ f(arg) = arg
     end
 
     let cst = parse_and_pass("a == nothing")
-        check_all(cst, server)
+        check_all(cst, StaticLint.LintOptions(),server)
         @test errorof(cst[1][2]) === StaticLint.NothingEquality 
     end
 
