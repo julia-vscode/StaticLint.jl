@@ -243,6 +243,8 @@ end
 
 function add_binding(x, state, scope = state.scope)
     if bindingof(x) isa Binding
+        bindingof(x).prev = nothing
+        bindingof(x).next = nothing
         if typof(bindingof(x).name) === CSTParser.IDENTIFIER
             name = valof(bindingof(x).name)
         elseif CSTParser.typof(bindingof(x).name) === CSTParser.MacroName

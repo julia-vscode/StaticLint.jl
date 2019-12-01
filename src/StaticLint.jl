@@ -56,10 +56,10 @@ function (state::State)(x::EXPR)
     handle_macro(x, state)
     s0 = scopes(x, state)
     resolved = resolve_ref(x, state.scope, state)
-    followinclude(x, state)
     if !resolved && (state.delayed || isglobal(valof(x), state.scope))
         push!(state.urefs, x)
     end
+    followinclude(x, state)
     
     if (state.targetfile !== nothing && state.file != state.targetfile) && 
         s0 != state.scope && !(typof(state.scope.expr) === CSTParser.ModuleH || typof(state.scope.expr) === CSTParser.BareModule)
