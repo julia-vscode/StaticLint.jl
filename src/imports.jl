@@ -1,52 +1,53 @@
 function resolve_import(x, state::State)
-    u = typof(x) === Using
-    i = 2
-    n = length(x.args)
-    
-    root = par = getsymbolserver(state.server)
-    bindings = []
-    while i <= length(x.args)
-        arg = x.args[i]
-        if isidentifier(arg) || typof(arg) === CSTParser.MacroName
-            if refof(x.args[i]) !== nothing
-                par = refof(x.args[i])
-            else
-                par = _get_field(par, arg, state)
-            end
-        elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.COMMA
-            # end of chain, make available
-            if i > 2
-                _mark_import_arg(x.args[i - 1], par, state, u)
-            end
-            par = root
-        elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
-            root = par
-            if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
-                setref!(x.args[i-1], par)
-            end
-        elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.DOT
-            #dot between identifiers
-            if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
-                setref!(x.args[i-1], par)
-            end
-        elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.DOT
-            #dot prexceding identifiser
-            if par == root == getsymbolserver(state.server)
-                par = state.scope
-            elseif par isa Scope && parentof(par) !== nothing
-                par = parentof(par)
+    if typof(x) === Using || typof(x) === Import
+        u = typof(x) === Using
+        i = 2
+        n = length(x.args)
+        
+        root = par = getsymbolserver(state.server)
+        bindings = []
+        while i <= length(x.args)
+            arg = x.args[i]
+            if isidentifier(arg) || typof(arg) === CSTParser.MacroName
+                if refof(x.args[i]) !== nothing
+                    par = refof(x.args[i])
+                else
+                    par = _get_field(par, arg, state)
+                end
+            elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.COMMA
+                # end of chain, make available
+                if i > 2
+                    _mark_import_arg(x.args[i - 1], par, state, u)
+                end
+                par = root
+            elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
+                root = par
+                if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
+                    setref!(x.args[i-1], par)
+                end
+            elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.DOT
+                #dot between identifiers
+                if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
+                    setref!(x.args[i-1], par)
+                end
+            elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.DOT
+                #dot prexceding identifiser
+                if par == root == getsymbolserver(state.server)
+                    par = state.scope
+                elseif par isa Scope && parentof(par) !== nothing
+                    par = parentof(par)
+                else
+                    return
+                end
             else
                 return
             end
-        else
-            return
+            if i == n 
+                _mark_import_arg(x.args[i], par, state, u)
+            end
+            i += 1
         end
-        if i == n 
-            _mark_import_arg(x.args[i], par, state, u)
-        end
-        i += 1
     end
-    
 end
 
 function _mark_import_arg(arg, par, state, u)

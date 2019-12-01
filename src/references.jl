@@ -78,7 +78,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{S
             setref!(x, Binding(noname, nothing, nothing, nothing, nothing, nothing))
             return true
         end
-    elseif typof(x) === MacroName
+    elseif resolvable_macroname(x)
         x1 = x.args[2]
         mn = string("@", valof(x1))
     elseif typof(x) === x_Str

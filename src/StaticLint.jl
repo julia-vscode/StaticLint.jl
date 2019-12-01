@@ -38,7 +38,6 @@ mutable struct State{T}
     targetfile::Union{Nothing,T}
     scope::Scope
     delayed::Bool
-    ignorewherescope::Bool
     urefs::Vector{EXPR}
     server
 end
@@ -46,30 +45,22 @@ end
 function (state::State)(x::EXPR)
     delayed = state.delayed # store states
     # imports
-    if typof(x) === Using || typof(x) === Import
-        resolve_import(x, state)
-    elseif typof(x) === Export # Allow delayed resolution
+    
+    resolve_import(x, state)
+    if typof(x) === Export # Allow delayed resolution
         state.delayed = true
     end
-    
-    #bindings
     mark_bindings!(x, state)
     add_binding(x, state)
     mark_globals(x, state)
-
-    #macros
     handle_macro(x, state)
-    
-    # scope
     s0 = scopes(x, state)
-
+    resolved = resolve_ref(x, state.scope, state)
     followinclude(x, state)
-    if (isidentifier(x) && !hasref(x)) || resolvable_macroname(x) || typof(x) === x_Str || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT) || typof(x) === CSTParser.Kw
-        resolved = resolve_ref(x, state.scope, state)
-        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
-            push!(state.urefs, x)
-        end
+    if !resolved && (state.delayed || isglobal(valof(x), state.scope))
+        push!(state.urefs, x)
     end
+    
     if (state.targetfile !== nothing && state.file != state.targetfile) && 
         s0 != state.scope && !(typof(state.scope.expr) === CSTParser.ModuleH || typof(state.scope.expr) === CSTParser.BareModule)
         # when not in the target file only traverse across the top-level 

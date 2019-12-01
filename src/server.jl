@@ -39,7 +39,7 @@ getsymbolserver(server::FileServer) = server.symbolserver
 function scopepass(file, target = nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false))
-    state = State(file, target, scopeof(getcst(file)), false, false, EXPR[], server)
+    state = State(file, target, scopeof(getcst(file)), false, EXPR[], server)
     state(getcst(file))
     for uref in state.urefs
         s = retrieve_delayed_scope(uref)
@@ -88,6 +88,12 @@ function Base.display(s::FileServer)
     end
 end
 
+"""
+    get_path(x::EXPR)
+
+Usually called on the argument to `include` calls, and attempts to determine
+the path of the file to be included. Has limited support for `joinpath` calls.
+"""
 function get_path(x::EXPR)
     if typof(x) === Call && length(x.args) == 4
         parg = x.args[3]
