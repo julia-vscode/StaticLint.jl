@@ -371,7 +371,7 @@ mutable struct LintOptions
     lazy::Bool
     datadecl::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, true)
+LintOptions() = LintOptions(true, true, true, true, true, false)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
