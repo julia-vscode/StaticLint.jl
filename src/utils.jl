@@ -115,9 +115,9 @@ end
 function get_root_method(b::Binding, server, b1 = nothing, bs = Binding[])
     if b.prev === nothing || b == b.prev || !(b.prev isa Binding)
         return b
-    elseif b.prev.type == getsymbolserver(server)["Core"].vals["Function"]
+    elseif b.prev.type == CoreTypes.Function
         return get_root_method(b.prev, server, b, bs)
-    elseif b.prev.type == getsymbolserver(server)["Core"].vals["DataType"]
+    elseif b.prev.type == CoreTypes.DataType
         return b.prev
     else
         return b

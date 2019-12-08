@@ -74,17 +74,17 @@ function mark_bindings!(x::EXPR, state)
     elseif typof(x) === FunctionDef
         name = CSTParser.get_name(x)
         # mark external binding
-        x.meta.binding = Binding(name, x, getsymbolserver(state.server)["Core"].vals["Function"], [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
         mark_sig_args!(CSTParser.get_sig(x))
     elseif typof(x) === ModuleH || typof(x) === BareModule
-        x.meta.binding = Binding(x.args[2], x, getsymbolserver(state.server)["Core"].vals["Module"], [], nothing, nothing)
+        x.meta.binding = Binding(x.args[2], x, CoreTypes.Module, [], nothing, nothing)
         setref!(x.args[2], bindingof(x))
     elseif typof(x) === Macro
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, getsymbolserver(state.server)["Core"].vals["Function"], [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
@@ -93,14 +93,14 @@ function mark_bindings!(x::EXPR, state)
         mark_binding!(x.args[4])
     elseif typof(x) === CSTParser.Abstract || typof(x) === CSTParser.Primitive 
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, getsymbolserver(state.server)["Core"].vals["DataType"], [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
         mark_parameters(CSTParser.get_sig(x))
     elseif typof(x) === CSTParser.Mutable || typof(x) === CSTParser.Struct
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, getsymbolserver(state.server)["Core"].vals["DataType"], [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end

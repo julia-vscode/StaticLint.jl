@@ -6,8 +6,18 @@ using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR
 using CSTParser: Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef
 using CSTParser: setparent!, kindof, valof, typof, parentof
 
-
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
+baremodule CoreTypes # Convenience
+using ..SymbolServer
+const DataType = SymbolServer.stdlibs["Core"].vals["DataType"]
+const Function = SymbolServer.stdlibs["Core"].vals["Function"]
+const Module = SymbolServer.stdlibs["Core"].vals["Module"]
+const String = SymbolServer.stdlibs["Core"].vals["String"]
+const Int = SymbolServer.stdlibs["Core"].vals["Int"]
+const Float64 = SymbolServer.stdlibs["Core"].vals["Float64"]
+
+end
+
 include("bindings.jl")
 include("scope.jl")
 
