@@ -27,7 +27,6 @@ mutable struct Meta
     ref::Union{Nothing,Binding,SymbolServer.SymStore}
     error
 end
-
 Meta() = Meta(nothing, nothing, nothing, nothing)
 
 function Base.show(io::IO, m::Meta)
@@ -54,7 +53,6 @@ end
 
 function (state::State)(x::EXPR)
     delayed = state.delayed # store states
-    # imports
     
     resolve_import(x, state)
     if typof(x) === Export # Allow delayed resolution
@@ -70,14 +68,8 @@ function (state::State)(x::EXPR)
         push!(state.urefs, x)
     end
     followinclude(x, state)
-    
-    if (state.targetfile !== nothing && state.file != state.targetfile) && 
-        s0 != state.scope && !(typof(state.scope.expr) === CSTParser.ModuleH || typof(state.scope.expr) === CSTParser.BareModule)
-        # when not in the target file only traverse across the top-level 
-        # (including modules)
-    else
-        traverse(x, state)
-    end
+
+    traverse(x, state)
 
     # return to previous states
     state.scope != s0 && (state.scope = s0)
