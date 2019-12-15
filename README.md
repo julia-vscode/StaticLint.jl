@@ -1,7 +1,7 @@
 # StaticLint
 
 [![Project Status: Active - The project has reached a stable, usable state and is being actively developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
-[![Build Status](https://travis-ci.org/julia-vscode/StaticLint.jl.svg?branch=master)](https://travis-ci.org/julia-vscode/StaticLint.jl)
+![](https://github.com/julia-vscode/StaticLint.jl/workflows/Run%20CI%20on%20master/badge.svg)
 [![codecov.io](http://codecov.io/github/julia-vscode/StaticLint.jl/coverage.svg?branch=master)](http://codecov.io/github/julia-vscode/StaticLint.jl?branch=master)
 
 This package supports LanguageServer.jl functionality broadly by:
