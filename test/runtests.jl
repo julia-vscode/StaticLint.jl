@@ -168,24 +168,24 @@ f(arg) = arg
 """) == [1, 1, 1]
 
 @testset "inference" begin
-    @test bindingof(parse_and_pass("f(arg) = arg")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-    @test bindingof(parse_and_pass("function f end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
-    @test bindingof(parse_and_pass("struct T end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("mutable struct T end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("abstract type T end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("primitive type T 8 end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-    @test bindingof(parse_and_pass("x = 1")[1][1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Int"]
-    @test bindingof(parse_and_pass("x = 1.0")[1][1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Float64"]
-    @test bindingof(parse_and_pass("x = \"text\"")[1][1]).type == StaticLint.getsymbolserver(server)["Core"].vals["String"]
-    @test bindingof(parse_and_pass("module A end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
-    @test bindingof(parse_and_pass("baremodule A end")[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["Module"]
+    @test bindingof(parse_and_pass("f(arg) = arg")[1]).type == StaticLint.CoreTypes.Function
+    @test bindingof(parse_and_pass("function f end")[1]).type == StaticLint.CoreTypes.Function
+    @test bindingof(parse_and_pass("struct T end")[1]).type == StaticLint.CoreTypes.DataType
+    @test bindingof(parse_and_pass("mutable struct T end")[1]).type == StaticLint.CoreTypes.DataType
+    @test bindingof(parse_and_pass("abstract type T end")[1]).type == StaticLint.CoreTypes.DataType
+    @test bindingof(parse_and_pass("primitive type T 8 end")[1]).type == StaticLint.CoreTypes.DataType
+    @test bindingof(parse_and_pass("x = 1")[1][1]).type == StaticLint.CoreTypes.Int
+    @test bindingof(parse_and_pass("x = 1.0")[1][1]).type == StaticLint.CoreTypes.Float64
+    @test bindingof(parse_and_pass("x = \"text\"")[1][1]).type == StaticLint.CoreTypes.String
+    @test bindingof(parse_and_pass("module A end")[1]).type == StaticLint.CoreTypes.Module
+    @test bindingof(parse_and_pass("baremodule A end")[1]).type == StaticLint.CoreTypes.Module
 
     # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
     let cst = parse_and_pass("""
         struct T end
         function f(x::T) x end""")
-        @test bindingof(cst[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-        @test bindingof(cst[2]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test bindingof(cst[1]).type == StaticLint.CoreTypes.DataType
+        @test bindingof(cst[2]).type == StaticLint.CoreTypes.Function
         @test bindingof(cst[2][2][3]).type == bindingof(cst[1])
         @test refof(cst[2][3][1]) == bindingof(cst[2][2][3])
     end
@@ -193,8 +193,8 @@ f(arg) = arg
         struct T end
         T() = 1
         function f(x::T) x end""")
-        @test bindingof(cst[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
-        @test bindingof(cst[3]).type == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+        @test bindingof(cst[1]).type == StaticLint.CoreTypes.DataType
+        @test bindingof(cst[3]).type == StaticLint.CoreTypes.Function
         @test bindingof(cst[3][2][3]).type == bindingof(cst[1])
         @test refof(cst[3][3][1]) == bindingof(cst[3][2][3])
     end
@@ -202,7 +202,7 @@ f(arg) = arg
     let cst = parse_and_pass("""
         struct T end
         t = T()""")
-        @test bindingof(cst[1]).type == StaticLint.getsymbolserver(server)["Core"].vals["DataType"]
+        @test bindingof(cst[1]).type == StaticLint.CoreTypes.DataType
         @test bindingof(cst[2][1]).type == bindingof(cst[1])
     end
 
