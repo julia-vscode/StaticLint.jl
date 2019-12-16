@@ -116,7 +116,12 @@ function get_root_method(b::Binding, server, b1 = nothing, bs = Binding[])
     if b.prev === nothing || b == b.prev || !(b.prev isa Binding)
         return b
     elseif b.prev.type == CoreTypes.Function
-        return get_root_method(b.prev, server, b, bs)
+        if b in bs
+            return b
+        else
+            push!(bs, b)
+            return get_root_method(b.prev, server, b, bs)
+        end
     elseif b.prev.type == CoreTypes.DataType
         return b.prev
     else
