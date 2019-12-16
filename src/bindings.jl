@@ -110,6 +110,19 @@ function mark_bindings!(x::EXPR, state)
             CSTParser.defines_function(x.args[blocki].args[i]) && continue
             mark_binding!(x.args[blocki].args[i])
         end
+    elseif typof(x) === CSTParser.Local
+        if length(x.args) == 2
+            if typof(x.args[2]) === CSTParser.IDENTIFIER
+                mark_binding!(x.args[2])
+            elseif typof(x.args[2]) === CSTParser.TupleH
+                for i = 1:length(x.args[2].args)
+                    if typof(x.args[2].args[i]) === CSTParser.IDENTIFIER
+                        mark_binding!(x.args[2].args[i])
+                    end
+                end
+            end
+        end
+        
     end
 end
 
