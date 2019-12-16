@@ -122,6 +122,8 @@ function mark_binding!(x::EXPR, val = x)
             typof(arg) === PUNCTUATION && continue    
             mark_binding!(arg, val)
         end
+    elseif typof(x) === CSTParser.BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DECLARATION && typof(x.args[1]) === CSTParser.TupleH
+        mark_binding!(x.args[1], x)
     elseif typof(x) === CSTParser.InvisBrackets
         mark_binding!(CSTParser.rem_invis(x), val)
     elseif typof(x) == UnaryOpCall && kindof(x.args[1]) === CSTParser.Tokens.DECLARATION

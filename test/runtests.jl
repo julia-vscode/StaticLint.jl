@@ -369,3 +369,29 @@ end
     b
     """)  == [true, true, true, true, true, true, true]
 end
+
+@testset "tuple args" begin
+    let cst = parse_and_pass("""
+        function f((arg1, arg2))
+            arg1, arg2
+        end""")
+        @test StaticLint.hasref(cst[1][3][1][1])
+        @test StaticLint.hasref(cst[1][3][1][3])
+    end
+
+    let cst = parse_and_pass("""
+        function f((arg1, arg2) = (1,2))
+            arg1, arg2
+        end""")
+        @test StaticLint.hasref(cst[1][3][1][1])
+        @test StaticLint.hasref(cst[1][3][1][3])
+    end
+
+    let cst = parse_and_pass("""
+        function f((arg1, arg2)::Tuple{Int,Int})
+            arg1, arg2
+        end""")
+        @test StaticLint.hasref(cst[1][3][1][1])
+        @test StaticLint.hasref(cst[1][3][1][3])
+    end
+end
