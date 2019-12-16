@@ -8,7 +8,8 @@ ConstIfCondition,
 PointlessOR,
 PointlessAND,
 UnusedBinding,
-InvalidTypeDeclaration)
+InvalidTypeDeclaration,
+UnusedTypeParameter)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
     IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
@@ -19,7 +20,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
     UnusedBinding => "The variable name has been bound but not used.",
-    InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement."
+    InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
+    UnusedTypeParameter => "A DataType parameter has been specified but not used."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -370,8 +372,9 @@ mutable struct LintOptions
     constif::Bool
     lazy::Bool
     datadecl::Bool
+    typeparam::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false)
+LintOptions() = LintOptions(true, true, true, true, true, false, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -382,6 +385,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.lazy && check_lazy(x)
     # check_is_callable(x, server)
     opts.datadecl && check_datatype_decl(x, server)
+    opts.typeparam && check_typeparams(x)
     if x.args !== nothing
         for i in 1:length(x.args)
             check_all(x.args[i], opts, server)
@@ -417,4 +421,17 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
     errs
 end
 
-
+function check_typeparams(x::EXPR)
+    if typof(x) === CSTParser.WhereOpCall
+        for i = 3:length(x.args)
+            if hasbinding(x.args[i])
+                if !(bindingof(x.args[i]).refs isa Vector) 
+                    seterror!(x.args[i], UnusedTypeParameter)
+                elseif length(bindingof(x.args[i]).refs) == 1
+                    # there should (will?) always be at least one reference in the where declaration
+                    seterror!(x.args[i], UnusedTypeParameter)
+                end
+            end
+        end
+    end
+end
