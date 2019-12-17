@@ -101,6 +101,9 @@ function _get_field(par, arg, state)
             return par.names[valof(arg)]
         end
     elseif par isa Binding 
+        if par.val isa Binding
+            par = par.val
+        end
         if par.val isa EXPR && typof(par.val) === ModuleH
             if scopeof(par.val) isa Scope && haskey(scopeof(par.val).names, valof(arg))
                 return scopeof(par.val).names[valof(arg)]
