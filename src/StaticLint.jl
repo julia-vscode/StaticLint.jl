@@ -147,8 +147,7 @@ function followinclude(x, state::State)
             state(getcst(state.file))
             state.file = oldfile
         else
-            # (printstyled(">>>>Can't follow include", color = :red);printstyled(" $(Expr(x)) from $(dirname(state.path))\n"))
-            # error handling for broken `include` here
+            seterror!(x, MissingFile)
         end
     end
 end
