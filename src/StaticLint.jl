@@ -45,6 +45,7 @@ bindingof(m::Meta) = m.binding
 mutable struct State{T}
     file::T
     targetfile::Union{Nothing,T}
+    included_files::Vector{String}
     scope::Scope
     delayed::Bool
     urefs::Vector{EXPR}
@@ -140,12 +141,18 @@ function followinclude(x, state::State)
             path = ""
         end
         if !isempty(path)
+            if path in state.included_files
+                seterror!(x, IncludeLoop)
+                return
+            end
             oldfile = state.file
             state.file = getfile(state.server, path)
+            push!(state.included_files, getpath(state.file))
             setroot(state.file, getroot(oldfile))
             setscope!(getcst(state.file), nothing)
             state(getcst(state.file))
             state.file = oldfile
+            pop!(state.included_files)
         else
             # (printstyled(">>>>Can't follow include", color = :red);printstyled(" $(Expr(x)) from $(dirname(state.path))\n"))
             # error handling for broken `include` here
