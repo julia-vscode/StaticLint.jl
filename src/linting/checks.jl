@@ -9,7 +9,9 @@ PointlessOR,
 PointlessAND,
 UnusedBinding,
 InvalidTypeDeclaration,
-IncludeLoop)
+IncludeLoop,
+MissingFile)
+
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
     IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
@@ -21,7 +23,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     PointlessAND => "The first argument of a `&&` call is `false`.",
     UnusedBinding => "The variable name has been bound but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
-    IncludeLoop => "Loop detected, this file has already been included."
+    IncludeLoop => "Loop detected, this file has already been included.",
+    MissingFile => "The included file can not be found."
 )
 
 haserror(m::Meta) = m.error !== nothing

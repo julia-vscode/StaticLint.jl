@@ -127,7 +127,7 @@ If this is successful it traverses the code associated with the loaded file.
 """
 function followinclude(x, state::State)
     if typof(x) === Call && typof(x.args[1]) === IDENTIFIER && valof(x.args[1]) == "include"
-        path = get_path(x)
+        path = get_path(x, state)
         if isempty(path)
         elseif hasfile(state.server, path)
         elseif canloadfile(state.server, path)
@@ -154,8 +154,7 @@ function followinclude(x, state::State)
             state.file = oldfile
             pop!(state.included_files)
         else
-            # (printstyled(">>>>Can't follow include", color = :red);printstyled(" $(Expr(x)) from $(dirname(state.path))\n"))
-            # error handling for broken `include` here
+            seterror!(x, MissingFile)
         end
     end
 end
