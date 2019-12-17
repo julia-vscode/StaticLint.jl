@@ -8,7 +8,8 @@ ConstIfCondition,
 PointlessOR,
 PointlessAND,
 UnusedBinding,
-InvalidTypeDeclaration)
+InvalidTypeDeclaration,
+MissingFile)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
     IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
@@ -19,7 +20,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
     UnusedBinding => "The variable name has been bound but not used.",
-    InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement."
+    InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
+    MissingFile => "The included file can not be found."
 )
 
 haserror(m::Meta) = m.error !== nothing
