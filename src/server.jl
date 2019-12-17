@@ -94,7 +94,7 @@ end
 Usually called on the argument to `include` calls, and attempts to determine
 the path of the file to be included. Has limited support for `joinpath` calls.
 """
-function get_path(x::EXPR)
+function get_path(x::EXPR, state)
     if typof(x) === Call && length(x.args) == 4
         parg = x.args[3]
         if CSTParser.is_lit_string(parg)
@@ -105,6 +105,8 @@ function get_path(x::EXPR)
             for i = 2:length(parg.args)
                 arg = parg.args[i]
                 if typof(arg) === PUNCTUATION
+                elseif _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
+                    path = string(path, "/", dirname(getpath(state.file)))
                 elseif CSTParser.is_lit_string(arg)
                     path = string(path, "/", CSTParser.str_value(arg))
                 else
@@ -116,3 +118,7 @@ function get_path(x::EXPR)
     end
     return ""
 end
+
+_is_macrocall_to_BaseDIR(arg) = typof(arg) === CSTParser.MacroCall && length(arg.args) == 1 &&
+    typof(arg.args[1]) === CSTParser.MacroName && length(arg.args[1].args) == 2 &&
+    valof(arg.args[1].args[2]) == "__DIR__"
