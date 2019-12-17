@@ -126,7 +126,7 @@ If this is successful it traverses the code associated with the loaded file.
 """
 function followinclude(x, state::State)
     if typof(x) === Call && typof(x.args[1]) === IDENTIFIER && valof(x.args[1]) == "include"
-        path = get_path(x)
+        path = get_path(x, state)
         if isempty(path)
         elseif hasfile(state.server, path)
         elseif canloadfile(state.server, path)
