@@ -2,11 +2,11 @@ mutable struct Binding
     name::EXPR
     val::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
     type::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
-    refs
+    refs::Vector{EXPR}
     prev::Union{Binding,SymbolServer.SymStore,Nothing}
     next::Union{Binding,SymbolServer.SymStore,Nothing}
 end
-Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, nothing, nothing, nothing)
+Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, EXPR[], nothing, nothing)
 
 function Base.show(io::IO, b::Binding)
     printstyled(io, "Binding(", Expr(b.name), 
@@ -74,17 +74,17 @@ function mark_bindings!(x::EXPR, state)
     elseif typof(x) === FunctionDef
         name = CSTParser.get_name(x)
         # mark external binding
-        x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.Function, EXPR[], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
         mark_sig_args!(CSTParser.get_sig(x))
     elseif typof(x) === ModuleH || typof(x) === BareModule
-        x.meta.binding = Binding(x.args[2], x, CoreTypes.Module, [], nothing, nothing)
+        x.meta.binding = Binding(x.args[2], x, CoreTypes.Module, EXPR[], nothing, nothing)
         setref!(x.args[2], bindingof(x))
     elseif typof(x) === Macro
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.Function, EXPR[], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
@@ -93,14 +93,14 @@ function mark_bindings!(x::EXPR, state)
         mark_binding!(x.args[4])
     elseif typof(x) === CSTParser.Abstract || typof(x) === CSTParser.Primitive 
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.DataType, EXPR[], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
         mark_parameters(CSTParser.get_sig(x))
     elseif typof(x) === CSTParser.Mutable || typof(x) === CSTParser.Struct
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.DataType, EXPR[], nothing, nothing)
         if typof(name) === IDENTIFIER
             setref!(name, bindingof(x))
         end
@@ -145,7 +145,7 @@ function mark_binding!(x::EXPR, val = x)
         if !hasmeta(x)
             x.meta = Meta()
         end
-        x.meta.binding = Binding(CSTParser.get_name(x), val, nothing, [], nothing, nothing)
+        x.meta.binding = Binding(CSTParser.get_name(x), val, nothing, EXPR[], nothing, nothing)
     end
     return x
 end

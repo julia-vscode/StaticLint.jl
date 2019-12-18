@@ -37,7 +37,7 @@ function handle_macro(x::EXPR, state)
             end
         elseif _points_to_Base_macro(x.args[1], "goto", state)
             if length(x.args) == 2 && typof(x.args[2]) === CSTParser.IDENTIFIER
-                setref!(x.args[2], Binding(noname, nothing, nothing, nothing, nothing, nothing))
+                setref!(x.args[2], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
             end
         elseif _points_to_Base_macro(x.args[1], "label", state)
             if length(x.args) == 2 && typof(x.args[2]) === CSTParser.IDENTIFIER
