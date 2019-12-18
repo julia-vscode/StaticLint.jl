@@ -59,7 +59,7 @@ function _mark_import_arg(arg, par, state, u)
             if !hasmeta(arg)
                 arg.meta = Meta()
             end
-            arg.meta.binding = Binding(arg, par, _typeof(par), EXPR[], nothing, nothing)
+            arg.meta.binding = Binding(arg, par, _typeof(par), [], nothing, nothing)
         end
         if u && par isa SymbolServer.ModuleStore
             if state.scope.modules isa Dict
