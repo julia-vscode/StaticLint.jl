@@ -2,11 +2,11 @@ mutable struct Binding
     name::EXPR
     val::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
     type::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
-    refs
+    refs::Vector{Any}
     prev::Union{Binding,SymbolServer.SymStore,Nothing}
     next::Union{Binding,SymbolServer.SymStore,Nothing}
 end
-Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, nothing, nothing, nothing)
+Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothing)
 
 function Base.show(io::IO, b::Binding)
     printstyled(io, "Binding(", Expr(b.name), 
@@ -321,7 +321,7 @@ function mark_globals(x, state)
     if typof(x) === CSTParser.Global
         if !haskey(state.scope.names, "#globals")
             
-            state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER,EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, String[], nothing, nothing)
+            state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER,EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
         end
         if x.args isa Vector{EXPR}
             for i = 2:length(x.args)

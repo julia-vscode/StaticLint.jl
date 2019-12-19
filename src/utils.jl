@@ -34,7 +34,7 @@ function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
 end
 
 function remove_ref(x::EXPR)
-    if hasref(x) && refof(x) isa Binding
+    if hasref(x) && refof(x) isa Binding && refof(x).refs isa Vector
         for ia in enumerate(refof(x).refs)
             if ia[2] == x
                 deleteat!(refof(x).refs, ia[1])
