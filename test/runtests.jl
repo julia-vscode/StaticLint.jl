@@ -395,3 +395,28 @@ end
         @test StaticLint.hasref(cst[1][3][1][3])
     end
 end
+
+@testset "type params check" begin
+    let cst = parse_and_pass("""
+        f() where T
+        f() where {T,S}
+        f() where {T<:Any}
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test StaticLint.errorof(cst[1][3]) == StaticLint.UnusedTypeParameter
+        @test StaticLint.errorof(cst[2][4]) == StaticLint.UnusedTypeParameter
+        @test StaticLint.errorof(cst[2][6]) == StaticLint.UnusedTypeParameter
+        @test StaticLint.errorof(cst[3][4]) == StaticLint.UnusedTypeParameter
+    end
+    let cst = parse_and_pass("""
+        f(x::T) where T
+        f(x::T,y::S) where {T,S}
+        f(x::T) where {T<:Any}
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test !StaticLint.haserror(cst[1][3])
+        @test !StaticLint.haserror(cst[2][4])
+        @test !StaticLint.haserror(cst[2][6])
+        @test !StaticLint.haserror(cst[3][4])
+    end
+end
