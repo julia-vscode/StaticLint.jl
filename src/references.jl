@@ -75,7 +75,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{S
         mn = valof(x)
         x1 = x
         if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
-            setref!(x, Binding(noname, nothing, nothing, nothing, nothing, nothing))
+            setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
             return true
         end
     elseif resolvable_macroname(x)
@@ -90,9 +90,9 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{S
         end
     elseif typof(x) === CSTParser.Kw
         if typof(x.args[1]) === IDENTIFIER
-            setref!(x.args[1], Binding(noname, nothing, nothing, nothing, nothing, nothing))
+            setref!(x.args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
         elseif typof(x.args[1]) === BinaryOpCall && kindof(x.args[1].args[2]) === CSTParser.Tokens.DECLARATION && typof(x.args[1].args[1]) === IDENTIFIER
-            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, nothing, nothing, nothing))
+            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true
     else

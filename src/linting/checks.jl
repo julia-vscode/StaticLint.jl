@@ -9,7 +9,10 @@ PointlessOR,
 PointlessAND,
 UnusedBinding,
 InvalidTypeDeclaration,
-UnusedTypeParameter)
+UnusedTypeParameter,
+IncludeLoop,
+MissingFile,
+InvalidModuleName)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
     IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
@@ -21,7 +24,10 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     PointlessAND => "The first argument of a `&&` call is `false`.",
     UnusedBinding => "The variable name has been bound but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
-    UnusedTypeParameter => "A DataType parameter has been specified but not used."
+    UnusedTypeParameter => "A DataType parameter has been specified but not used.",
+    IncludeLoop => "Loop detected, this file has already been included.",
+    MissingFile => "The included file can not be found.",
+    InvalidModuleName => "Module name matches that of its parent."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -364,6 +370,16 @@ function check_datatype_decl(x::EXPR, server)
     end    
 end
 
+function check_modulename(x::EXPR)
+    if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && # x is a module
+        scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
+        (typof(parentof(scopeof(x)).expr) === CSTParser.ModuleH || 
+        typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) # the parent scope is a module
+        valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
+        seterror!(CSTParser.get_name(x), InvalidModuleName)
+    end
+end
+
 
 mutable struct LintOptions
     call::Bool
@@ -373,8 +389,9 @@ mutable struct LintOptions
     lazy::Bool
     datadecl::Bool
     typeparam::Bool
+    modname::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true)
+LintOptions() = LintOptions(true, true, true, true, true, false, true, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -386,6 +403,8 @@ function check_all(x::EXPR, opts::LintOptions, server)
     # check_is_callable(x, server)
     opts.datadecl && check_datatype_decl(x, server)
     opts.typeparam && check_typeparams(x)
+    opts.modname && check_modulename(x)
+                          
     if x.args !== nothing
         for i in 1:length(x.args)
             check_all(x.args[i], opts, server)
