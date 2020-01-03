@@ -53,6 +53,15 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(x.args[i], x)
                 end
             end
+        elseif _points_to_arbitrary_macro(x.args[1], "Turing", "model", state) && length(x.args) == 2 && 
+            _binary_assert(x.args[2], CSTParser.Tokens.EQ) && 
+            _expr_assert(x.args[2].args[3], CSTParser.Begin, 3) && typof(x.args[2].args[3].args[2]) === CSTParser.Block && x.args[2].args[3].args[2].args isa Vector{EXPR}
+            for i = 1:length(x[2][3][2].args)
+                ex = x[2][3][2][i]
+                if typof(ex) == CSTParser.BinaryOpCall && kindof(ex[2]) === CSTParser.Tokens.APPROX
+                    mark_binding!(ex)
+                end
+            end
         end
     end
 end
@@ -63,6 +72,5 @@ function _points_to_Base_macro(x::EXPR, name, state)
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
-    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && refof(x.args[2]) == getsymbolserver(state.server)[module_name].vals[string("@", name)]
+    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && haskey(getsymbolserver(state.server), module_name) && haskey(getsymbolserver(state.server)[module_name].vals, string("@", name)) && refof(x.args[2]) == getsymbolserver(state.server)[module_name].vals[string("@", name)]
 end
-
