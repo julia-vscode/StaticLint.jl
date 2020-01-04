@@ -53,97 +53,110 @@ end
 
 # Call
 function struct_nargs(x::EXPR)
-    nargs, ndefaulted_args, params = 0, 0, String[]
+    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     args = typof(x) === CSTParser.Mutable ? x.args[4] : x.args[3]
     inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args.args[inner_constructor])
     else
-        nargs += length(args.args)
+        minargs = maxargs = length(args.args)
     end
-    return nargs, ndefaulted_args, params
+    return minargs, maxargs, kws, kwsplat
 end
 
 function func_nargs(x::EXPR)
-    nargs, ndefaulted_args, params = 0, 0, String[]
+    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
     if sig.args isa Vector{EXPR}
         for i = 2:length(sig.args)
-            if typof(sig.args[i]) === CSTParser.Parameters
+            arg = sig.args[i]
+            if typof(sig.args[i]) === CSTParser.PUNCTUATION
+                # skip
+            elseif typof(sig.args[i]) === CSTParser.Parameters
                 for j = 1:length(sig.args[i])
                     arg = sig.args[i].args[j]
                     if typof(arg) === CSTParser.Kw
-                        push!(params, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                    elseif typof(arg) !== CSTParser.PUNCTUATION
-                        # This is wrong
-                        nargs += 1
+                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
+                    elseif typof(arg) === CSTParser.BinaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+                        kwsplat = true
                     end
                 end
-            else
-                
-                if typof(sig.args[i]) === CSTParser.Kw
-                    ndefaulted_args += 1
-                elseif typof(sig.args[i]) !== CSTParser.PUNCTUATION
-                    nargs += 1
+            elseif typof(arg) === CSTParser.Kw
+                if typof(arg.args[1]) === UnaryOpCall && kindof(arg.args[1].args[2]) === CSTParser.Tokens.DDDOT
+                    maxargs += Inf
+                else
+                    maxargs += 1
                 end
+            elseif typof(arg) === UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+                maxargs += Inf
+            else
+                minargs += 1
+                maxargs += 1
+                
             end
         end
-    else
-        nargs = -1
     end
-    return nargs, ndefaulted_args, params
+    return minargs, maxargs, kws, kwsplat
+end
+
+function func_nargs(m::SymbolServer.MethodStore)
+    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
+    for a in m.args
+        if last(a) == ".KW"
+            if endswith(first(a), "...")
+                kwsplat = true
+            else
+                push!(kws, first(a))
+            end
+        elseif startswith(last(a), "Vararg") || endswith(first(a), "...") || endswith(last(a), "...")
+            maxargs += Inf
+        else
+            minargs += 1
+            maxargs += 1
+        end
+    end
+    return minargs, maxargs, kws, kwsplat
 end
 
 function call_nargs(x::EXPR)
-    nargs, splat, params = 0, 0, String[]
+    minargs, maxargs, kws = 0, 0, String[]
     if x.args isa Vector{EXPR}
         for i = 2:length(x.args)
-            if typof(x.args[i]) === CSTParser.Parameters
+            arg = x.args[i]
+            if typof(arg) === CSTParser.PUNCTUATION
+                # skip
+            elseif typof(x.args[i]) === CSTParser.Parameters
                 for j = 1:length(x.args[i])
                     arg = x.args[i].args[j]
                     if typof(arg) === CSTParser.Kw
-                        push!(params, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                    elseif typof(arg) !== CSTParser.PUNCTUATION
-                        # This is wrong
-                        nargs += 1
+                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
                     end
                 end
+            elseif typof(arg) === CSTParser.Kw
+                push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
+            elseif typof(arg) === CSTParser.UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+                maxargs += Inf
             else
-                arg = x.args[i]
-                if typof(arg) === CSTParser.Kw
-                    push!(params, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                elseif typof(arg) !== CSTParser.PUNCTUATION
-                    nargs += 1
-                    if typof(arg) === CSTParser.UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
-                        splat = 1
-                    end
-                end
+                minargs += 1
+                maxargs += 1
             end
         end
     else
         @info string("call_nargs: ", Expr(x))
     end
-    
-    return nargs, splat, params
+
+    return minargs, maxargs, kws
 end
 
-function func_nargs(m::SymbolServer.MethodStore)
-    counts = (0, 0, String[])
-    nargs, ndefaulted_args, params = 0, 0, String[]
-    for a in m.args
-        if last(a) == ".KW"
-            push!(params, first(a))
-        elseif startswith(last(a), "Vararg") || endswith(first(a), "...") || endswith(last(a), "...")
-            ndefaulted_args += Inf
-        else
-            nargs += 1
-        end
+function compare_f_call(m_counts, call_counts)
+    !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
+    if !m_counts[4] # no splatted kw in method sig
+        length(call_counts[3]) > length(m_counts[3]) && return false # call has more kws than method accepts
+        !all(kw in m_counts[3] for kw in call_counts[3]) && return false # call supplies a kw that isn't defined in the method
+    else # splatted kw in method so accept any kw in call
     end
-    return nargs, ndefaulted_args, params
+    return true
 end
-
-
-compare_f_call(m_counts, call_counts) = m_counts[1] <= call_counts[1] <= m_counts[1] + m_counts[2] && length(call_counts[3]) <= length(m_counts[3]) && all(kw in m_counts[3] for kw in call_counts[3])
 
 function check_call(x, server)
     if typof(x) === Call
@@ -243,26 +256,6 @@ function check_nothing_equality(x::EXPR, server)
             seterror!(x.args[2], NothingNotEq)
         end
     end
-end
-
-function _get_call_nargs(x::EXPR)
-    cnt = 0
-    kws = 0
-    for i = 2:length(x.args)
-        if typof(x.args[i]) === PUNCTUATION
-        elseif typof(x.args[i]) === CSTParser.Parameters
-            for j = 1:length(x.args[i].args)
-                if typof(x.args[i].args[j]) !== PUNCTUATION
-                    kws += 1
-                end
-            end
-        elseif typof(x.args[i]) === CSTParser.Kw
-            kws += 1
-        else
-            cnt += 1
-        end
-    end
-    return cnt, kws
 end
 
 function _get_top_binding(x::EXPR, name::String)

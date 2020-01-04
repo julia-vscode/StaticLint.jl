@@ -458,6 +458,17 @@ end
         StaticLint.check_call(cst[1], server)
         @test StaticLint.errorof(cst[1]) === nothing
     end
+
+    let cst = parse_and_pass("""
+        f(a...) = 1
+        f(1)
+        f(1, 2)
+        """)
+        StaticLint.check_call(cst[2], server)
+        StaticLint.check_call(cst[3], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+        @test StaticLint.errorof(cst[3]) === nothing
+    end
 end
 
 @testset "check_modulename" begin
