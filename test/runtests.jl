@@ -444,14 +444,19 @@ end
         @test StaticLint.errorof(cst[2][2]) === nothing
     end
 
-
     let cst = parse_and_pass("""
         f(x) = 1
         f(1, 2)
         """)
         StaticLint.check_call(cst[2], server)
-        @test_broken StaticLint.errorof(cst[2]) === nothing
-        # Change this following tagging of new 
+        @test StaticLint.errorof(cst[2]) === StaticLint.IncorrectCallNargs
+    end
+
+    let cst = parse_and_pass("""
+        view([1], 1, 2, 3)
+        """)
+        StaticLint.check_call(cst[1], server)
+        @test StaticLint.errorof(cst[1]) === nothing
     end
 end
 
