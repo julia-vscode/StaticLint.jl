@@ -454,3 +454,26 @@ end
         # Change this following tagging of new 
     end
 end
+
+@testset "check_modulename" begin
+    let cst = parse_and_pass("""
+        module Mod1
+        module Mod11
+        end
+        end
+        module Mod2
+        module Mod2
+        end
+        end
+        """)
+        StaticLint.check_modulename(cst[1])
+        StaticLint.check_modulename(cst[1][3][1])
+        StaticLint.check_modulename(cst[2])
+        StaticLint.check_modulename(cst[2][3][1])
+        
+        @test StaticLint.errorof(cst[1][2]) === nothing
+        @test StaticLint.errorof(cst[1][3][1][2]) === nothing
+        @test StaticLint.errorof(cst[2][2]) === nothing
+        @test StaticLint.errorof(cst[2][3][1][2]) === StaticLint.InvalidModuleName
+    end
+end

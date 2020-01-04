@@ -373,7 +373,7 @@ function check_modulename(x::EXPR)
     if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && # x is a module
         scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
         (typof(parentof(scopeof(x)).expr) === CSTParser.ModuleH || 
-        typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) # the parent scope is a module
+        typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) && # the parent scope is a module
         valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
         seterror!(CSTParser.get_name(x), InvalidModuleName)
     end
