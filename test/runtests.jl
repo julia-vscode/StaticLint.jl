@@ -420,3 +420,37 @@ end
         @test !StaticLint.haserror(cst[3][4])
     end
 end
+
+@testset "check_call" begin
+    let cst = parse_and_pass("""
+        sin(1)
+        sin(1,2)
+        """)
+        StaticLint.check_call(cst[1], server)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[1]) === nothing
+        @test StaticLint.errorof(cst[2]) == StaticLint.IncorrectCallNargs
+    end
+
+    let cst = parse_and_pass("""
+        Base.sin(a,b) = 1
+        function Base.sin(a,b)
+            1
+        end
+        """)
+        StaticLint.check_call(cst[1][1], server)
+        @test StaticLint.errorof(cst[1][1]) === nothing
+        StaticLint.check_call(cst[2][2], server)
+        @test StaticLint.errorof(cst[2][2]) === nothing
+    end
+
+
+    let cst = parse_and_pass("""
+        f(x) = 1
+        f(1, 2)
+        """)
+        StaticLint.check_call(cst[2], server)
+        @test_broken StaticLint.errorof(cst[2]) === nothing
+        # Change this following tagging of new 
+    end
+end

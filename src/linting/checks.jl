@@ -43,11 +43,11 @@ end
 
 function _typeof(x, state)
     if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
-        return getsymbolserver(state.server)["Core"].vals["DataType"]
+        return CoreTypes.DataType
     elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
-        return getsymbolserver(state.server)["Core"].vals["Module"]
+        return CoreTypes.Module
     elseif CSTParser.defines_function(x)
-        return return getsymbolserver(state.server)["Core"].vals["Function"]
+        return CoreTypes.Function
     end
 end
 
@@ -164,10 +164,10 @@ function check_call(x, server)
                 end
             end
             seterror!(x, IncorrectCallNargs)
-        elseif func_ref isa Binding && (func_ref.type === getsymbolserver(server)["Core"].vals["Function"] || func_ref.type === getsymbolserver(server)["Core"].vals["DataType"])
+        elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
             call_counts = call_nargs(x)
             b = func_ref
-            while b.next isa Binding && b.next.type == getsymbolserver(server)["Core"].vals["Function"]
+            while b.next isa Binding && b.next.type == CoreTypes.Function
                 b = b.next
             end
             while true
@@ -183,10 +183,9 @@ function check_call(x, server)
                     else
                         return
                     end
-                elseif b.type == getsymbolserver(server)["Core"].vals["Function"]
-                # if b.type == getsymbolserver(server)["Core"].vals["Function"]
+                elseif b.type == CoreTypes.Function
                     m_counts = func_nargs(b.val)
-                elseif b.type == getsymbolserver(server)["Core"].vals["DataType"]
+                elseif b.type == CoreTypes.DataType
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
                     for m in b.val.methods
@@ -351,7 +350,7 @@ function check_datatype_decl(x::EXPR, server)
             if dt isa SymbolServer.DataTypeStore || dt isa Binding && dt.val isa SymbolServer.DataTypeStore
             elseif dt isa Binding && dt.type !== nothing
                 safety_trip = 0
-                while dt.type == getsymbolserver(server)["Core"].vals["Function"]
+                while dt.type == CoreTypes.Function
                     safety_trip += 1
                     dt.prev === nothing && break
                     dt = dt.prev
@@ -360,7 +359,7 @@ function check_datatype_decl(x::EXPR, server)
                         return
                     end
                 end
-                if dt.type !== nothing && dt.type !== getsymbolserver(server)["Core"].vals["DataType"]
+                if dt.type !== nothing && dt.type !== CoreTypes.DataType
                     seterror!(x, InvalidTypeDeclaration)
                 end
             end
