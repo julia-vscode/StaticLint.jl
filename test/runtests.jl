@@ -445,5 +445,7 @@ end
         """)
         StaticLint.check_for_pirates(cst[3])
         StaticLint.check_for_pirates(cst[4])
+        @test errorof(cst[3]) === StaticLint.TypePiracy
+        @test errorof(cst[4]) === nothing
     end
 end
