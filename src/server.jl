@@ -100,6 +100,8 @@ function get_path(x::EXPR, state)
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
             return normpath(path)
+        elseif typof(parg) === x_Str && length(parg.args) == 2 && CSTParser.isidentifier(parg.args[1]) && valof(parg.args[1]) == "raw" && typof(parg.args[2]) === CSTParser.LITERAL && (kindof(parg.args[2]) == CSTParser.Tokens.STRING || kindof(parg.args[2]) == CSTParser.Tokens.TRIPLE_STRING)
+            return normpath(CSTParser.str_value(parg.args[2]))
         elseif typof(parg) === Call && typof(parg.args[1]) === IDENTIFIER && CSTParser.str_value(parg.args[1]) == "joinpath"
             path = ""
             for i = 2:length(parg.args)
