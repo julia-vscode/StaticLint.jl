@@ -183,6 +183,15 @@ function find_return_statements(x::EXPR, last_stmt , rets)
     return rets, false
 end
 
+
+function _expr_assert(x::EXPR, typ, nargs)
+    typof(x) == typ && x.args isa Vector{EXPR} && length(x.args) == nargs
+end
+
+function _binary_assert(x, kind)
+    typof(x) === CSTParser.BinaryOpCall && x.args isa Vector{EXPR} && length(x.args) == 3 && typof(x.args[2]) === CSTParser.OPERATOR && kindof(x.args[2]) === kind
+end
+    
 # should only be called on Bindings to functions
 function last_method(func::Binding)
     if func.next isa Binding && func.next.type === CoreTypes.Function
