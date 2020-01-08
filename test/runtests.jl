@@ -420,3 +420,121 @@ end
         @test !StaticLint.haserror(cst[3][4])
     end
 end
+
+
+@testset "overwrites_imported_function" begin
+    let cst = parse_and_pass("""
+        import Base:sin
+        using Base:cos
+        sin(x) = 1
+        cos(x) = 1
+        Base.tan(x) = 1
+        """)
+        
+        @test StaticLint.overwrites_imported_function(bindingof(cst[3]))
+        @test !StaticLint.overwrites_imported_function(bindingof(cst[4]))
+        @test StaticLint.overwrites_imported_function(bindingof(cst[5]))
+    end
+end
+
+@testset "pirates" begin
+    let cst = parse_and_pass("""
+        import Base:sin
+        struct T end
+        sin(x::Int) = 1
+        sin(x::T) = 1
+        """)
+        StaticLint.check_for_pirates(cst[3])
+        StaticLint.check_for_pirates(cst[4])
+        @test errorof(cst[3]) === StaticLint.TypePiracy
+        @test errorof(cst[4]) === nothing
+    end
+end
+
+@testset "docs for undescribed variables" begin
+let cst = parse_and_pass("""
+    \"\"\"
+        somefunc() = true
+    \"\"\"
+    somefunc
+    somefunc() = true
+    """)
+    @test StaticLint.hasref(cst[1][3])
+    @test StaticLint.hasbinding(cst[1][3])
+    @test refof(cst[1][3]) == bindingof(cst[1][3])
+end
+end
+
+@testset "check_call" begin
+    let cst = parse_and_pass("""
+        sin(1)
+        sin(1,2)
+        """)
+        StaticLint.check_call(cst[1], server)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[1]) === nothing
+        @test StaticLint.errorof(cst[2]) == StaticLint.IncorrectCallNargs
+    end
+
+    let cst = parse_and_pass("""
+        Base.sin(a,b) = 1
+        function Base.sin(a,b)
+            1
+        end
+        """)
+        StaticLint.check_call(cst[1][1], server)
+        @test StaticLint.errorof(cst[1][1]) === nothing
+        StaticLint.check_call(cst[2][2], server)
+        @test StaticLint.errorof(cst[2][2]) === nothing
+    end
+
+    let cst = parse_and_pass("""
+        f(x) = 1
+        f(1, 2)
+        """)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === StaticLint.IncorrectCallNargs
+    end
+
+    let cst = parse_and_pass("""
+        view([1], 1, 2, 3)
+        """)
+        StaticLint.check_call(cst[1], server)
+        @test StaticLint.errorof(cst[1]) === nothing
+    end
+
+    let cst = parse_and_pass("""
+        f(a...) = 1
+        f(1)
+        f(1, 2)
+        """)
+        StaticLint.check_call(cst[2], server)
+        StaticLint.check_call(cst[3], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+        @test StaticLint.errorof(cst[3]) === nothing
+    end
+end
+
+@testset "check_modulename" begin
+    let cst = parse_and_pass("""
+        module Mod1
+        module Mod11
+        end
+        end
+        module Mod2
+        module Mod2
+        end
+        end
+        """)
+        StaticLint.check_modulename(cst[1])
+        StaticLint.check_modulename(cst[1][3][1])
+        StaticLint.check_modulename(cst[2])
+        StaticLint.check_modulename(cst[2][3][1])
+        
+        @test StaticLint.errorof(cst[1][2]) === nothing
+        @test StaticLint.errorof(cst[1][3][1][2]) === nothing
+        @test StaticLint.errorof(cst[2][2]) === nothing
+        @test StaticLint.errorof(cst[2][3][1][2]) === StaticLint.InvalidModuleName
+    end
+end
+
