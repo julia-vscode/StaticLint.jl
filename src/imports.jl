@@ -73,13 +73,13 @@ function _mark_import_arg(arg, par, state, u)
             else
                 state.scope.modules = Dict(valof(arg) => par.val)
             end
-        elseif u && par isa Binding && par.val isa EXPR && typof(par.val) === CSTParser.ModuleH
+        elseif u && par isa Binding && par.val isa EXPR && (typof(par.val) === CSTParser.ModuleH || typof(par.val) === CSTParser.BareModule)
             if state.scope.modules isa Dict
                 state.scope.modules[valof(arg)] = scopeof(par.val)
             else
                 state.scope.modules = Dict(valof(arg) => scopeof(par.val))
             end
-        elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && typof(par.val.val) === CSTParser.ModuleH
+        elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && (typof(par.val.val) === CSTParser.ModuleH || typof(par.val.val) === CSTParser.BareModule)
             if state.scope.modules isa Dict
                 state.scope.modules[valof(arg)] = scopeof(par.val.val)
             else
@@ -104,7 +104,7 @@ function _get_field(par, arg, state)
         if par.val isa Binding
             par = par.val
         end
-        if par.val isa EXPR && typof(par.val) === ModuleH
+        if par.val isa EXPR && (typof(par.val) === ModuleH || typof(par.val) === BareModule)
             if scopeof(par.val) isa Scope && haskey(scopeof(par.val).names, valof(arg))
                 return scopeof(par.val).names[valof(arg)]
             end

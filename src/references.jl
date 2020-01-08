@@ -60,7 +60,7 @@ end
 function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{String}())
     hasref(x) && return true
     resolved = false
-    if typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule && CSTParser.length(scope.expr.args) > 1 && CSTParser.typof(scope.expr.args[2]) === IDENTIFIER
+    if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr.args) > 1 && CSTParser.typof(scope.expr.args[2]) === IDENTIFIER
         s_m_name = scope.expr.args[2].val isa String ? scope.expr.args[2].val : ""
         if s_m_name in visited_scopes
             return resolved
@@ -138,9 +138,9 @@ function resolve_getindex(x::EXPR, b::Binding, state::State)
         resolved = resolve_getindex(x, b.type.val, state)
     elseif b.val isa SymbolServer.ModuleStore
         resolved = resolve_getindex(x, b.val, state)
-    elseif b.val isa EXPR && typof(b.val) === ModuleH
+    elseif b.val isa EXPR && (typof(b.val) === ModuleH || typof(b.val) === BareModule)
         resolved = resolve_getindex(x, b.val, state)
-    elseif b.val isa Binding && b.val.val isa EXPR && typof(b.val.val) === ModuleH
+    elseif b.val isa Binding && b.val.val isa EXPR && (typof(b.val.val) === ModuleH || typof(b.val.val) === BareModule)
         resolved = resolve_getindex(x, b.val.val, state)
     end
     return resolved

@@ -12,7 +12,8 @@ InvalidTypeDeclaration,
 UnusedTypeParameter,
 IncludeLoop,
 MissingFile,
-InvalidModuleName)
+InvalidModuleName,
+TypePiracy)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
     IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
@@ -27,7 +28,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
     IncludeLoop => "Loop detected, this file has already been included.",
     MissingFile => "The included file can not be found.",
-    InvalidModuleName => "Module name matches that of its parent."
+    InvalidModuleName => "Module name matches that of its parent.",
+    TypePiracy => "An imported function has been extended without using module defined typed arguments."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -43,107 +45,120 @@ end
 
 function _typeof(x, state)
     if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
-        return getsymbolserver(state.server)["Core"].vals["DataType"]
+        return CoreTypes.DataType
     elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
-        return getsymbolserver(state.server)["Core"].vals["Module"]
+        return CoreTypes.Module
     elseif CSTParser.defines_function(x)
-        return return getsymbolserver(state.server)["Core"].vals["Function"]
+        return CoreTypes.Function
     end
 end
 
 # Call
 function struct_nargs(x::EXPR)
-    nargs, ndefaulted_args, params = 0, 0, String[]
+    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     args = typof(x) === CSTParser.Mutable ? x.args[4] : x.args[3]
     inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args.args[inner_constructor])
     else
-        nargs += length(args.args)
+        minargs = maxargs = length(args.args)
     end
-    return nargs, ndefaulted_args, params
+    return minargs, maxargs, kws, kwsplat
 end
 
 function func_nargs(x::EXPR)
-    nargs, ndefaulted_args, params = 0, 0, String[]
+    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
     if sig.args isa Vector{EXPR}
         for i = 2:length(sig.args)
-            if typof(sig.args[i]) === CSTParser.Parameters
+            arg = sig.args[i]
+            if typof(sig.args[i]) === CSTParser.PUNCTUATION
+                # skip
+            elseif typof(sig.args[i]) === CSTParser.Parameters
                 for j = 1:length(sig.args[i])
                     arg = sig.args[i].args[j]
                     if typof(arg) === CSTParser.Kw
-                        push!(params, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                    elseif typof(arg) !== CSTParser.PUNCTUATION
-                        # This is wrong
-                        nargs += 1
+                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
+                    elseif typof(arg) === CSTParser.BinaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+                        kwsplat = true
                     end
                 end
-            else
-                
-                if typof(sig.args[i]) === CSTParser.Kw
-                    ndefaulted_args += 1
-                elseif typof(sig.args[i]) !== CSTParser.PUNCTUATION
-                    nargs += 1
+            elseif typof(arg) === CSTParser.Kw
+                if typof(arg.args[1]) === UnaryOpCall && kindof(arg.args[1].args[2]) === CSTParser.Tokens.DDDOT
+                    maxargs += Inf
+                else
+                    maxargs += 1
                 end
+            elseif typof(arg) === UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+                maxargs += Inf
+            else
+                minargs += 1
+                maxargs += 1
+                
             end
         end
-    else
-        nargs = -1
     end
-    return nargs, ndefaulted_args, params
+    return minargs, maxargs, kws, kwsplat
+end
+
+function func_nargs(m::SymbolServer.MethodStore)
+    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
+    for a in m.args
+        if last(a) == ".KW"
+            if endswith(first(a), "...")
+                kwsplat = true
+            else
+                push!(kws, first(a))
+            end
+        elseif startswith(last(a), "Vararg") || endswith(first(a), "...") || endswith(last(a), "...")
+            maxargs += Inf
+        else
+            minargs += 1
+            maxargs += 1
+        end
+    end
+    return minargs, maxargs, kws, kwsplat
 end
 
 function call_nargs(x::EXPR)
-    nargs, splat, params = 0, 0, String[]
+    minargs, maxargs, kws = 0, 0, String[]
     if x.args isa Vector{EXPR}
         for i = 2:length(x.args)
-            if typof(x.args[i]) === CSTParser.Parameters
+            arg = x.args[i]
+            if typof(arg) === CSTParser.PUNCTUATION
+                # skip
+            elseif typof(x.args[i]) === CSTParser.Parameters
                 for j = 1:length(x.args[i])
                     arg = x.args[i].args[j]
                     if typof(arg) === CSTParser.Kw
-                        push!(params, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                    elseif typof(arg) !== CSTParser.PUNCTUATION
-                        # This is wrong
-                        nargs += 1
+                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
                     end
                 end
+            elseif typof(arg) === CSTParser.Kw
+                push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
+            elseif typof(arg) === CSTParser.UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+                maxargs += Inf
             else
-                arg = x.args[i]
-                if typof(arg) === CSTParser.Kw
-                    push!(params, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                elseif typof(arg) !== CSTParser.PUNCTUATION
-                    nargs += 1
-                    if typof(arg) === CSTParser.UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
-                        splat = 1
-                    end
-                end
+                minargs += 1
+                maxargs += 1
             end
         end
     else
         @info string("call_nargs: ", Expr(x))
     end
-    
-    return nargs, splat, params
+
+    return minargs, maxargs, kws
 end
 
-function func_nargs(m::SymbolServer.MethodStore)
-    counts = (0, 0, String[])
-    nargs, ndefaulted_args, params = 0, 0, String[]
-    for a in m.args
-        if last(a) == ".KW"
-            push!(params, first(a))
-        elseif startswith(last(a), "Vararg") || endswith(first(a), "...") || endswith(last(a), "...")
-            ndefaulted_args += Inf
-        else
-            nargs += 1
-        end
+function compare_f_call(m_counts, call_counts)
+    !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
+    if !m_counts[4] # no splatted kw in method sig
+        length(call_counts[3]) > length(m_counts[3]) && return false # call has more kws than method accepts
+        !all(kw in m_counts[3] for kw in call_counts[3]) && return false # call supplies a kw that isn't defined in the method
+    else # splatted kw in method so accept any kw in call
     end
-    return nargs, ndefaulted_args, params
+    return true
 end
-
-
-compare_f_call(m_counts, call_counts) = m_counts[1] <= call_counts[1] <= m_counts[1] + m_counts[2] && length(call_counts[3]) <= length(m_counts[3]) && all(kw in m_counts[3] for kw in call_counts[3])
 
 function check_call(x, server)
     if typof(x) === Call
@@ -164,10 +179,10 @@ function check_call(x, server)
                 end
             end
             seterror!(x, IncorrectCallNargs)
-        elseif func_ref isa Binding && (func_ref.type === getsymbolserver(server)["Core"].vals["Function"] || func_ref.type === getsymbolserver(server)["Core"].vals["DataType"])
+        elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
             call_counts = call_nargs(x)
             b = func_ref
-            while b.next isa Binding && b.next.type == getsymbolserver(server)["Core"].vals["Function"]
+            while b.next isa Binding && b.next.type == CoreTypes.Function
                 b = b.next
             end
             while true
@@ -183,10 +198,9 @@ function check_call(x, server)
                     else
                         return
                     end
-                elseif b.type == getsymbolserver(server)["Core"].vals["Function"]
-                # if b.type == getsymbolserver(server)["Core"].vals["Function"]
+                elseif b.type == CoreTypes.Function
                     m_counts = func_nargs(b.val)
-                elseif b.type == getsymbolserver(server)["Core"].vals["DataType"]
+                elseif b.type == CoreTypes.DataType
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
                     for m in b.val.methods
@@ -244,26 +258,6 @@ function check_nothing_equality(x::EXPR, server)
             seterror!(x.args[2], NothingNotEq)
         end
     end
-end
-
-function _get_call_nargs(x::EXPR)
-    cnt = 0
-    kws = 0
-    for i = 2:length(x.args)
-        if typof(x.args[i]) === PUNCTUATION
-        elseif typof(x.args[i]) === CSTParser.Parameters
-            for j = 1:length(x.args[i].args)
-                if typof(x.args[i].args[j]) !== PUNCTUATION
-                    kws += 1
-                end
-            end
-        elseif typof(x.args[i]) === CSTParser.Kw
-            kws += 1
-        else
-            cnt += 1
-        end
-    end
-    return cnt, kws
 end
 
 function _get_top_binding(x::EXPR, name::String)
@@ -351,7 +345,7 @@ function check_datatype_decl(x::EXPR, server)
             if dt isa SymbolServer.DataTypeStore || dt isa Binding && dt.val isa SymbolServer.DataTypeStore
             elseif dt isa Binding && dt.type !== nothing
                 safety_trip = 0
-                while dt.type == getsymbolserver(server)["Core"].vals["Function"]
+                while dt.type == CoreTypes.Function
                     safety_trip += 1
                     dt.prev === nothing && break
                     dt = dt.prev
@@ -360,7 +354,7 @@ function check_datatype_decl(x::EXPR, server)
                         return
                     end
                 end
-                if dt.type !== nothing && dt.type !== getsymbolserver(server)["Core"].vals["DataType"]
+                if dt.type !== nothing && dt.type !== CoreTypes.DataType
                     seterror!(x, InvalidTypeDeclaration)
                 end
             end
@@ -374,7 +368,7 @@ function check_modulename(x::EXPR)
     if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && # x is a module
         scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
         (typof(parentof(scopeof(x)).expr) === CSTParser.ModuleH || 
-        typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) # the parent scope is a module
+        typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) && # the parent scope is a module
         valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
         seterror!(CSTParser.get_name(x), InvalidModuleName)
     end
@@ -390,8 +384,9 @@ mutable struct LintOptions
     datadecl::Bool
     typeparam::Bool
     modname::Bool
+    pirates::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true, true)
+LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -404,7 +399,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.datadecl && check_datatype_decl(x, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
-                          
+    opts.pirates && check_for_pirates(x)
     if x.args !== nothing
         for i in 1:length(x.args)
             check_all(x.args[i], opts, server)
@@ -453,4 +448,42 @@ function check_typeparams(x::EXPR)
             end
         end
     end
+end
+
+function check_for_pirates(x::EXPR)
+    if CSTParser.defines_function(x) && hasbinding(x) && overwrites_imported_function(bindingof(x))
+        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        if typof(sig) == CSTParser.Call
+            for i = 2:length(sig.args)
+                if hasbinding(sig.args[i]) && bindingof(sig.args[i]).type isa Binding
+                    return
+                end
+            end
+            seterror!(x, TypePiracy)
+        end
+    end
+end
+
+overwrites_imported_function(b) = false
+function overwrites_imported_function(b::Binding)
+    if b.prev isa Binding
+        if b.prev.val isa EXPR
+            # overwrites a within source bindig so lets check that
+            return overwrites_imported_function(b.prev)
+        elseif (b.prev.val isa SymbolServer.FunctionStore || b.prev.val isa SymbolServer.DataTypeStore) && parentof(b.prev.name) isa EXPR && typof(parentof(b.prev.name)) === CSTParser.Import
+            # explicitly imported, e.g. import ModuleName: somefunction
+            return true
+        end
+    elseif b.prev isa SymbolServer.FunctionStore && 
+        parentof(b.name) isa EXPR && typof(parentof(b.name)) === CSTParser.Quotenode && 
+        parentof(parentof(b.name)) isa EXPR && typof(parentof(parentof(b.name))) === CSTParser.BinaryOpCall && kindof(parentof(parentof(b.name))[2]) === CSTParser.Tokens.DOT
+        fullname = parentof(parentof(b.name))
+        # overwrites imported function by declaring full name, e.g. ModuleName.FunctionName
+        if CSTParser.isidentifier(fullname.args[1]) && refof(fullname.args[1]) isa SymbolServer.ModuleStore
+            return true
+        elseif typof(fullname.args[1]) === CSTParser.BinaryOpCall && kindof(fullname.args[1].args[2]) == CSTParser.Tokens.DOT && typof(fullname.args[1].args[3]) === CSTParser.Quotenode && refof(fullname.args[1].args[3].args[1]) isa SymbolServer.ModuleStore
+            return true
+        end
+    end
+    return false
 end
