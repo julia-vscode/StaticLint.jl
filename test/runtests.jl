@@ -422,6 +422,35 @@ end
 end
 
 
+@testset "overwrites_imported_function" begin
+    let cst = parse_and_pass("""
+        import Base:sin
+        using Base:cos
+        sin(x) = 1
+        cos(x) = 1
+        Base.tan(x) = 1
+        """)
+        
+        @test StaticLint.overwrites_imported_function(bindingof(cst[3]))
+        @test !StaticLint.overwrites_imported_function(bindingof(cst[4]))
+        @test StaticLint.overwrites_imported_function(bindingof(cst[5]))
+    end
+end
+
+@testset "pirates" begin
+    let cst = parse_and_pass("""
+        import Base:sin
+        struct T end
+        sin(x::Int) = 1
+        sin(x::T) = 1
+        """)
+        StaticLint.check_for_pirates(cst[3])
+        StaticLint.check_for_pirates(cst[4])
+        @test errorof(cst[3]) === StaticLint.TypePiracy
+        @test errorof(cst[4]) === nothing
+    end
+end
+
 @testset "docs for undescribed variables" begin
 let cst = parse_and_pass("""
     \"\"\"

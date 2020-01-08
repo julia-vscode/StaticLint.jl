@@ -12,7 +12,8 @@ InvalidTypeDeclaration,
 UnusedTypeParameter,
 IncludeLoop,
 MissingFile,
-InvalidModuleName)
+InvalidModuleName,
+TypePiracy)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
     IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
@@ -27,7 +28,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
     IncludeLoop => "Loop detected, this file has already been included.",
     MissingFile => "The included file can not be found.",
-    InvalidModuleName => "Module name matches that of its parent."
+    InvalidModuleName => "Module name matches that of its parent.",
+    TypePiracy => "An imported function has been extended without using module defined typed arguments."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -382,8 +384,9 @@ mutable struct LintOptions
     datadecl::Bool
     typeparam::Bool
     modname::Bool
+    pirates::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true, true)
+LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -396,7 +399,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.datadecl && check_datatype_decl(x, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
-                          
+    opts.pirates && check_for_pirates(x)
     if x.args !== nothing
         for i in 1:length(x.args)
             check_all(x.args[i], opts, server)
@@ -445,4 +448,42 @@ function check_typeparams(x::EXPR)
             end
         end
     end
+end
+
+function check_for_pirates(x::EXPR)
+    if CSTParser.defines_function(x) && hasbinding(x) && overwrites_imported_function(bindingof(x))
+        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        if typof(sig) == CSTParser.Call
+            for i = 2:length(sig.args)
+                if hasbinding(sig.args[i]) && bindingof(sig.args[i]).type isa Binding
+                    return
+                end
+            end
+            seterror!(x, TypePiracy)
+        end
+    end
+end
+
+overwrites_imported_function(b) = false
+function overwrites_imported_function(b::Binding)
+    if b.prev isa Binding
+        if b.prev.val isa EXPR
+            # overwrites a within source bindig so lets check that
+            return overwrites_imported_function(b.prev)
+        elseif (b.prev.val isa SymbolServer.FunctionStore || b.prev.val isa SymbolServer.DataTypeStore) && parentof(b.prev.name) isa EXPR && typof(parentof(b.prev.name)) === CSTParser.Import
+            # explicitly imported, e.g. import ModuleName: somefunction
+            return true
+        end
+    elseif b.prev isa SymbolServer.FunctionStore && 
+        parentof(b.name) isa EXPR && typof(parentof(b.name)) === CSTParser.Quotenode && 
+        parentof(parentof(b.name)) isa EXPR && typof(parentof(parentof(b.name))) === CSTParser.BinaryOpCall && kindof(parentof(parentof(b.name))[2]) === CSTParser.Tokens.DOT
+        fullname = parentof(parentof(b.name))
+        # overwrites imported function by declaring full name, e.g. ModuleName.FunctionName
+        if CSTParser.isidentifier(fullname.args[1]) && refof(fullname.args[1]) isa SymbolServer.ModuleStore
+            return true
+        elseif typof(fullname.args[1]) === CSTParser.BinaryOpCall && kindof(fullname.args[1].args[2]) == CSTParser.Tokens.DOT && typof(fullname.args[1].args[3]) === CSTParser.Quotenode && refof(fullname.args[1].args[3].args[1]) isa SymbolServer.ModuleStore
+            return true
+        end
+    end
+    return false
 end

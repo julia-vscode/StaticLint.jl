@@ -182,3 +182,37 @@ function find_return_statements(x::EXPR, last_stmt , rets)
     end
     return rets, false
 end
+
+# should only be called on Bindings to functions
+function last_method(func::Binding)
+    if func.next isa Binding && func.next.type === CoreTypes.Function
+        return func.next
+    else
+        return func
+    end
+end
+
+function prev_method(func::Binding)
+    if func.prev isa Binding
+        if func.prev.type === CoreTypes.Function
+            return func.prev
+        elseif func.prev.type === CoreTypes.DataType && func.prev.val isa EXPR && CSTParser.defines_struct(func.prev.val)
+            return func.prev
+        elseif (func.prev.val isa SymbolServer.FunctionStore || func.prev.val isa SymbolServer.DataTypeStore) && length(func.prev.val.methods) > 0
+            return func.prev.val, 1
+        end
+    elseif (func.prev isa SymbolServer.FunctionStore || func.prev isa SymbolServer.DataTypeStore) && length(func.prev.methods) > 0
+        return func.prev, 1
+    end
+    return nothing
+end
+
+function prev_method(func_iter::Tuple{T,Int}) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}
+    func = func_iter[1]
+    iter = func_iter[2]
+    if iter < length(func.methods) 
+        return func, iter + 1
+    else
+        return nothing
+    end
+end
