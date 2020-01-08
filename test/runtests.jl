@@ -420,3 +420,76 @@ end
         @test !StaticLint.haserror(cst[3][4])
     end
 end
+
+@testset "check_call" begin
+    let cst = parse_and_pass("""
+        sin(1)
+        sin(1,2)
+        """)
+        StaticLint.check_call(cst[1], server)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[1]) === nothing
+        @test StaticLint.errorof(cst[2]) == StaticLint.IncorrectCallNargs
+    end
+
+    let cst = parse_and_pass("""
+        Base.sin(a,b) = 1
+        function Base.sin(a,b)
+            1
+        end
+        """)
+        StaticLint.check_call(cst[1][1], server)
+        @test StaticLint.errorof(cst[1][1]) === nothing
+        StaticLint.check_call(cst[2][2], server)
+        @test StaticLint.errorof(cst[2][2]) === nothing
+    end
+
+    let cst = parse_and_pass("""
+        f(x) = 1
+        f(1, 2)
+        """)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === StaticLint.IncorrectCallNargs
+    end
+
+    let cst = parse_and_pass("""
+        view([1], 1, 2, 3)
+        """)
+        StaticLint.check_call(cst[1], server)
+        @test StaticLint.errorof(cst[1]) === nothing
+    end
+
+    let cst = parse_and_pass("""
+        f(a...) = 1
+        f(1)
+        f(1, 2)
+        """)
+        StaticLint.check_call(cst[2], server)
+        StaticLint.check_call(cst[3], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+        @test StaticLint.errorof(cst[3]) === nothing
+    end
+end
+
+@testset "check_modulename" begin
+    let cst = parse_and_pass("""
+        module Mod1
+        module Mod11
+        end
+        end
+        module Mod2
+        module Mod2
+        end
+        end
+        """)
+        StaticLint.check_modulename(cst[1])
+        StaticLint.check_modulename(cst[1][3][1])
+        StaticLint.check_modulename(cst[2])
+        StaticLint.check_modulename(cst[2][3][1])
+        
+        @test StaticLint.errorof(cst[1][2]) === nothing
+        @test StaticLint.errorof(cst[1][3][1][2]) === nothing
+        @test StaticLint.errorof(cst[2][2]) === nothing
+        @test StaticLint.errorof(cst[2][3][1][2]) === StaticLint.InvalidModuleName
+    end
+end
