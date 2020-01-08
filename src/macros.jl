@@ -54,6 +54,9 @@ function handle_macro(x::EXPR, state)
                 end
             end
         end
+    elseif typof(x.args[1]) == CSTParser.GlobalRefDoc && length(x.args) == 3 && CSTParser.isliteral(x.args[2]) && kindof(x.args[2]) === CSTParser.Tokens.TRIPLE_STRING && isidentifier(x.args[3])
+        mark_binding!(x.args[3])
+        setref!(x.args[3], bindingof(x.args[3]))
     end
 end
 

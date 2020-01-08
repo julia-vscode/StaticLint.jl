@@ -35,9 +35,12 @@ function mark_bindings!(x::EXPR, state)
     if typof(x) === BinaryOpCall
         if kindof(x.args[2]) === CSTParser.Tokens.EQ
             if CSTParser.is_func_call(x.args[1])
-                name = CSTParser.get_name(x.args[1])
+                name = CSTParser.get_name(x)
                 mark_binding!(x)
                 mark_sig_args!(x.args[1])
+                if typof(name) === IDENTIFIER
+                    setref!(name, bindingof(x))
+                end
             elseif typof(x.args[1]) === CSTParser.Curly
                 mark_typealias_bindings!(x)
             else
