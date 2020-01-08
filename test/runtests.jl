@@ -421,6 +421,21 @@ end
     end
 end
 
+
+@testset "docs for undescribed variables" begin
+let cst = parse_and_pass("""
+    \"\"\"
+        somefunc() = true
+    \"\"\"
+    somefunc
+    somefunc() = true
+    """)
+    @test StaticLint.hasref(cst[1][3])
+    @test StaticLint.hasbinding(cst[1][3])
+    @test refof(cst[1][3]) == bindingof(cst[1][3])
+end
+end
+
 @testset "check_call" begin
     let cst = parse_and_pass("""
         sin(1)
@@ -493,3 +508,4 @@ end
         @test StaticLint.errorof(cst[2][3][1][2]) === StaticLint.InvalidModuleName
     end
 end
+
