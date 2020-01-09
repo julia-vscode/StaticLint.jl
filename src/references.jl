@@ -59,6 +59,7 @@ end
 
 function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{String}())
     hasref(x) && return true
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode && return false
     resolved = false
     if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr.args) > 1 && CSTParser.typof(scope.expr.args[2]) === IDENTIFIER
         s_m_name = scope.expr.args[2].val isa String ? scope.expr.args[2].val : ""
