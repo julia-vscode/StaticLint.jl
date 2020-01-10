@@ -64,10 +64,7 @@ function (state::State)(x::EXPR)
     mark_globals(x, state)
     handle_macro(x, state)
     s0 = scopes(x, state)
-    resolved = resolve_ref(x, state.scope, state)
-    if !resolved && (state.delayed || isglobal(valof(x), state.scope))
-        push!(state.urefs, x)
-    end
+    _resolve_ref(x, state)
     followinclude(x, state)
 
     traverse(x, state)
