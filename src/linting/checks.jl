@@ -15,8 +15,7 @@ MissingFile,
 InvalidModuleName,
 TypePiracy)
 
-const LintCodeDescriptions = Dict{LintCodes,String}(
-    IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
+const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
     NothingEquality => "Compare against `nothing` using `===`",
     NothingNotEq => "Compare against `nothing` using `!==`",
@@ -29,8 +28,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     IncludeLoop => "Loop detected, this file has already been included.",
     MissingFile => "The included file can not be found.",
     InvalidModuleName => "Module name matches that of its parent.",
-    TypePiracy => "An imported function has been extended without using module defined typed arguments."
-)
+    TypePiracy => "An imported function has been extended without using module defined typed arguments.")
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)

@@ -133,7 +133,7 @@ function followinclude(x, state::State)
             path = joinpath(dirname(getpath(state.file)), path)
         elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
             path = joinpath(dirname(getpath(state.file)), path)
-            loadfile(state.server, path,)
+            loadfile(state.server, path)
         else
             path = ""
         end

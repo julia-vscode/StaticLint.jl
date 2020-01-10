@@ -8,8 +8,8 @@ end
 Scope(expr) = Scope(nothing, expr, Dict{String,Binding}(), nothing, typof(expr) === CSTParser.ModuleH || typof(expr) === CSTParser.BareModule)
 function Base.show(io::IO, s::Scope)
     printstyled(io, typof(s.expr))
-    printstyled(io, " ", join(keys(s.names), ","),color = :yellow)
-    s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","),color = :blue)
+    printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
+    s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color = :blue)
     println(io)
 end 
 
@@ -26,7 +26,7 @@ function introduces_scope(x::EXPR, state)
             return false
         end
     elseif typof(x) === CSTParser.WhereOpCall
-        #unless in func def signature
+        # unless in func def signature
         return !_in_func_def(x)
     elseif typof(x) === CSTParser.FunctionDef ||
             typof(x) === CSTParser.Macro ||
