@@ -62,7 +62,7 @@ function mark_bindings!(x::EXPR, state)
             markiterbinding!(x.args[i])
         end
     elseif typof(x) === CSTParser.Filter
-        for i = 1:length(x.args)-2
+        for i = 1:length(x.args) - 2
             typof(x.args[i]) === PUNCTUATION && continue
             markiterbinding!(x.args[i])
         end
@@ -144,7 +144,7 @@ function mark_binding!(x::EXPR, val = x)
         mark_binding!(CSTParser.rem_invis(x), val)
     elseif typof(x) == UnaryOpCall && kindof(x.args[1]) === CSTParser.Tokens.DECLARATION
         return x
-    else#if typof(x) === IDENTIFIER || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DECLARATION)
+    else# if typof(x) === IDENTIFIER || (typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DECLARATION)
         if !hasmeta(x)
             x.meta = Meta()
         end
@@ -324,7 +324,7 @@ function mark_globals(x, state)
     if typof(x) === CSTParser.Global
         if !haskey(state.scope.names, "#globals")
             
-            state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER,EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
+            state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
         end
         if x.args isa Vector{EXPR}
             for i = 2:length(x.args)

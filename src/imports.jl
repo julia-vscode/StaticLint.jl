@@ -22,16 +22,16 @@ function resolve_import(x, state::State)
                 par = root
             elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
                 root = par
-                if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
-                    setref!(x.args[i-1], par)
+                if par !== nothing && i > 2 && isidentifier(x.args[i - 1]) && refof(x.args[i - 1]) === nothing
+                    setref!(x.args[i - 1], par)
                 end
             elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.DOT
-                #dot between identifiers
-                if par !== nothing && i > 2 && isidentifier(x.args[i-1]) && refof(x.args[i-1]) === nothing
-                    setref!(x.args[i-1], par)
+                # dot between identifiers
+                if par !== nothing && i > 2 && isidentifier(x.args[i - 1]) && refof(x.args[i - 1]) === nothing
+                    setref!(x.args[i - 1], par)
                 end
             elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.DOT
-                #dot prexceding identifiser
+                # dot prexceding identifiser
                 if par == root == getsymbolserver(state.server)
                     par = state.scope
                 elseif par isa Scope && parentof(par) !== nothing
@@ -52,7 +52,7 @@ end
 
 function _mark_import_arg(arg, par, state, u)
     if par !== nothing && (typof(arg) === IDENTIFIER || typof(arg) === MacroName)
-        if par isa Binding #mark reference to binding
+        if par isa Binding # mark reference to binding
             push!(par.refs, arg)
         end
         if bindingof(arg) === nothing
@@ -92,7 +92,7 @@ end
 
 
 function _get_field(par, arg, state)
-    if par isa Dict{String, SymbolServer.ModuleStore} #package store
+    if par isa Dict{String,SymbolServer.ModuleStore} # package store
         if haskey(par, CSTParser.str_value(arg))
             return par[CSTParser.str_value(arg)]
         end

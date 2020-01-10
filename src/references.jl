@@ -13,6 +13,16 @@ function setref!(x::EXPR, binding)
     x.meta.ref = binding
 end
 
+# Main function to be called
+function _resolve_ref(x, state)
+    if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
+        resolved = resolve_ref(x, state.scope, state)
+        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
+            push!(state.urefs, x)
+        end
+    end
+end
+
 function resolve_ref(x::EXPR, m, state::State, visited_scopes = 0)
     return hasref(x)
 end
@@ -59,6 +69,7 @@ end
 
 function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{String}())
     hasref(x) && return true
+
     resolved = false
     if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr.args) > 1 && CSTParser.typof(scope.expr.args[2]) === IDENTIFIER
         s_m_name = scope.expr.args[2].val isa String ? scope.expr.args[2].val : ""

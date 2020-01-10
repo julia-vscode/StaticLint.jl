@@ -81,8 +81,8 @@ function Base.display(s::FileServer)
     n = length(s.files)
     println(n, "-file Server")
     cnt = 0
-    for (p,f) in s.files
-        cnt+=1
+    for (p, f) in s.files
+        cnt += 1
         println(" ", p)
         cnt > 10 && break
     end

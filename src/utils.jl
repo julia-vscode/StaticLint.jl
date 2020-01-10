@@ -162,7 +162,7 @@ function find_return_statements(x::EXPR)
     return rets
 end
 
-function find_return_statements(x::EXPR, last_stmt , rets)
+function find_return_statements(x::EXPR, last_stmt, rets)
     if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
         push!(rets, x)
         return rets, false
