@@ -555,4 +555,5 @@ if !(VERSION < v"1.3")
         @test StaticLint.hasref(cst[6])
     end
 end
+end
 
