@@ -538,3 +538,25 @@ end
     end
 end
 
+@testset "non-std var syntax" begin
+    let cst = parse_and_pass("""
+        var"name" = 1
+        var"func"(arg) = arg
+        function var"func1"() end
+        name
+        func
+        func1
+        """)
+        StaticLint.collect_hints(cst)
+        @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
+        @test StaticLint.hasref(cst[4])
+        @test StaticLint.hasref(cst[5])
+        @test StaticLint.hasref(cst[6])
+    end
+    let cst = parse_and_pass("""
+        var"name" = 1
+        """)
+        @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
+    end
+end
+

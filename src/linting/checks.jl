@@ -416,7 +416,8 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
         # collect parse errors
         push!(errs, (pos, x))
     elseif !isquoted
-        if missing && CSTParser.isidentifier(x) && !hasref(x)
+        if missing && CSTParser.isidentifier(x) && !hasref(x) && !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER)
+            
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
             # collect lint hints
