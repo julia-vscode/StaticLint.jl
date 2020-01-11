@@ -553,10 +553,5 @@ end
         @test StaticLint.hasref(cst[5])
         @test StaticLint.hasref(cst[6])
     end
-    let cst = parse_and_pass("""
-        var"name" = 1
-        """)
-        @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
-    end
 end
 
