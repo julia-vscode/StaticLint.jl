@@ -83,8 +83,14 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{S
     if typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT
         return resolve_getindex(x, scope, state)
     elseif isidentifier(x)
-        mn = valof(x)
-        x1 = x
+        if typof(x) === IDENTIFIER
+            mn = valof(x)
+            x1 = x
+        else
+            # NONSTDIDENTIFIER, e.g. var"name"
+            mn = valof(x.args[2])
+            x1 = x
+        end
         if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
             setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
             return true
