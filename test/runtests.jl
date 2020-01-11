@@ -538,6 +538,7 @@ end
     end
 end
 
+if !(VERSION < v"1.3")
 @testset "non-std var syntax" begin
     let cst = parse_and_pass("""
         var"name" = 1
