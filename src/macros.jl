@@ -62,11 +62,52 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(ex)
                 end
             end
+        elseif _points_to_arbitrary_macro(x.args[1], "JuMP", "variable", state)
+            if length(x.args) < 3
+                return
+            elseif typof(x.args[2]) === PUNCTUATION
+                _mark_JuMP_binding(x.args[5])
+            else
+                _mark_JuMP_binding(x.args[3])
+            end
+        elseif (_points_to_arbitrary_macro(x.args[1], "JuMP", "expression", state) || 
+            _points_to_arbitrary_macro(x.args[1], "JuMP", "NLexpression", state) ||
+            _points_to_arbitrary_macro(x.args[1], "JuMP", "constraint", state) || _points_to_arbitrary_macro(x.args[1], "JuMP", "NLconstraint", state)) && length(x.args) > 1
+            if typof(x.args[2]) === PUNCTUATION 
+                if length(x.args) == 8
+                    _mark_JuMP_binding(x.args[5])
+                end
+            else
+                if length(x.args) == 4
+                    _mark_JuMP_binding(x.args[3])
+                end
+            end
         end
     elseif typof(x.args[1]) == CSTParser.GlobalRefDoc && length(x.args) == 3 && CSTParser.isliteral(x.args[2]) && kindof(x.args[2]) === CSTParser.Tokens.TRIPLE_STRING && isidentifier(x.args[3])
         mark_binding!(x.args[3])
         setref!(x.args[3], bindingof(x.args[3]))
     end
+end
+
+function _rem_ref(x::EXPR)
+    if typof(x) === CSTParser.Ref && x.args isa Vector{EXPR} && length(x.args) > 0
+        return x.args[1]
+    end
+    return x
+end
+
+function _mark_JuMP_binding(arg)
+    if CSTParser.isidentifier(arg) || typof(arg) === CSTParser.Ref
+        mark_binding!(_rem_ref(arg))
+    elseif _binary_assert(arg, CSTParser.Tokens.EQEQ) || _binary_assert(arg, CSTParser.Tokens.LESS_EQ)  || _binary_assert(arg, CSTParser.Tokens.GREATER_EQ)
+        if CSTParser.isidentifier(arg.args[1]) || typof(arg.args[1]) === CSTParser.Ref
+            mark_binding!(_rem_ref(arg.args[1]))
+        else
+            mark_binding!(_rem_ref(arg.args[3]))
+        end
+    elseif typof(arg) === CSTParser.Comparison && arg.args isa Vector{EXPR} && length(arg.args) == 5
+        mark_binding!(_rem_ref(arg.args[3]))
+    end 
 end
 
 
