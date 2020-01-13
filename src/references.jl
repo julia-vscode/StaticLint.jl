@@ -79,7 +79,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{S
             push!(visited_scopes, s_m_name)
         end
     end
-    
+
     if typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT
         return resolve_getindex(x, scope, state)
     elseif isidentifier(x)
@@ -115,7 +115,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{S
     else
         return false
     end
-    
+
     if haskey(scope.names, mn)
         setref!(x1, scope.names[mn])
         resolved = true
@@ -174,7 +174,7 @@ function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)
         if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
             resolved = resolve_ref(x, scopeof(parent_type), state)
         elseif CSTParser.defines_struct(parent_type)
-            if haskey(scopeof(parent_type).names, valof(x)) 
+            if haskey(scopeof(parent_type).names, valof(x))
                 setref!(x, scopeof(parent_type).names[valof(x)])
                 resolved = true
             end

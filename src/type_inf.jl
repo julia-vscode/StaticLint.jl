@@ -42,7 +42,7 @@ function infer_type(binding::Binding, scope, state)
                 end
                 if typof(t) === CSTParser.BinaryOpCall && kindof(t.args[2]) === CSTParser.Tokens.DOT && t.args[3].args isa Vector && length(t.args[3].args) > 0
                     t = t.args[3].args[1]
-                end             
+                end
 
                 if refof(t) isa Binding
                     rb = get_root_method(refof(t), state.server)

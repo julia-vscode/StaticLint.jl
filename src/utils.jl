@@ -8,7 +8,7 @@ function get_ids(x, q = false, ids = [])
     if q && unquoted(x)
         q = false
     end
-    if isidentifier(x) 
+    if isidentifier(x)
         !q && push!(ids, x)
     elseif x.args !== nothing
         for i in 1:length(x.args)
@@ -90,7 +90,7 @@ function clear_ref(x::EXPR)
     end
 end
 function clear_error(x::EXPR)
-    if hasmeta(x) && x.meta.error !== nothing 
+    if hasmeta(x) && x.meta.error !== nothing
         x.meta.error = nothing
     end
 end
@@ -150,7 +150,7 @@ function retrieve_scope(x)
     elseif parentof(x) isa EXPR
         return retrieve_scope(parentof(x))
     end
-    return 
+    return
 end
 
 
@@ -166,7 +166,7 @@ function find_return_statements(x::EXPR, last_stmt, rets)
     if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
         push!(rets, x)
         return rets, false
-    end 
+    end
 
     if typof(x) === CSTParser.Return
         push!(rets, x)
@@ -191,7 +191,7 @@ end
 function _binary_assert(x, kind)
     typof(x) === CSTParser.BinaryOpCall && x.args isa Vector{EXPR} && length(x.args) == 3 && typof(x.args[2]) === CSTParser.OPERATOR && kindof(x.args[2]) === kind
 end
-    
+
 # should only be called on Bindings to functions
 function last_method(func::Binding)
     if func.next isa Binding && func.next.type === CoreTypes.Function
@@ -219,7 +219,7 @@ end
 function prev_method(func_iter::Tuple{T,Int}) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}
     func = func_iter[1]
     iter = func_iter[2]
-    if iter < length(func.methods) 
+    if iter < length(func.methods)
         return func, iter + 1
     else
         return nothing
@@ -230,7 +230,7 @@ function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
     for i in 1:length(x.args[3].args)
         expr = x.args[3].args[i]
-        if typof(expr) == CSTParser.Export && 
+        if typof(expr) == CSTParser.Export &&
             for j = 2:length(expr)
                 if CSTParser.isidentifier(expr.args[j]) && StaticLint.hasref(expr.args[j])
                     push!(exported_vars, expr.args[j])

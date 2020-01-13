@@ -3,7 +3,7 @@ function resolve_import(x, state::State)
         u = typof(x) === Using
         i = 2
         n = length(x.args)
-        
+
         root = par = getsymbolserver(state.server)
         bindings = []
         while i <= length(x.args)
@@ -42,7 +42,7 @@ function resolve_import(x, state::State)
             else
                 return
             end
-            if i == n 
+            if i == n
                 _mark_import_arg(x.args[i], par, state, u)
             end
             i += 1
@@ -67,7 +67,7 @@ function _mark_import_arg(arg, par, state, u)
             else
                 state.scope.modules = Dict(valof(arg) => par)
             end
-        elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore 
+        elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore
             if state.scope.modules isa Dict
                 state.scope.modules[valof(arg)] = par.val
             else
@@ -85,7 +85,7 @@ function _mark_import_arg(arg, par, state, u)
             else
                 state.scope.modules = Dict(valof(arg) => scopeof(par.val.val))
             end
-            
+
         end
     end
 end
@@ -100,7 +100,7 @@ function _get_field(par, arg, state)
         if haskey(par.names, valof(arg))
             return par.names[valof(arg)]
         end
-    elseif par isa Binding 
+    elseif par isa Binding
         if par.val isa Binding
             par = par.val
         end

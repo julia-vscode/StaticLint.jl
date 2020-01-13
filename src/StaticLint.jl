@@ -54,7 +54,7 @@ end
 
 function (state::State)(x::EXPR)
     delayed = state.delayed # store states
-    
+
     resolve_import(x, state)
     if typof(x) === Export # Allow delayed resolution
         state.delayed = true

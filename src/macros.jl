@@ -53,8 +53,8 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(x.args[i], x)
                 end
             end
-        elseif _points_to_arbitrary_macro(x.args[1], "Turing", "model", state) && length(x.args) == 2 && 
-            _binary_assert(x.args[2], CSTParser.Tokens.EQ) && 
+        elseif _points_to_arbitrary_macro(x.args[1], "Turing", "model", state) && length(x.args) == 2 &&
+            _binary_assert(x.args[2], CSTParser.Tokens.EQ) &&
             _expr_assert(x.args[2].args[3], CSTParser.Begin, 3) && typof(x.args[2].args[3].args[2]) === CSTParser.Block && x.args[2].args[3].args[2].args isa Vector{EXPR}
             for i = 1:length(x[2][3][2].args)
                 ex = x[2][3][2][i]
@@ -70,10 +70,10 @@ function handle_macro(x::EXPR, state)
             else
                 _mark_JuMP_binding(x.args[3])
             end
-        elseif (_points_to_arbitrary_macro(x.args[1], "JuMP", "expression", state) || 
+        elseif (_points_to_arbitrary_macro(x.args[1], "JuMP", "expression", state) ||
             _points_to_arbitrary_macro(x.args[1], "JuMP", "NLexpression", state) ||
             _points_to_arbitrary_macro(x.args[1], "JuMP", "constraint", state) || _points_to_arbitrary_macro(x.args[1], "JuMP", "NLconstraint", state)) && length(x.args) > 1
-            if typof(x.args[2]) === PUNCTUATION 
+            if typof(x.args[2]) === PUNCTUATION
                 if length(x.args) == 8
                     _mark_JuMP_binding(x.args[5])
                 end
@@ -107,7 +107,7 @@ function _mark_JuMP_binding(arg)
         end
     elseif typof(arg) === CSTParser.Comparison && arg.args isa Vector{EXPR} && length(arg.args) == 5
         mark_binding!(_rem_ref(arg.args[3]))
-    end 
+    end
 end
 
 

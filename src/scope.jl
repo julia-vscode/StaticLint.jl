@@ -11,7 +11,7 @@ function Base.show(io::IO, s::Scope)
     printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
     s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color = :blue)
     println(io)
-end 
+end
 
 
 function introduces_scope(x::EXPR, state)
@@ -33,7 +33,7 @@ function introduces_scope(x::EXPR, state)
             typof(x) === CSTParser.For ||
             typof(x) === CSTParser.While ||
             typof(x) === CSTParser.Let ||
-            typof(x) === CSTParser.Generator || # and Flatten? 
+            typof(x) === CSTParser.Generator || # and Flatten?
             typof(x) === CSTParser.Try ||
             typof(x) === CSTParser.Do ||
             typof(x) === CSTParser.ModuleH ||
@@ -89,5 +89,5 @@ function scopes(x::EXPR, state)
             setscope!(x.args[1].args[1], nothing)
         end
     end
-    return s0    
+    return s0
 end

@@ -9,8 +9,8 @@ end
 Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothing)
 
 function Base.show(io::IO, b::Binding)
-    printstyled(io, "Binding(", Expr(b.name), 
-        b.type === nothing ? "" : ":: ", 
+    printstyled(io, "Binding(", Expr(b.name),
+        b.type === nothing ? "" : ":: ",
         b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color = :blue)
 end
 
@@ -92,9 +92,9 @@ function mark_bindings!(x::EXPR, state)
             setref!(name, bindingof(x))
         end
         mark_sig_args!(CSTParser.get_sig(x))
-    elseif typof(x) === CSTParser.Try && length(x.args) > 3 
+    elseif typof(x) === CSTParser.Try && length(x.args) > 3
         mark_binding!(x.args[4])
-    elseif typof(x) === CSTParser.Abstract || typof(x) === CSTParser.Primitive 
+    elseif typof(x) === CSTParser.Abstract || typof(x) === CSTParser.Primitive
         name = CSTParser.get_name(x)
         x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
         if typof(name) === IDENTIFIER
@@ -125,7 +125,7 @@ function mark_bindings!(x::EXPR, state)
                 end
             end
         end
-        
+
     end
 end
 
@@ -135,7 +135,7 @@ function mark_binding!(x::EXPR, val = x)
         mark_binding!(x.args[1], x)
     elseif typof(x) === CSTParser.TupleH || typof(x) === Parameters
         for arg in x.args
-            typof(arg) === PUNCTUATION && continue    
+            typof(arg) === PUNCTUATION && continue
             mark_binding!(arg, val)
         end
     elseif typof(x) === CSTParser.BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DECLARATION && typof(x.args[1]) === CSTParser.TupleH
@@ -231,7 +231,7 @@ end
 
 function _in_func_def(x::EXPR)
     # only called in WhereOpCall
-    
+
     # check 1st arg contains a call (or op call)
     ex = x.args[1]
     while true
@@ -325,7 +325,7 @@ isglobal(name::String, scope) = haskey(scope.names, "#globals") && name in scope
 function mark_globals(x, state)
     if typof(x) === CSTParser.Global
         if !haskey(state.scope.names, "#globals")
-            
+
             state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
         end
         if x.args isa Vector{EXPR}
