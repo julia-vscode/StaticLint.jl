@@ -620,3 +620,16 @@ let cst = parse_and_pass("""
 end
 end
 end
+
+@testset "stdcall" begin
+    let cst = parse_and_pass("""
+        ccall(:GetCurrentProcess, stdcall, Ptr{Cvoid}, ())""")
+        StaticLint.collect_hints(cst)
+        @test isempty(StaticLint.collect_hints(cst))
+    end
+    let cst = parse_and_pass("""
+        stdcall
+        """)
+        @test !StaticLint.hasref(cst[1])
+    end
+end
