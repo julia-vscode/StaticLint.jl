@@ -416,8 +416,9 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
         # collect parse errors
         push!(errs, (pos, x))
     elseif !isquoted
-        if missing && CSTParser.isidentifier(x) && !hasref(x) && !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER)
-            
+        if missing && CSTParser.isidentifier(x) && !hasref(x) && 
+            !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER) &&
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->typof(x) === CSTParser.Call && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
             # collect lint hints
