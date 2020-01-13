@@ -225,3 +225,44 @@ function prev_method(func_iter::Tuple{T,Int}) where T <: Union{SymbolServer.Func
         return nothing
     end
 end
+
+function find_exported_names(x::EXPR)
+    exported_vars = EXPR[]
+    for i in 1:length(x.args[3].args)
+        expr = x.args[3].args[i]
+        if typof(expr) == CSTParser.Export && 
+            for j = 2:length(expr)
+                if CSTParser.isidentifier(expr.args[j]) && StaticLint.hasref(expr.args[j])
+                    push!(exported_vars, expr.args[j])
+                end
+            end
+        end
+    end
+    return exported_vars
+end
+
+"""
+    is_in_fexpr(x::EXPR, f)
+Check whether `x` isa the child of an expression for which `f(parent) == true`.
+"""
+function is_in_fexpr(x::EXPR, f)
+    if f(x)
+        return true
+    elseif parentof(x) isa EXPR
+        return is_in_fexpr(parentof(x), f)
+    else
+        return false
+    end
+end
+
+"""
+    get_in_fexpr(x::EXPR, f)
+Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
+"""
+function get_parent_fexpr(x::EXPR, f)
+    if f(x)
+        return x
+    elseif parentof(x) isa EXPR
+        return get_parent_fexpr(parentof(x), f)
+    end
+end
