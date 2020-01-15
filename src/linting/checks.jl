@@ -55,6 +55,7 @@ end
 function struct_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     args = typof(x) === CSTParser.Mutable ? x.args[4] : x.args[3]
+    args.args === nothing && return
     inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args.args[inner_constructor])
