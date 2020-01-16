@@ -150,7 +150,11 @@ function call_nargs(x::EXPR)
 end
 
 function compare_f_call(m_counts, call_counts)
-    !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
+    if call_counts[2] == Inf
+        m_counts[1] < call_counts[1] && return false
+    else
+        !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
+    end
     if !m_counts[4] # no splatted kw in method sig
         length(call_counts[3]) > length(m_counts[3]) && return false # call has more kws than method accepts
         !all(kw in m_counts[3] for kw in call_counts[3]) && return false # call supplies a kw that isn't defined in the method
