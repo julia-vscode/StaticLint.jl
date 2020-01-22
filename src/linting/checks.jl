@@ -5,6 +5,7 @@ IncorrectIterSpec,
 NothingEquality,
 NothingNotEq,
 ConstIfCondition,
+EqInIfConditional,
 PointlessOR,
 PointlessAND,
 UnusedBinding,
@@ -20,6 +21,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallNargs => "An in
     NothingEquality => "Compare against `nothing` using `===`",
     NothingNotEq => "Compare against `nothing` using `!==`",
     ConstIfCondition => "A boolean literal has been used as the conditional of an if statement - it will either always or never run.",
+    EqInIfConditional => "Unbracketed assignment in if conditional statements is not allowed, did you mean to use ==?",
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
     UnusedBinding => "The variable name has been bound but not used.",
@@ -312,6 +314,8 @@ function check_if_conds(x::EXPR)
         cond = typof(first(x.args)) == CSTParser.KEYWORD ? x.args[2] : x.args[1]
         if typof(cond) === CSTParser.LITERAL && (kindof(cond) === CSTParser.Tokens.TRUE || kindof(cond) === CSTParser.Tokens.FALSE)
             seterror!(cond, ConstIfCondition)
+        elseif _binary_assert(x, CSTParser.Tokens.EQ)
+            seterror!(x, EqInIfConditional)
         end
     end
 end

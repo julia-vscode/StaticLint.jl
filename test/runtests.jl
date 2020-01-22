@@ -640,3 +640,30 @@ end
         @test !StaticLint.hasref(cst[1])
     end
 end
+
+@testset "check_if_conds" begin
+    let cst = parse_and_pass("""
+        if true end
+        """)
+        StaticLint.check_if_conds(cst[1])
+        @test cst[1][2].meta.error == StaticLint.ConstIfCondition
+    end
+    let cst = parse_and_pass("""
+        if x = 1 end
+        """)
+        StaticLint.check_if_conds(cst[1])
+        @test cst[1][2].meta.error == StaticLint.EqInIfConditional
+    end
+    let cst = parse_and_pass("""
+        if a || x = 1 end
+        """)
+        StaticLint.check_if_conds(cst[1])
+        @test cst[1][2].meta.error == StaticLint.EqInIfConditional
+    end
+    let cst = parse_and_pass("""
+        if x = 1 && b end
+        """)
+        StaticLint.check_if_conds(cst[1])
+        @test cst[1][2].meta.error == StaticLint.EqInIfConditional
+    end
+end
