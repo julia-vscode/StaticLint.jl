@@ -150,7 +150,7 @@ function followinclude(x, state::State)
             state(getcst(state.file))
             state.file = oldfile
             pop!(state.included_files)
-        else
+        elseif !is_in_fexpr(x, CSTParser.defines_function)
             seterror!(x, MissingFile)
         end
     end
