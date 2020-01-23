@@ -237,7 +237,7 @@ function _in_func_def(x::EXPR)
     while true
         if typof(ex) === WhereOpCall || (typof(ex) === BinaryOpCall && kindof(ex.args[2]) === CSTParser.Tokens.DECLARATION)
             ex = ex.args[1]
-        elseif typof(ex) === Call || (typof(ex) === BinaryOpCall && !(kindof(ex.args[2]) === CSTParser.Tokens.DOT))
+        elseif typof(ex) === Call || (typof(ex) === BinaryOpCall && !(kindof(ex.args[2]) === CSTParser.Tokens.DOT)) || typof(ex) == CSTParser.UnaryOpCall #&& kindof(ex.args[1]) == CSTParser.Tokens.MINUS
             break
         else
             return false
