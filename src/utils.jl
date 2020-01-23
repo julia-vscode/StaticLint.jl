@@ -266,3 +266,18 @@ function get_parent_fexpr(x::EXPR, f)
         return get_parent_fexpr(parentof(x), f)
     end
 end
+
+hasreadperm(p::String) = (uperm(p) & 0x04) == 0x04
+
+# check whether a path is in (including subfolders) the julia base dir. Returns "" if not, and the path to the base dir if so.
+function _is_in_basedir(path::AbstractString)
+    i = findfirst(r".*base", path)
+    i == nothing && return ""
+    path1 = path[i]
+    !hasreadperm(path1) && return ""
+    !isdir(path1) && return ""
+    files = readdir(path1)
+    if all(f -> f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
+        return path1
+    end
+end
