@@ -57,7 +57,7 @@ end
 function struct_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     args = typof(x) === CSTParser.Mutable ? x.args[4] : x.args[3]
-    args.args === nothing && return
+    args.args === nothing && return 0, typemax(Int), kws, kwsplat
     inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args.args[inner_constructor])
@@ -73,29 +73,37 @@ function func_nargs(x::EXPR)
     if sig.args isa Vector{EXPR}
         for i = 2:length(sig.args)
             arg = sig.args[i]
-            if typof(sig.args[i]) === CSTParser.PUNCTUATION
+            if typof(arg) === CSTParser.MacroCall && arg.args isa Vector{EXPR} && length(arg.args) > 1 &&
+                _expr_assert(arg.args[1], MacroName, 2) && valof(arg.args[1].args[2]) == "nospecialize"
+                if length(arg.args) == 2
+                    arg = arg.args[2]
+                end
+            end
+            if typof(arg) === CSTParser.PUNCTUATION
                 # skip
-            elseif typof(sig.args[i]) === CSTParser.Parameters
-                for j = 1:length(sig.args[i])
-                    arg = sig.args[i].args[j]
-                    if typof(arg) === CSTParser.Kw
-                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
-                    elseif typof(arg) === CSTParser.BinaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
+            elseif typof(arg) === CSTParser.Parameters
+                for j = 1:length(arg)
+                    arg1 = arg.args[j]
+                    if typof(arg1) === CSTParser.Kw
+                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1])))
+                    elseif typof(arg1) === CSTParser.BinaryOpCall && kindof(arg1.args[2]) === CSTParser.Tokens.DDDOT
                         kwsplat = true
                     end
                 end
             elseif typof(arg) === CSTParser.Kw
                 if typof(arg.args[1]) === UnaryOpCall && kindof(arg.args[1].args[2]) === CSTParser.Tokens.DDDOT
-                    maxargs += Inf
+                    maxargs = typemax(Int)
                 else
-                    maxargs += 1
+                    maxargs !== typemax(Int) && (maxargs += 1)
                 end
-            elseif typof(arg) === UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
-                maxargs += Inf
+            elseif (typof(arg) === UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT) ||
+                (_binary_assert(arg, CSTParser.Tokens.DECLARATION) &&
+                ((typof(arg.args[3]) === CSTParser.IDENTIFIER && valof(arg.args[3]) == "Vararg") ||
+                (typof(arg.args[3]) === CSTParser.Curly && typof(arg.args[3].args[1]) === CSTParser.IDENTIFIER && valof(arg.args[3].args[1]) == "Vararg")))
+                maxargs = typemax(Int)
             else
                 minargs += 1
-                maxargs += 1
-                
+                maxargs !== typemax(Int) && (maxargs += 1)
             end
         end
     end
@@ -112,10 +120,10 @@ function func_nargs(m::SymbolServer.MethodStore)
                 push!(kws, first(a))
             end
         elseif startswith(last(a), "Vararg") || endswith(first(a), "...") || endswith(last(a), "...")
-            maxargs += Inf
+            maxargs = typemax(Int)
         else
             minargs += 1
-            maxargs += 1
+            maxargs !== typemax(Int) && (maxargs += 1)
         end
     end
     return minargs, maxargs, kws, kwsplat
@@ -138,10 +146,10 @@ function call_nargs(x::EXPR)
             elseif typof(arg) === CSTParser.Kw
                 push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
             elseif typof(arg) === CSTParser.UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
-                maxargs += Inf
+                maxargs = typemax(Int)
             else
                 minargs += 1
-                maxargs += 1
+                maxargs !== typemax(Int) && (maxargs += 1)
             end
         end
     else
@@ -151,9 +159,11 @@ function call_nargs(x::EXPR)
     return minargs, maxargs, kws
 end
 
-function compare_f_call(m_counts, call_counts)
-    if call_counts[2] == Inf
-        m_counts[1] < call_counts[1] && return false
+# compare_f_call(m_counts, call_counts) = true # fallback method
+
+function compare_f_call(m_counts::Tuple{Int,Int,Array{String},Bool}, call_counts::Tuple{Int,Int,Array{String}})
+    if call_counts[2] == typemax(Int)
+        call_counts[1] <= call_counts[2] < m_counts[1] && return false
     else
         !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
     end
@@ -167,6 +177,7 @@ end
 
 function check_call(x, server)
     if typof(x) === Call
+        parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Do && return # TODO: add number of args specified in do block.
         if typof(first(x.args)) === IDENTIFIER && hasref(first(x.args))
             func_ref = refof(first(x.args))
         elseif typof(first(x)) === BinaryOpCall && kindof(first(x).args[2]) === CSTParser.Tokens.DOT && typof(first(last(first(x)))) === IDENTIFIER && hasref(first(last(first(x))))
@@ -205,7 +216,7 @@ function check_call(x, server)
                     end
                 elseif b.type == CoreTypes.Function
                     m_counts = func_nargs(b.val)
-                elseif b.type == CoreTypes.DataType
+                elseif b.type == CoreTypes.DataType && CSTParser.defines_struct(b.val)
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
                     for m in b.val.methods
