@@ -166,6 +166,8 @@ end
 f(arg) = arg
 """) == [1, 1, 1]
 
+@test check_resolved("-(r::T) where T = r") == [1, 1, 1, 1]
+
 @testset "inference" begin
     @test bindingof(parse_and_pass("f(arg) = arg")[1]).type == StaticLint.CoreTypes.Function
     @test bindingof(parse_and_pass("function f end")[1]).type == StaticLint.CoreTypes.Function
@@ -518,7 +520,49 @@ end
         end
         """)
         StaticLint.check_call(cst[1][3][1], server)
+        m_counts = StaticLint.func_nargs(cst[1])
+        call_counts = StaticLint.call_nargs(cst[1][3][1])
         @test StaticLint.errorof(cst[1][3][1]) === nothing
+    end
+    let cst = parse_and_pass("""
+        function func(@nospecialize args...) end
+        func(1, 2)
+        """)
+        @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+    end
+    let cst = parse_and_pass("""
+        argtail(x, rest...) = 1
+        tail(x::Tuple) = argtail(x...)
+        """)
+        @test StaticLint.func_nargs(cst[1]) == (1, typemax(Int), String[], false)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+    end
+    let cst = parse_and_pass("""
+        func(arg::Vararg{T,N}) where N = arg
+        func(a,b)
+        """)
+
+        @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+    end
+    let cst = parse_and_pass("""
+        function f(a, b; kw = kw) end
+        f(1,2, kw = 1)
+        """)
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+    end
+    let cst = parse_and_pass("""
+        func(a,b,c,d) = 1
+        func(a..., 2)
+        """)
+        StaticLint.call_nargs(cst[2])
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === nothing
     end
 end
 
