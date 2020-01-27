@@ -103,19 +103,21 @@ function get_path(x::EXPR, state)
         elseif typof(parg) === x_Str && length(parg.args) == 2 && CSTParser.isidentifier(parg.args[1]) && valof(parg.args[1]) == "raw" && typof(parg.args[2]) === CSTParser.LITERAL && (kindof(parg.args[2]) == CSTParser.Tokens.STRING || kindof(parg.args[2]) == CSTParser.Tokens.TRIPLE_STRING)
             return normpath(CSTParser.str_value(parg.args[2]))
         elseif typof(parg) === Call && typof(parg.args[1]) === IDENTIFIER && CSTParser.str_value(parg.args[1]) == "joinpath"
-            path = ""
+            path_elements = String[]
+
             for i = 2:length(parg.args)
                 arg = parg.args[i]
                 if typof(arg) === PUNCTUATION
                 elseif _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
-                    path = string(path, "/", dirname(getpath(state.file)))
+                    push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.is_lit_string(arg)
-                    path = string(path, "/", CSTParser.str_value(arg))
+                    push!(path_elements, string(CSTParser.str_value(arg)))
                 else
                     return ""
                 end
             end
-            return normpath(path)
+            path = normpath(joinpath(path_elements...))
+            return path
         end
     end
     return ""
