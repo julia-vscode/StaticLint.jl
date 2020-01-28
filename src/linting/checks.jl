@@ -178,9 +178,10 @@ end
 function check_call(x, server)
     if typof(x) === Call
         parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Do && return # TODO: add number of args specified in do block.
+        x.args === nothing || isempty(x.args) && return
         if typof(first(x.args)) === IDENTIFIER && hasref(first(x.args))
             func_ref = refof(first(x.args))
-        elseif typof(first(x)) === BinaryOpCall && kindof(first(x).args[2]) === CSTParser.Tokens.DOT && typof(first(last(first(x)))) === IDENTIFIER && hasref(first(last(first(x))))
+        elseif _binary_assert(first(x), CSTParser.Tokens.DOT) && typof(first(x).args[3]) === CSTParser.Quotenode && first(x).args[3].args !== nothing && !isempty(first(x).args[3].args) && typof(first(x).args[3].args[1]) === IDENTIFIER && hasref(first(x).args[3].args[1])
             func_ref = refof(first(last(first(x.args).args)))
         else
             return
@@ -484,12 +485,18 @@ function check_for_pirates(x::EXPR)
     end
 end
 
-overwrites_imported_function(b) = false
-function overwrites_imported_function(b::Binding)
+overwrites_imported_function(b, visited_bindings = Binding[]) = false
+function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
+    if b in visited_bindings
+        return false
+    else
+        push!(visited_bindings, b)
+    end
+
     if b.prev isa Binding
         if b.prev.val isa EXPR
             # overwrites a within source bindig so lets check that
-            return overwrites_imported_function(b.prev)
+            return overwrites_imported_function(b.prev, visited_bindings)
         elseif (b.prev.val isa SymbolServer.FunctionStore || b.prev.val isa SymbolServer.DataTypeStore) && parentof(b.prev.name) isa EXPR && typof(parentof(b.prev.name)) === CSTParser.Import
             # explicitly imported, e.g. import ModuleName: somefunction
             return true
