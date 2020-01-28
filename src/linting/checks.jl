@@ -478,11 +478,31 @@ function check_for_pirates(x::EXPR)
             for i = 2:length(sig.args)
                 if hasbinding(sig.args[i]) && bindingof(sig.args[i]).type isa Binding
                     return
+                elseif refers_to_nonimported_type(sig.args[i])
+                    return
                 end
             end
             seterror!(x, TypePiracy)
         end
     end
+end
+
+function refers_to_nonimported_type(arg::EXPR)
+    if hasref(arg) && refof(arg) isa Binding
+        return true
+    elseif typof(arg) === CSTParser.UnaryOpCall && length(arg.args) == 2 && kindof(arg.args[1]) === CSTParser.Tokens.DECLARATION
+        return refers_to_nonimported_type(arg.args[2])
+    elseif _binary_assert(arg, CSTParser.Tokens.DECLARATION)
+        return refers_to_nonimported_type(arg.args[3])
+    elseif typof(arg) === CSTParser.Curly
+        for i = 1:length(arg.args)
+            if refers_to_nonimported_type(arg.args[i])
+                return true
+            end
+        end
+        return false
+    end
+    return false
 end
 
 overwrites_imported_function(b, visited_bindings = Binding[]) = false
