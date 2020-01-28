@@ -484,12 +484,18 @@ function check_for_pirates(x::EXPR)
     end
 end
 
-overwrites_imported_function(b) = false
-function overwrites_imported_function(b::Binding)
+overwrites_imported_function(b, visited_bindings = Binding[]) = false
+function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
+    if b in visited_bindings
+        return false
+    else
+        push!(visited_bindings, b)
+    end
+
     if b.prev isa Binding
         if b.prev.val isa EXPR
             # overwrites a within source bindig so lets check that
-            return overwrites_imported_function(b.prev)
+            return overwrites_imported_function(b.prev, visited_bindings)
         elseif (b.prev.val isa SymbolServer.FunctionStore || b.prev.val isa SymbolServer.DataTypeStore) && parentof(b.prev.name) isa EXPR && typof(parentof(b.prev.name)) === CSTParser.Import
             # explicitly imported, e.g. import ModuleName: somefunction
             return true
