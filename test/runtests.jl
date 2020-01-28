@@ -444,11 +444,22 @@ end
         struct T end
         sin(x::Int) = 1
         sin(x::T) = 1
+        sin(x::Array{T}) = 1
         """)
         StaticLint.check_for_pirates(cst[3])
         StaticLint.check_for_pirates(cst[4])
         @test errorof(cst[3]) === StaticLint.TypePiracy
         @test errorof(cst[4]) === nothing
+    end
+    let cst = parse_and_pass("""
+        struct AreaIterator{T}
+            array::AbstractMatrix{T}
+            radius::Int
+        end
+        Base.eltype(::Type{AreaIterator{T}}) where T = Tuple{T, AbstractVector{T}}
+        """)
+        StaticLint.check_for_pirates(cst[2])
+        @test errorof(cst[2]) === nothing
     end
 end
 
