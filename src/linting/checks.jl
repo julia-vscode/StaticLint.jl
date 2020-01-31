@@ -1,6 +1,6 @@
 @enum(LintCodes,
 MissingRef,
-IncorrectCallNargs,
+IncorrectCallArgs,
 IncorrectIterSpec,
 NothingEquality,
 NothingNotEq,
@@ -16,7 +16,7 @@ MissingFile,
 InvalidModuleName,
 TypePiracy)
 
-const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallNargs => "An incorrect number of function arguments has been passed.",
+const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
     NothingEquality => "Compare against `nothing` using `===`",
     NothingNotEq => "Compare against `nothing` using `!==`",
@@ -55,6 +55,8 @@ end
 
 # Call
 function struct_nargs(x::EXPR)
+    # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.MacroCall && return 0, typemax(Int), String[], true 
     minargs, maxargs, kws, kwsplat = 0, 0, String[], false
     args = typof(x) === CSTParser.Mutable ? x.args[4] : x.args[3]
     args.args === nothing && return 0, typemax(Int), kws, kwsplat
@@ -195,7 +197,7 @@ function check_call(x, server)
                     return
                 end
             end
-            seterror!(x, IncorrectCallNargs)
+            seterror!(x, IncorrectCallArgs)
         elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
             call_counts = call_nargs(x)
             b = func_ref
@@ -238,7 +240,7 @@ function check_call(x, server)
                 b.prev === nothing && break
                 b = b.prev
             end
-            seterror!(x, IncorrectCallNargs)
+            seterror!(x, IncorrectCallArgs)
         end
     end
 end
