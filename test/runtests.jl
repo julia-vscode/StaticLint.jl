@@ -285,7 +285,7 @@ f(arg) = arg
         sin(1,2,3)
         """)
         check_all(cst, StaticLint.LintOptions(),server)
-        @test errorof(cst[1]) === StaticLint.IncorrectCallNargs
+        @test errorof(cst[1]) === StaticLint.IncorrectCallArgs
     end
     let cst = parse_and_pass("""
         for i in length(1) end
@@ -485,7 +485,7 @@ end
         StaticLint.check_call(cst[1], server)
         StaticLint.check_call(cst[2], server)
         @test StaticLint.errorof(cst[1]) === nothing
-        @test StaticLint.errorof(cst[2]) == StaticLint.IncorrectCallNargs
+        @test StaticLint.errorof(cst[2]) == StaticLint.IncorrectCallArgs
     end
 
     let cst = parse_and_pass("""
@@ -505,7 +505,7 @@ end
         f(1, 2)
         """)
         StaticLint.check_call(cst[2], server)
-        @test StaticLint.errorof(cst[2]) === StaticLint.IncorrectCallNargs
+        @test StaticLint.errorof(cst[2]) === StaticLint.IncorrectCallArgs
     end
 
     let cst = parse_and_pass("""
@@ -572,6 +572,15 @@ end
         func(a..., 2)
         """)
         StaticLint.call_nargs(cst[2])
+        StaticLint.check_call(cst[2], server)
+        @test StaticLint.errorof(cst[2]) === nothing
+    end
+    let cst = parse_and_pass("""
+        @kwdef struct A
+            x::Float64
+        end
+        A(x = 5.0)
+        """)
         StaticLint.check_call(cst[2], server)
         @test StaticLint.errorof(cst[2]) === nothing
     end
