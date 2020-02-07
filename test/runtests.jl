@@ -584,6 +584,19 @@ end
         StaticLint.check_call(cst[2], server)
         @test StaticLint.errorof(cst[2]) === nothing
     end
+    let cst = parse_and_pass("""
+        _csvread_f(file::AbstractString, delim=','; kwargs...) = nothing
+        _csvread_f(files[1], delim;
+                   noresize=true,
+                   colspool=colspool,
+                   kwargs...)
+        """)
+        StaticLint.check_call(cst[2], server)
+        fnargs = StaticLint.func_nargs(cst[1])
+        cnargs = StaticLint.call_nargs(cst[2])
+        @test StaticLint.compare_f_call(fnargs, cnargs)
+        @test StaticLint.errorof(cst[2]) === nothing
+    end
 end
 
 @testset "check_modulename" begin

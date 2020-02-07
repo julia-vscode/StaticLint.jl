@@ -88,7 +88,7 @@ function func_nargs(x::EXPR)
                     arg1 = arg.args[j]
                     if typof(arg1) === CSTParser.Kw
                         push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1])))
-                    elseif typof(arg1) === CSTParser.BinaryOpCall && kindof(arg1.args[2]) === CSTParser.Tokens.DDDOT
+                    elseif typof(arg1) === CSTParser.UnaryOpCall && kindof(arg1.args[2]) === CSTParser.Tokens.DDDOT
                         kwsplat = true
                     end
                 end
