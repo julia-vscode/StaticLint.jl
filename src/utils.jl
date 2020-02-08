@@ -106,22 +106,17 @@ function clear_meta(x::EXPR)
     end
 end
 
-
-
 function get_root_method(b, server)
     return b
 end
 
-function get_root_method(b::Binding, server, b1 = nothing, bs = Binding[])
-    if b.prev === nothing || b == b.prev || !(b.prev isa Binding)
+function get_root_method(b::Binding, server, b1 = nothing, visited_bindings = Binding[])
+    if b.prev === nothing || b == b.prev || !(b.prev isa Binding) || b in visited_bindings
         return b
-    elseif b.prev.type == CoreTypes.Function
-        if b in bs
-            return b
-        else
-            push!(bs, b)
-            return get_root_method(b.prev, server, b, bs)
-        end
+    end
+    push!(visited_bindings, b)
+    if b.prev.type == CoreTypes.Function
+        return get_root_method(b.prev, server, b, visited_bindings)
     elseif b.prev.type == CoreTypes.DataType
         return b.prev
     else
