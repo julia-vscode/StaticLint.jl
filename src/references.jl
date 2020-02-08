@@ -67,7 +67,7 @@ function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visite
     return false
 end
 
-function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = Set{String}())
+function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = [])
     hasref(x) && return true
 
     resolved = false
