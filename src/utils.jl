@@ -291,7 +291,7 @@ end
 # tls is a top-level Scope (hopefully containing loaded modules)
 # for a FunctionStore b, checks whether additional methods are provided by other packages
 # f is a function that returns `true` if we want to break early from the loop
-function iterate_over_ss_methods(b, tls, server, f)
+function iterate_over_ss_methods(b::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, tls, server, f)
     if (b.extends !== nothing || b.extends in keys(getsymbolextendeds(server))) && tls.modules !== nothing
         # above should be modified, 
         rootmod = SymbolServer._lookup(b.extends.mod, getsymbolserver(server)) # points to the module containing the initial function declaration
@@ -320,4 +320,8 @@ function iterate_over_ss_methods(b, tls, server, f)
         end
     end
     return false
+end
+
+function iterate_over_ss_methods(b, tls, server, f)
+    # fallback
 end
