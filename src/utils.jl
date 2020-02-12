@@ -148,6 +148,16 @@ function retrieve_scope(x)
     return 
 end
 
+function retrieve_toplevel_scope(x)
+    if scopeof(x) !== nothing && (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule || typof(x) === CSTParser.FileH)
+        return scopeof(x)
+    elseif parentof(x) isa EXPR
+        return retrieve_scope(parentof(x))
+    else
+        error("Tried to reach toplevel scope, no scope found.")
+        # Add some sort of useful recovery here?
+    end
+end
 
 function find_return_statements(x::EXPR)
     rets = EXPR[]
@@ -275,4 +285,39 @@ function _is_in_basedir(path::AbstractString)
     if all(f -> f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
         return path1
     end
+end
+
+# b::SymbolServer.FunctionStore or DataTypeStore
+# tls is a top-level Scope (hopefully containing loaded modules)
+# for a FunctionStore b, checks whether additional methods are provided by other packages
+# f is a function that returns `true` if we want to break early from the loop
+function iterate_over_ss_methods(b, tls, server, f)
+    if (b.extends !== nothing || b.extends in keys(getsymbolextendeds(server))) && tls.modules !== nothing
+        # above should be modified, 
+        rootmod = SymbolServer._lookup(b.extends.mod, getsymbolserver(server)) # points to the module containing the initial function declaration
+        if rootmod !== nothing && haskey(rootmod.vals, b.extends.name) # check rootmod exists, and that it has the variable
+            rootfunc = rootmod.vals[b.extends.name]
+            # find extensoions
+            if haskey(getsymbolextendeds(server), b.extends) # method extensions listed
+                for pr in getsymbolextendeds(server)[b.extends] # iterate over packages with extensions
+                    isempty(pr.name) && continue
+                    !(first(pr.name) in keys(tls.modules)) && continue
+                    !(tls.modules[first(pr.name)] isa SymbolServer.ModuleStore) && continue
+                    rootmod = SymbolServer._lookup(pr, getsymbolserver(server)) 
+                    if rootmod !== nothing && haskey(rootmod.vals, b.extends.name) && (rootmod.vals[b.extends.name] isa SymbolServer.FunctionStore || rootmod.vals[b.extends.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
+                        for m in rootmod.vals[b.extends.name].methods # 
+                            ret = f(m)
+                            ret && return true
+                        end
+                    end
+                end
+            end
+        end
+    else
+        for m in b.methods
+            ret = f(m)
+            ret && return true
+        end
+    end
+    return false
 end

@@ -34,7 +34,7 @@ function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visite
         if valof(x) == m.name
             setref!(x, m)
             return true
-        elseif valof(x) in m.exported && haskey(m.vals, valof(x))
+        elseif haskey(m.vals, valof(x)) && m.vals[valof(x)].exported
             val = m.vals[valof(x)]
             if val isa SymbolServer.PackageRef
                 val1 = SymbolServer._lookup(val, getsymbolserver(state.server))
@@ -52,14 +52,14 @@ function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visite
     elseif typof(x1) === MacroName
         x = x1.args[2]
         mn = string("@", valof(x))
-        if mn in m.exported
+        if haskey(m.vals, mn) && m.vals[mn].exported
             setref!(x, m.vals[mn])
             return true
         end
     elseif typof(x1) === x_Str
         mac = x1
         mn = string("@", valof(mac.args[1]), "_str")
-        if mn in m.exported && haskey(m.vals, mn)
+        if haskey(m.vals, mn) && m.vals[mn].exported
             setref!(mac.args[1], m.vals[mn])
             return true
         end

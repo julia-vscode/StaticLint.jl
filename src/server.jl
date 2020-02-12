@@ -13,10 +13,11 @@ mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
     symbolserver::Dict{String,SymbolServer.ModuleStore}
+    symbol_extendeds::Dict{SymbolServer.TypeRef,Vector{SymbolServer.PackageRef}}
 end
 
 # Interface spec.
-# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver
+# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextendeds
 # AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, scopepass, (get/set)server
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
@@ -34,6 +35,7 @@ function loadfile(server::FileServer, path::String)
     return getfile(server, path)
 end
 getsymbolserver(server::FileServer) = server.symbolserver
+getsymbolextendeds(server::FileServer) = server.symbol_extendeds
 
 
 function scopepass(file, target = nothing)

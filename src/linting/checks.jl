@@ -191,15 +191,20 @@ function check_call(x, server)
         
         if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             call_counts = call_nargs(x)
-            for m in func_ref.methods
+            function ff(m)
                 m_counts = func_nargs(m)
-                if compare_f_call(m_counts, call_counts)
-                    return
-                end
+                return compare_f_call(m_counts, call_counts)
             end
+            tls = retrieve_toplevel_scope(x)
+            retearly = iterate_over_ss_methods(func_ref, tls, server, ff)
+            retearly && return
             seterror!(x, IncorrectCallArgs)
         elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
             call_counts = call_nargs(x)
+            function ff1(m)
+                m_counts = func_nargs(m)
+                return compare_f_call(m_counts, call_counts)
+            end
             b = func_ref
             while b.next isa Binding && b.next.type == CoreTypes.Function
                 b = b.next
@@ -207,12 +212,9 @@ function check_call(x, server)
             while true
                 if !(b isa Binding) # Needs to be cleaned up
                     if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
-                        for m in b.methods
-                            m_counts = func_nargs(m)
-                            if compare_f_call(m_counts, call_counts)
-                                return
-                            end
-                        end
+                        tls = retrieve_toplevel_scope(x)
+                        retearly = iterate_over_ss_methods(b, tls, server, ff1)
+                        retearly && return
                         break
                     else
                         return
@@ -222,12 +224,9 @@ function check_call(x, server)
                 elseif b.type == CoreTypes.DataType && CSTParser.defines_struct(b.val)
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
-                    for m in b.val.methods
-                        m_counts = func_nargs(m)
-                        if compare_f_call(m_counts, call_counts)
-                            return
-                        end
-                    end
+                    tls = retrieve_toplevel_scope(x)
+                    retearly = iterate_over_ss_methods(b.val, tls, server, ff1)
+                    retearly && return
                     break
                 else
                     break
