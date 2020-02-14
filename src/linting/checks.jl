@@ -446,6 +446,13 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
             # collect lint hints
             push!(errs, (pos, x))
         end
+    elseif isquoted && !hasref(x) && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode &&
+        parentof(parentof(x)) isa EXPR && _binary_assert(parentof(parentof(x)), CSTParser.Tokens.DOT) &&
+        (refof(parentof(parentof(x)).args[1]) isa SymbolServer.ModuleStore || 
+            (refof(parentof(parentof(x)).args[1]) isa Binding && refof(parentof(parentof(x)).args[1]).val isa SymbolServer.ModuleStore)
+        )
+        # mark undef error for qualified names where the parent is a ModuleStore
+        push!(errs, (pos, x))
     end
     
     if x.args !== nothing
