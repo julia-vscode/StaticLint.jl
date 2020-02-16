@@ -8,7 +8,7 @@ makedocs(;
     sitename="StaticLint.jl",
     format=Documenter.HTML(;
         prettyurls = prettyurls = get(ENV, "CI", nothing) == "true",
-        # canonical="https://julia-vscode.github.io/StaticLint.jl",
+        # canonical="https://www.julia-vscode.org/StaticLint.jl",
         # assets=String[],
     ),
     pages=[
