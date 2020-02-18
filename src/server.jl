@@ -20,19 +20,7 @@ end
 # AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, scopepass, (get/set)server
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
-canloadfile(server, path) = isfile(path)
-function setfile(server::FileServer, path::String, file::File)
-    server.files[path] = file
-end
 getfile(server::FileServer, path::String) = server.files[path]
-function loadfile(server::FileServer, path::String)
-    source = read(path, String)
-    cst = CSTParser.parse(source, true)
-    f = File(path, source, cst, nothing, server)
-    setroot(f, f)
-    setfile(server, path, f)
-    return getfile(server, path)
-end
 getsymbolserver(server::FileServer) = server.symbolserver
 
 
@@ -50,10 +38,6 @@ function scopepass(file, target = nothing)
 end
 
 getpath(file::File) = file.path
-function setpath(file::File, path)
-    file.path = path
-    return file
-end
 
 getroot(file::File) = file.root
 function setroot(file::File, root::File)
@@ -62,16 +46,8 @@ function setroot(file::File, root::File)
 end
 
 getcst(file::File) = file.cst
-function setcst(file::File, cst::EXPR)
-    file.cst = cst
-    return file
-end
 
 getserver(file::File) = file.server
-function setserver(file::File, server::FileServer)
-    file.server = server
-    return file
-end
 
 function Base.display(f::File)
     println(f.path)

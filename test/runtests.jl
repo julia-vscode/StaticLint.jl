@@ -19,7 +19,8 @@ function parse_and_pass(s)
     empty!(server.files)
     f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
     StaticLint.setroot(f, f)
-    StaticLint.setfile(server, "", f)
+    # TODO Unclear what to do with this line
+    # StaticLint.setfile(server, "", f)
     StaticLint.scopepass(f)
     return f.cst
 end
