@@ -115,9 +115,9 @@ function get_root_method(b::Binding, server, b1 = nothing, visited_bindings = Bi
         return b
     end
     push!(visited_bindings, b)
-    if b.prev.type == CoreTypes.Function
+    if b.type == b.prev.type == CoreTypes.Function
         return get_root_method(b.prev, server, b, visited_bindings)
-    elseif b.prev.type == CoreTypes.DataType
+    elseif b.type == CoreTypes.Function && b.prev.type == CoreTypes.DataType
         return b.prev
     else
         return b
@@ -189,7 +189,7 @@ end
     
 # should only be called on Bindings to functions
 function last_method(func::Binding)
-    if func.next isa Binding && func.next.type === CoreTypes.Function
+    if func.next isa Binding && (func.next.type === CoreTypes.Function || (func.next.type === CoreTypes.DataType && func.type === CoreTypes.Function))
         return func.next
     else
         return func
