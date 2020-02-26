@@ -13,6 +13,7 @@ mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
     symbolserver::Dict{String,SymbolServer.ModuleStore}
+    workspacepackages::Dict{String,Binding}
 end
 
 # Interface spec.

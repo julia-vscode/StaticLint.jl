@@ -93,7 +93,9 @@ end
 
 function _get_field(par, arg, state)
     if par isa Dict{String,SymbolServer.ModuleStore} # package store
-        if haskey(par, CSTParser.str_value(arg))
+        if haskey(state.server.workspacepackages, CSTParser.str_value(arg))
+            return state.server.workspacepackages[CSTParser.str_value(arg)]
+        elseif haskey(par, CSTParser.str_value(arg))
             return par[CSTParser.str_value(arg)]
         end
     elseif par isa Scope
