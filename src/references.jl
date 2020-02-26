@@ -113,7 +113,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes = [])
         end
         return true
     else
-        return false
+        return true
     end
     
     if haskey(scope.names, mn)
