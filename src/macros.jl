@@ -65,7 +65,7 @@ function handle_macro(x::EXPR, state)
         elseif _points_to_arbitrary_macro(x.args[1], "JuMP", "variable", state)
             if length(x.args) < 3
                 return
-            elseif typof(x.args[2]) === PUNCTUATION
+            elseif length(x.args) >= 5 && typof(x.args[2]) === PUNCTUATION
                 _mark_JuMP_binding(x.args[5])
             else
                 _mark_JuMP_binding(x.args[3])
