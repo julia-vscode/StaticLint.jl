@@ -167,6 +167,8 @@ f(arg) = arg
 """) == [1, 1, 1]
 
 @test check_resolved("-(r::T) where T = r") == [1, 1, 1, 1]
+@test check_resolved("[k * j for j = 1:10 for k = 1:10]") == [1, 1, 1, 1]
+@test check_resolved("[k * j for j in 1:10 for k in 1:10]") == [1, 1, 1, 1]
 
 @testset "inference" begin
     @test bindingof(parse_and_pass("f(arg) = arg")[1]).type == StaticLint.CoreTypes.Function
