@@ -66,6 +66,15 @@ function mark_bindings!(x::EXPR, state)
             typof(x.args[i]) === PUNCTUATION && continue
             markiterbinding!(x.args[i])
         end
+    elseif typof(x) === CSTParser.Flatten && x.args !== nothing && length(x.args) === 1 && x.args[1].args !== nothing && length(x.args[1]) >= 3 && length(x.args[1].args[1]) >= 3
+        for i = 3:length(x.args[1].args[1].args)
+            typof(x.args[1].args[1].args[i]) === PUNCTUATION && continue
+            markiterbinding!(x.args[1].args[1].args[i])
+        end
+        for i = 3:length(x.args[1].args)
+            typof(x.args[1].args[i]) === PUNCTUATION && continue
+            markiterbinding!(x.args[1].args[i])
+        end
     elseif typof(x) === CSTParser.Do
         if typof(x.args[3]) === CSTParser.TupleH
             for i in 1:length(x.args[3].args)
