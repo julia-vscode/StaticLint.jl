@@ -57,7 +57,9 @@ function _mark_import_arg(arg, par, state, u)
         end
         if par isa SymbolServer.PackageRef
             par = SymbolServer._lookup(par, getsymbolserver(state.server))
-            par === nothing && return
+            par isa SymbolServer.PackageRef && (par = SymbolServer._lookup(par, getsymbolserver(state.server)))
+            par isa SymbolServer.PackageRef && (par = SymbolServer._lookup(par, getsymbolserver(state.server)))
+            !(par isa SymbolServer.SymStore) && return
         end
         if bindingof(arg) === nothing
             if !hasmeta(arg)
