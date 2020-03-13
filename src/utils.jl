@@ -115,9 +115,9 @@ function get_root_method(b::Binding, server, b1 = nothing, visited_bindings = Bi
         return b
     end
     push!(visited_bindings, b)
-    if b.prev.type == CoreTypes.Function
+    if b.type == b.prev.type == CoreTypes.Function
         return get_root_method(b.prev, server, b, visited_bindings)
-    elseif b.prev.type == CoreTypes.DataType
+    elseif b.type == CoreTypes.Function && b.prev.type == CoreTypes.DataType
         return b.prev
     else
         return b
@@ -189,7 +189,7 @@ end
     
 # should only be called on Bindings to functions
 function last_method(func::Binding)
-    if func.next isa Binding && func.next.type === CoreTypes.Function
+    if func.next isa Binding && (func.next.type === CoreTypes.Function || (func.next.type === CoreTypes.DataType && func.type === CoreTypes.Function))
         return func.next
     else
         return func
@@ -265,14 +265,15 @@ end
 hasreadperm(p::String) = (uperm(p) & 0x04) == 0x04
 
 # check whether a path is in (including subfolders) the julia base dir. Returns "" if not, and the path to the base dir if so.
-function _is_in_basedir(path::AbstractString)
+function _is_in_basedir(path::String)
     i = findfirst(r".*base", path)
     i == nothing && return ""
-    path1 = path[i]
+    path1 = path[i]::String
     !hasreadperm(path1) && return ""
     !isdir(path1) && return ""
     files = readdir(path1)
     if all(f -> f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
         return path1
     end
+    return ""
 end

@@ -55,6 +55,12 @@ function _mark_import_arg(arg, par, state, u)
         if par isa Binding # mark reference to binding
             push!(par.refs, arg)
         end
+        if par isa SymbolServer.PackageRef
+            par = SymbolServer._lookup(par, getsymbolserver(state.server))
+            par isa SymbolServer.PackageRef && (par = SymbolServer._lookup(par, getsymbolserver(state.server)))
+            par isa SymbolServer.PackageRef && (par = SymbolServer._lookup(par, getsymbolserver(state.server)))
+            !(par isa SymbolServer.SymStore) && return
+        end
         if bindingof(arg) === nothing
             if !hasmeta(arg)
                 arg.meta = Meta()

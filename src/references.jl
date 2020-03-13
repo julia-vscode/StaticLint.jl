@@ -191,7 +191,7 @@ function resolve_getindex(x::EXPR, parent::SymbolServer.SymStore, state::State)
             val = parent.vals[valof(x)]
             if val isa SymbolServer.PackageRef
                 val = SymbolServer._lookup(val, getsymbolserver(state.server))
-                val === nothing && return false
+                !(val isa SymbolServer.SymStore) && return false
             end
             setref!(x, val)
             resolved = true
