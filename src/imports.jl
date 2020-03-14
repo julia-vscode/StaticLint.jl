@@ -96,11 +96,19 @@ function _mark_import_arg(arg, par, state, u)
     end
 end
 
+function has_workspace_package(server, name)
+    haskey(server.workspacepackages, name) &&
+    hasscope(getcst(server.workspacepackages[name])) &&
+    haskey(scopeof(getcst(server.workspacepackages[name])).names, name) &&
+    scopeof(getcst(server.workspacepackages[name])).names[name] isa Binding && 
+    scopeof(getcst(server.workspacepackages[name])).names[name].val isa EXPR && 
+    (typof(scopeof(getcst(server.workspacepackages[name])).names[name].val) in (ModuleH,BareModule))
+end 
 
 function _get_field(par, arg, state)
     if par isa Dict{String,SymbolServer.ModuleStore} # package store
-        if haskey(state.server.workspacepackages, CSTParser.str_value(arg))
-            return state.server.workspacepackages[CSTParser.str_value(arg)]
+        if has_workspace_package(state.server, CSTParser.str_value(arg))
+            return scopeof(getcst(state.server.workspacepackages[CSTParser.str_value(arg)])).names[CSTParser.str_value(arg)]
         elseif haskey(par, CSTParser.str_value(arg))
             return par[CSTParser.str_value(arg)]
         end
