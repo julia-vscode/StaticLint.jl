@@ -201,10 +201,14 @@ function check_call(x, server)
         elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
             call_counts = call_nargs(x)
             b = func_ref
-            while b.next isa Binding && b.next.type == CoreTypes.Function
+            seen = Binding[]
+            while b.next isa Binding && b.next.type == CoreTypes.Function && !(b in seen)
+                push!(seen, b)
                 b = b.next
             end
+            seen = Binding[]
             while true
+                b in seen && break
                 if !(b isa Binding) # Needs to be cleaned up
                     if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
                         for m in b.methods
@@ -238,6 +242,8 @@ function check_call(x, server)
                     return
                 end
                 b.prev === nothing && break
+                b in seen && break
+                push!(seen, b)
                 b = b.prev
             end
             seterror!(x, IncorrectCallArgs)
