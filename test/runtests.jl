@@ -733,3 +733,23 @@ end
         @test cst[1][2].meta.error == StaticLint.EqInIfConditional
     end
 end
+
+@testset "check_farg_unused" begin
+    let cst = parse_and_pass("function f(arg1, arg2) arg1 end")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument 
+    end
+    let cst = parse_and_pass("function f(arg1::T, arg2::T) arg1 end")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument 
+    end
+    let cst = parse_and_pass("function f(arg1, arg2::T, arg3 = 1, arg4::T = 1) end")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[7][1]) === StaticLint.UnusedFunctionArgument
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[9][1]) === StaticLint.UnusedFunctionArgument
+    end
+end

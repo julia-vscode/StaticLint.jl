@@ -14,7 +14,8 @@ UnusedTypeParameter,
 IncludeLoop,
 MissingFile,
 InvalidModuleName,
-TypePiracy)
+TypePiracy,
+UnusedFunctionArgument)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
@@ -30,7 +31,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     IncludeLoop => "Loop detected, this file has already been included.",
     MissingFile => "The included file can not be found.",
     InvalidModuleName => "Module name matches that of its parent.",
-    TypePiracy => "An imported function has been extended without using module defined typed arguments.")
+    TypePiracy => "An imported function has been extended without using module defined typed arguments.",
+    UnusedFunctionArgument => "An argument is included in a function signature but not used with its body."
+    )
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)
@@ -395,6 +398,28 @@ function check_modulename(x::EXPR)
     end
 end
 
+# Check whether function arguments are unused
+function check_farg_unused(x::EXPR)
+    if CSTParser.defines_function(x)
+        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        if typof(sig) === CSTParser.Call
+            for i = 2:length(sig.args)
+                if hasbinding(sig.args[i])
+                    check_arg_is_used(sig.args[i])
+                elseif typof(sig.args[i]) === CSTParser.Kw && hasbinding(sig.args[i].args[1])
+                    check_arg_is_used(sig.args[i].args[1])
+                end
+            end
+        end
+    end
+end
+function check_arg_is_used(arg)
+    b::Binding = bindingof(arg)
+    if isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)
+        seterror!(arg, UnusedFunctionArgument)
+    end
+end
+
 
 mutable struct LintOptions
     call::Bool
@@ -406,8 +431,9 @@ mutable struct LintOptions
     typeparam::Bool
     modname::Bool
     pirates::Bool
+    useoffuncargs::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true)
+LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -421,6 +447,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
+    opts.useoffuncargs && check_arg_is_used(x)
     if x.args !== nothing
         for i in 1:length(x.args)
             check_all(x.args[i], opts, server)
