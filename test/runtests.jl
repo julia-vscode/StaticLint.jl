@@ -752,4 +752,16 @@ end
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[7][1]) === StaticLint.UnusedFunctionArgument
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[9][1]) === StaticLint.UnusedFunctionArgument
     end
+    let cst = parse_and_pass("function f(arg) arg = 1 end")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+    end
+    let cst = parse_and_pass("function f(arg) 1 end")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+    end
+    let cst = parse_and_pass("f(arg) = true")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+    end
 end
