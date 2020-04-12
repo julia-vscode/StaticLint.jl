@@ -62,12 +62,11 @@ function clear_scope(x::EXPR)
     if hasmeta(x) && scopeof(x) isa Scope
         setparent!(scopeof(x), nothing)
         empty!(scopeof(x).names)
-        if typof(x) === FileH && scopeof(x).modules isa Dict && haskey(scopeof(x).modules, "Base") && haskey(scopeof(x).modules, "Core")
-            m1 = scopeof(x).modules["Base"]
-            m2 = scopeof(x).modules["Core"]
+        if typof(x) === FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
+            m1, m2 = getscopemodule(scopeof(x), :Base), getscopemodule(scopeof(x), :Core)
             empty!(scopeof(x).modules)
-            scopeof(x).modules["Base"] = m1
-            scopeof(x).modules["Core"] = m2
+            addmoduletoscope!(scopeof(x), m1)
+            addmoduletoscope!(scopeof(x), m2)
         else
             scopeof(x).modules = nothing
         end
@@ -276,4 +275,95 @@ function _is_in_basedir(path::String)
         return path1
     end
     return ""
+end
+
+isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && m[k].exported
+isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m)
+isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
+isexportedby(k, m::SymbolServer.ModuleStore) = false
+
+function retrieve_toplevel_scope(x)
+    if scopeof(x) !== nothing && (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule || typof(x) === CSTParser.FileH)
+        return scopeof(x)
+    elseif parentof(x) isa EXPR
+        return retrieve_toplevel_scope(parentof(x))
+    else
+        error("Tried to reach toplevel scope, no scope found.")
+        # Add some sort of useful recovery here?
+    end
+end
+
+
+# b::SymbolServer.FunctionStore or DataTypeStore
+# tls is a top-level Scope (expected to contain loaded modules)
+# for a FunctionStore b, checks whether additional methods are provided by other packages
+# f is a function that returns `true` if we want to break early from the loop
+
+
+function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
+    if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
+        # above should be modified, 
+        rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+        if rootmod !== nothing && haskey(rootmod, b.extends.name) # check rootmod exists, and that it has the variable
+            rootfunc = rootmod[b.extends.name]
+            # find extensoions
+            if haskey(getsymbolextendeds(server), b.extends) # method extensions listed
+                for vr in getsymbolextendeds(server)[b.extends] # iterate over packages with extensions
+                    !(SymbolServer.get_top_module(vr) in keys(tls.modules)) && continue
+                    rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
+                    !(rootmod isa SymbolServer.ModuleStore) && continue
+                    if haskey(rootmod.vals, b.extends.name) && (rootmod.vals[b.extends.name] isa SymbolServer.FunctionStore || rootmod.vals[b.extends.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
+                        for m in rootmod.vals[b.extends.name].methods # 
+                            ret = f(m)
+                            ret && return true
+                        end
+                    end
+                end
+            end
+        end
+    else
+        for m in b.methods
+            ret = f(m)
+            ret && return true
+        end
+    end
+    return false
+end
+
+
+
+
+function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, server, f)
+    if b.name isa SymbolServer.VarRef
+        bname = b.name
+    elseif b.name isa SymbolServer.FakeTypeName
+        bname = b.name.name
+    end
+    if (bname in keys(getsymbolextendeds(server))) && tls.modules !== nothing
+        # above should be modified, 
+        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+        if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
+            rootfunc = rootmod[bname.name]
+            # find extensoions
+            if haskey(getsymbolextendeds(server), bname) # method extensions listed
+                for vr in getsymbolextendeds(server)[bname] # iterate over packages with extensions
+                    !(SymbolServer.get_top_module(vr) in keys(tls.modules)) && continue
+                    rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
+                    !(rootmod isa SymbolServer.ModuleStore) && continue
+                    if haskey(rootmod.vals, bname.name) && (rootmod.vals[bname.name] isa SymbolServer.FunctionStore || rootmod.vals[bname.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
+                        for m in rootmod.vals[bname.name].methods # 
+                            ret = f(m)
+                            ret && return true
+                        end
+                    end
+                end
+            end
+        end
+    else
+        for m in b.methods
+            ret = f(m)
+            ret && return true
+        end
+    end
+    return false
 end

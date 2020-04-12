@@ -55,41 +55,39 @@ function _mark_import_arg(arg, par, state, u)
         if par isa Binding # mark reference to binding
             push!(par.refs, arg)
         end
-        if par isa SymbolServer.PackageRef
-            par = SymbolServer._lookup(par, getsymbolserver(state.server))
-            par isa SymbolServer.PackageRef && (par = SymbolServer._lookup(par, getsymbolserver(state.server)))
-            par isa SymbolServer.PackageRef && (par = SymbolServer._lookup(par, getsymbolserver(state.server)))
+        if par isa SymbolServer.VarRef
+            par = SymbolServer._lookup(par, getsymbolserver(state.server), true)
             !(par isa SymbolServer.SymStore) && return
         end
         if bindingof(arg) === nothing
             if !hasmeta(arg)
                 arg.meta = Meta()
             end
-            arg.meta.binding = Binding(arg, par, _typeof(par), [], nothing, nothing)
+            arg.meta.binding = Binding(arg, par, _typeof(par, state), [], nothing, nothing)
         end
         if u && par isa SymbolServer.ModuleStore
             if state.scope.modules isa Dict
-                state.scope.modules[valof(arg)] = par
+                state.scope.modules[Symbol(valof(arg))] = par
             else
-                state.scope.modules = Dict(valof(arg) => par)
+                state.scope.modules = Dict(Symbol(valof(arg)) => par)
             end
         elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore 
             if state.scope.modules isa Dict
-                state.scope.modules[valof(arg)] = par.val
+                state.scope.modules[Symbol(valof(arg))] = par.val
             else
-                state.scope.modules = Dict(valof(arg) => par.val)
+                state.scope.modules = Dict(Symbol(valof(arg)) => par.val)
             end
         elseif u && par isa Binding && par.val isa EXPR && (typof(par.val) === CSTParser.ModuleH || typof(par.val) === CSTParser.BareModule)
             if state.scope.modules isa Dict
-                state.scope.modules[valof(arg)] = scopeof(par.val)
+                state.scope.modules[Symbol(valof(arg))] = scopeof(par.val)
             else
-                state.scope.modules = Dict(valof(arg) => scopeof(par.val))
+                state.scope.modules = Dict(Symbol(valof(arg)) => scopeof(par.val))
             end
         elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && (typof(par.val.val) === CSTParser.ModuleH || typof(par.val.val) === CSTParser.BareModule)
             if state.scope.modules isa Dict
-                state.scope.modules[valof(arg)] = scopeof(par.val.val)
+                state.scope.modules[Symbol(valof(arg))] = scopeof(par.val.val)
             else
-                state.scope.modules = Dict(valof(arg) => scopeof(par.val.val))
+                state.scope.modules = Dict(Symbol(valof(arg)) => scopeof(par.val.val))
             end
             
         end
@@ -98,12 +96,15 @@ end
 
 
 function _get_field(par, arg, state)
-    if par isa Dict{String,SymbolServer.ModuleStore} # package store
-        if haskey(par, CSTParser.str_value(arg))
-            return par[CSTParser.str_value(arg)]
+    if par isa SymbolServer.EnvStore # package store
+        if haskey(par, Symbol(CSTParser.str_value(arg)))
+            return par[Symbol(CSTParser.str_value(arg))]
         end
     elseif par isa Scope
-        if haskey(par.names, valof(arg))
+        if valof(arg) == nothing
+            @info arg
+        end
+        if scopehasbinding(par, valof(arg))
             return par.names[valof(arg)]
         end
     elseif par isa Binding 
@@ -111,28 +112,26 @@ function _get_field(par, arg, state)
             par = par.val
         end
         if par.val isa EXPR && (typof(par.val) === ModuleH || typof(par.val) === BareModule)
-            if scopeof(par.val) isa Scope && haskey(scopeof(par.val).names, valof(arg))
+            if scopeof(par.val) isa Scope && scopehasbinding(scopeof(par.val), valof(arg))
                 return scopeof(par.val).names[valof(arg)]
             end
         elseif par.val isa SymbolServer.ModuleStore
-            if haskey(par.val.vals, CSTParser.str_value(arg))
-                par = par.val.vals[CSTParser.str_value(arg)]
-                if par isa SymbolServer.PackageRef # reference to dependency
-                    return SymbolServer._lookup(par, getsymbolserver(state.server))
+            if haskey(par.val, Symbol(CSTParser.str_value(arg)))
+                par = par.val[Symbol(CSTParser.str_value(arg))]
+                if par isa SymbolServer.VarRef # reference to dependency
+                    return SymbolServer._lookup(par, getsymbolserver(state.server), true)
                 end
                 return par
             end
         end
     elseif par isa SymbolServer.ModuleStore # imported module
-        if haskey(par.vals, CSTParser.str_value(arg))
-            par = par.vals[CSTParser.str_value(arg)]
-            if par isa SymbolServer.PackageRef # reference to dependency
-                return SymbolServer._lookup(par, getsymbolserver(state.server))
+        if haskey(par, Symbol(CSTParser.str_value(arg)))
+            par = par[Symbol(CSTParser.str_value(arg))]
+            if par isa SymbolServer.VarRef # reference to dependency
+                return SymbolServer._lookup(par, getsymbolserver(state.server), true)
             end
             return par
         end
     end
     return
 end
-
-_typeof(x) = nothing

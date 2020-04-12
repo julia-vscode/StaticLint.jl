@@ -2,7 +2,7 @@ using StaticLint, SymbolServer
 using CSTParser, Test
 using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
-server = StaticLint.FileServer(Dict(), Set(), deepcopy(SymbolServer.stdlibs));
+server = StaticLint.FileServer();
 
 function get_ids(x, ids = [])
     if StaticLint.typof(x) == CSTParser.IDENTIFIER

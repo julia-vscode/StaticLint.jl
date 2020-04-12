@@ -2,16 +2,29 @@ mutable struct Scope
     parent::Union{Scope,Nothing}
     expr::EXPR
     names::Dict{String,Binding}
-    modules::Union{Nothing,Dict{String,Any}}
+    modules::Union{Nothing,Dict{Symbol,Any}}
     ismodule::Bool
 end
-Scope(expr) = Scope(nothing, expr, Dict{String,Binding}(), nothing, typof(expr) === CSTParser.ModuleH || typof(expr) === CSTParser.BareModule)
+Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, typof(expr) === CSTParser.ModuleH || typof(expr) === CSTParser.BareModule)
 function Base.show(io::IO, s::Scope)
     printstyled(io, typof(s.expr))
     printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
     s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color = :blue)
     println(io)
-end 
+end
+
+scopehasmodule(s::Scope, mname::Symbol) = s.modules !== nothing && haskey(s.modules, mname)
+function addmoduletoscope!(s::Scope, m, mname::Symbol)
+    if s.modules === nothing
+        s.modules = Dict{Symbol,Any}()
+    end
+    s.modules[m.name.name] = m
+end
+addmoduletoscope!(s::Scope, m::SymbolServer.ModuleStore) = addmoduletoscope!(s, m, m.name.name)
+addmoduletoscope!(s::Scope, m::EXPR) = addmoduletoscope!(s, scopeof(m), Symbol(valof(CSTParser.get_name(m))))
+getscopemodule(s::Scope, m::Symbol) = s.modules[m]
+
+scopehasbinding(s::Scope, n::String) = haskey(s.names, n)
 
 
 function introduces_scope(x::EXPR, state)
@@ -75,12 +88,12 @@ function scopes(x::EXPR, state)
         scopeof(x) != s0 && setparent!(scopeof(x), s0)
         state.scope = scopeof(x)
         if typof(x) === ModuleH # Add default modules to a new module
-            state.scope.modules = Dict{String,Any}()
-            state.scope.modules["Base"] = getsymbolserver(state.server)["Base"]
-            state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
+            state.scope.modules = Dict{Symbol,Any}()
+            state.scope.modules[:Base] = getsymbolserver(state.server)[:Base]
+            state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
         elseif typof(x) === BareModule
             state.scope.modules = Dict{String,Any}()
-            state.scope.modules["Core"] = getsymbolserver(state.server)["Core"]
+            state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
         end
         if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
             # state.scope.names[bindingof(x).name] = bindingof(x)
@@ -89,5 +102,5 @@ function scopes(x::EXPR, state)
             setscope!(x.args[1].args[1], nothing)
         end
     end
-    return s0    
+    return s0
 end

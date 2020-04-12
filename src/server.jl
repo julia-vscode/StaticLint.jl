@@ -12,11 +12,13 @@ end
 mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
-    symbolserver::Dict{String,SymbolServer.ModuleStore}
+    symbolserver::SymbolServer.EnvStore
+    symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
 end
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
 
 # Interface spec.
-# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver
+# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
 # AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, scopepass, (get/set)server
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
@@ -34,17 +36,17 @@ function loadfile(server::FileServer, path::String)
     return getfile(server, path)
 end
 getsymbolserver(server::FileServer) = server.symbolserver
-
+getsymbolextendeds(server::FileServer) = server.symbol_extends
 
 function scopepass(file, target = nothing)
     server = file.server
-    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false))
+    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), false))
     state = State(file, target, [getpath(file)], scopeof(getcst(file)), false, EXPR[], server)
     state(getcst(file))
     for uref in state.urefs
         s = retrieve_delayed_scope(uref)
         if s !== nothing
-            resolve_ref(uref, s, state)
+            resolve_ref(uref, s, state, [])
         end
     end
 end

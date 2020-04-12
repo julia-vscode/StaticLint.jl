@@ -9,13 +9,15 @@ using CSTParser: setparent!, kindof, valof, typof, parentof
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
 baremodule CoreTypes # Convenience
 using ..SymbolServer
-const DataType = SymbolServer.stdlibs["Core"].vals["DataType"]
-const Function = SymbolServer.stdlibs["Core"].vals["Function"]
-const Module = SymbolServer.stdlibs["Core"].vals["Module"]
-const String = SymbolServer.stdlibs["Core"].vals["String"]
-const Int = SymbolServer.stdlibs["Core"].vals["Int"]
-const Float64 = SymbolServer.stdlibs["Core"].vals["Float64"]
-
+using Base: ==
+const DataType = SymbolServer.stdlibs[:Core][:DataType]
+const Function = SymbolServer.stdlibs[:Core][:Function]
+const Module = SymbolServer.stdlibs[:Core][:Module]
+const String = SymbolServer.stdlibs[:Core][:String]
+const Int = SymbolServer.stdlibs[:Core][:Int]
+const Float64 = SymbolServer.stdlibs[:Core][:Float64]
+const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
+isva(x) = (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
 end
 
 include("bindings.jl")
