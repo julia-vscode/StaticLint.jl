@@ -44,11 +44,17 @@ end
 
 
 function _typeof(x, state)
-    if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
+    if x isa EXPR
+        if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
+            return CoreTypes.DataType
+        elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
+            return CoreTypes.Module
+        elseif CSTParser.defines_function(x)
+            return CoreTypes.Function
+        end
+    elseif x isa SymbolServer.DataTypeStore
         return CoreTypes.DataType
-    elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
-        return CoreTypes.Module
-    elseif CSTParser.defines_function(x)
+    elseif x isa SymbolServer.FunctionStore
         return CoreTypes.Function
     end
 end
@@ -56,8 +62,8 @@ end
 # Call
 function struct_nargs(x::EXPR)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
-    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.MacroCall && return 0, typemax(Int), String[], true 
-    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.MacroCall && return 0, typemax(Int), Symbol[], true 
+    minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = typof(x) === CSTParser.Mutable ? x.args[4] : x.args[3]
     args.args === nothing && return 0, typemax(Int), kws, kwsplat
     inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
@@ -70,7 +76,7 @@ function struct_nargs(x::EXPR)
 end
 
 function func_nargs(x::EXPR)
-    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
+    minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
     if sig.args isa Vector{EXPR}
         for i = 2:length(sig.args)
@@ -87,7 +93,7 @@ function func_nargs(x::EXPR)
                 for j = 1:length(arg)
                     arg1 = arg.args[j]
                     if typof(arg1) === CSTParser.Kw
-                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1])))
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
                     elseif typof(arg1) === CSTParser.BinaryOpCall && kindof(arg1.args[2]) === CSTParser.Tokens.DDDOT
                         kwsplat = true
                     end
@@ -113,26 +119,28 @@ function func_nargs(x::EXPR)
 end
 
 function func_nargs(m::SymbolServer.MethodStore)
-    minargs, maxargs, kws, kwsplat = 0, 0, String[], false
-    for a in m.args
-        if last(a) == ".KW"
-            if endswith(first(a), "...")
-                kwsplat = true
-            else
-                push!(kws, first(a))
-            end
-        elseif startswith(last(a), "Vararg") || endswith(first(a), "...") || endswith(last(a), "...")
+    minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
+    
+    for arg in m.sig
+        if CoreTypes.isva(last(arg))
             maxargs = typemax(Int)
         else
             minargs += 1
             maxargs !== typemax(Int) && (maxargs += 1)
         end
     end
+    for kw in m.kws
+        if endswith(String(kw), "...")
+            kwsplat = true
+        else
+            push!(kws, kw)
+        end
+    end
     return minargs, maxargs, kws, kwsplat
 end
 
 function call_nargs(x::EXPR)
-    minargs, maxargs, kws = 0, 0, String[]
+    minargs, maxargs, kws = 0, 0, Symbol[]
     if x.args isa Vector{EXPR}
         for i = 2:length(x.args)
             arg = x.args[i]
@@ -142,11 +150,11 @@ function call_nargs(x::EXPR)
                 for j = 1:length(x.args[i])
                     arg = x.args[i].args[j]
                     if typof(arg) === CSTParser.Kw
-                        push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg.args[1]))))
                     end
                 end
             elseif typof(arg) === CSTParser.Kw
-                push!(kws, CSTParser.str_value(CSTParser.get_arg_name(arg.args[1])))
+                push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg.args[1]))))
             elseif typof(arg) === CSTParser.UnaryOpCall && kindof(arg.args[2]) === CSTParser.Tokens.DDDOT
                 maxargs = typemax(Int)
             else
@@ -163,7 +171,7 @@ end
 
 # compare_f_call(m_counts, call_counts) = true # fallback method
 
-function compare_f_call(m_counts::Tuple{Int,Int,Array{String},Bool}, call_counts::Tuple{Int,Int,Array{String}})
+function compare_f_call(m_counts::Tuple{Int,Int,Array{Symbol},Bool}, call_counts::Tuple{Int,Int,Array{Symbol}})
     if call_counts[2] == typemax(Int)
         call_counts[1] <= call_counts[2] < m_counts[1] && return false
     else
@@ -188,18 +196,20 @@ function check_call(x, server)
         else
             return
         end
-        
         if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             call_counts = call_nargs(x)
-            for m in func_ref.methods
+            function ff(m)
                 m_counts = func_nargs(m)
-                if compare_f_call(m_counts, call_counts)
-                    return
-                end
+                return compare_f_call(m_counts, call_counts)
             end
+            iterate_over_ss_methods(func_ref, retrieve_toplevel_scope(x), server, ff) && return # returns if ff(m) == true for any methods
             seterror!(x, IncorrectCallArgs)
         elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
             call_counts = call_nargs(x)
+            function ff1(m)
+                m_counts = func_nargs(m)
+                return compare_f_call(m_counts, call_counts)
+            end
             b = func_ref
             seen = Binding[]
             while b.next isa Binding && b.next.type == CoreTypes.Function && !(b in seen)
@@ -211,27 +221,17 @@ function check_call(x, server)
                 b in seen && break
                 if !(b isa Binding) # Needs to be cleaned up
                     if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
-                        for m in b.methods
-                            m_counts = func_nargs(m)
-                            if compare_f_call(m_counts, call_counts)
-                                return
-                            end
-                        end
+                        iterate_over_ss_methods(b, retrieve_toplevel_scope(x), server, ff1) && return
                         break
                     else
                         return
                     end
-                elseif b.type == CoreTypes.Function
+                elseif b.type == CoreTypes.Function && b.val isa EXPR
                     m_counts = func_nargs(b.val)
-                elseif b.type == CoreTypes.DataType && CSTParser.defines_struct(b.val)
+                elseif b.type == CoreTypes.DataType && b.val isa EXPR && CSTParser.defines_struct(b.val)
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
-                    for m in b.val.methods
-                        m_counts = func_nargs(m)
-                        if compare_f_call(m_counts, call_counts)
-                            return
-                        end
-                    end
+                    iterate_over_ss_methods(b.val, retrieve_toplevel_scope(x), server, ff1) && return
                     break
                 else
                     break
@@ -257,7 +257,7 @@ function check_loop_iter(x::EXPR, server)
             rng = x.args[2].args[3]
             if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                 seterror!(x.args[2], IncorrectIterSpec)
-            elseif typof(rng) === CSTParser.Call && refof(rng.args[1]) === getsymbolserver(server)["Base"].vals["length"]
+            elseif typof(rng) === CSTParser.Call && refof(rng.args[1]) === getsymbolserver(server)[:Base][:length]
                 seterror!(x.args[2], IncorrectIterSpec)
             end
         end
@@ -267,7 +267,7 @@ function check_loop_iter(x::EXPR, server)
                 rng = x.args[i].args[3]
                 if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                     seterror!(x.args[i], IncorrectIterSpec)
-                elseif typof(rng) === CSTParser.Call && valof(rng.args[1]) == "length" && refof(rng.args[1]) === getsymbolserver(server)["Base"].vals["length"]
+                elseif typof(rng) === CSTParser.Call && valof(rng.args[1]) == "length" && refof(rng.args[1]) === getsymbolserver(server)[:Base][:length]
                     seterror!(x.args[i], IncorrectIterSpec)
                 end
             end
@@ -277,9 +277,9 @@ end
 
 function check_nothing_equality(x::EXPR, server)
     if typof(x) === CSTParser.BinaryOpCall
-        if kindof(x.args[2]) === CSTParser.Tokens.EQEQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)["Core"].vals["nothing"]
+        if kindof(x.args[2]) === CSTParser.Tokens.EQEQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
             seterror!(x.args[2], NothingEquality)
-        elseif kindof(x.args[2]) === CSTParser.Tokens.NOT_EQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)["Core"].vals["nothing"]
+        elseif kindof(x.args[2]) === CSTParser.Tokens.NOT_EQ && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
             seterror!(x.args[2], NothingNotEq)
         end
     end
@@ -300,7 +300,7 @@ _get_last_method(x, b::Binding, server) = b
 
 function _get_last_method(x::EXPR, b::Binding, server)
     if scopeof(x) isa Scope
-        if haskey(scopeof(x).names, b.name)
+        if scopehasbinding(scopeof(x), b.name)
             if scopeof(x).names[b.name] isa Binding && scopeof(x).names[b.name].type == b.type
                 return scopeof(x).names[b.name]
             end
@@ -312,7 +312,7 @@ function _get_last_method(x::EXPR, b::Binding, server)
 end
 
 function _get_top_binding(s::Scope, name::String)
-    if haskey(s.names, name)
+    if scopehasbinding(s, name)
         return s.names[name]
     elseif parentof(s) isa Scope
         return _get_top_binding(parentof(s), name)

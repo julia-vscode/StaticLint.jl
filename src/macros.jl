@@ -3,7 +3,7 @@ function handle_macro(x::EXPR, state)
     typof(x) !== MacroCall && return
     if typof(x.args[1]) === MacroName
         state(x.args[1])
-        if _points_to_Base_macro(x.args[1], "deprecate", state) && length(x.args) == 3
+        if _points_to_Base_macro(x.args[1], :deprecate, state) && length(x.args) == 3
             if bindingof(x.args[2]) !== nothing
                 return
             elseif CSTParser.is_func_call(x.args[2])
@@ -20,7 +20,7 @@ function handle_macro(x::EXPR, state)
             elseif isidentifier(x.args[2])
                 mark_binding!(x.args[2], x)
             end
-        elseif _points_to_Base_macro(x.args[1], "enum", state)
+        elseif _points_to_Base_macro(x.args[1], :enum, state)
             for i = 2:length(x.args)
                 if !(typof(x.args[i]) === PUNCTUATION)
                     if bindingof(x.args[i]) !== nothing
@@ -35,11 +35,11 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(x.args[i], x)
                 end
             end
-        elseif _points_to_Base_macro(x.args[1], "goto", state)
+        elseif _points_to_Base_macro(x.args[1], :goto, state)
             if length(x.args) == 2 && typof(x.args[2]) === CSTParser.IDENTIFIER
                 setref!(x.args[2], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
             end
-        elseif _points_to_Base_macro(x.args[1], "label", state)
+        elseif _points_to_Base_macro(x.args[1], :label, state)
             if length(x.args) == 2 && typof(x.args[2]) === CSTParser.IDENTIFIER
                 mark_binding!(x.args[2])
             end
@@ -53,7 +53,7 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(x.args[i], x)
                 end
             end
-        elseif _points_to_arbitrary_macro(x.args[1], "Turing", "model", state) && length(x.args) == 2 && 
+        elseif _points_to_arbitrary_macro(x.args[1], :Turing, :model, state) && length(x.args) == 2 && 
             _binary_assert(x.args[2], CSTParser.Tokens.EQ) && 
             _expr_assert(x.args[2].args[3], CSTParser.Begin, 3) && typof(x.args[2].args[3].args[2]) === CSTParser.Block && x.args[2].args[3].args[2].args isa Vector{EXPR}
             for i = 1:length(x[2][3][2].args)
@@ -62,7 +62,7 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(ex)
                 end
             end
-        elseif _points_to_arbitrary_macro(x.args[1], "JuMP", "variable", state)
+        elseif _points_to_arbitrary_macro(x.args[1], :JuMP, :variable, state)
             if length(x.args) < 3
                 return
             elseif length(x.args) >= 5 && typof(x.args[2]) === PUNCTUATION
@@ -70,9 +70,9 @@ function handle_macro(x::EXPR, state)
             else
                 _mark_JuMP_binding(x.args[3])
             end
-        elseif (_points_to_arbitrary_macro(x.args[1], "JuMP", "expression", state) || 
-            _points_to_arbitrary_macro(x.args[1], "JuMP", "NLexpression", state) ||
-            _points_to_arbitrary_macro(x.args[1], "JuMP", "constraint", state) || _points_to_arbitrary_macro(x.args[1], "JuMP", "NLconstraint", state)) && length(x.args) > 1
+        elseif (_points_to_arbitrary_macro(x.args[1], :JuMP, :expression, state) || 
+            _points_to_arbitrary_macro(x.args[1], :JuMP, :NLexpression, state) ||
+            _points_to_arbitrary_macro(x.args[1], :JuMP, :constraint, state) || _points_to_arbitrary_macro(x.args[1], :JuMP, :NLconstraint, state)) && length(x.args) > 1
             if typof(x.args[2]) === PUNCTUATION 
                 if length(x.args) == 8
                     _mark_JuMP_binding(x.args[5])
@@ -110,11 +110,10 @@ function _mark_JuMP_binding(arg)
     end 
 end
 
-
 function _points_to_Base_macro(x::EXPR, name, state)
-    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && refof(x.args[2]) == getsymbolserver(state.server)["Base"].vals[string("@", name)]
+    length(x.args) == 2 && isidentifier(x.args[2]) && Symbol(valof(x.args[2])) == name && refof(x.args[2]) == getsymbolserver(state.server)[:Base][Symbol("@", name)]
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
-    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && haskey(getsymbolserver(state.server), module_name) && haskey(getsymbolserver(state.server)[module_name].vals, string("@", name)) && refof(x.args[2]) == getsymbolserver(state.server)[module_name].vals[string("@", name)]
+    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && haskey(getsymbolserver(state.server), Symbol(module_name)) && haskey(getsymbolserver(state.server)[Symbol(module_name)], Symbol("@", name)) && refof(x.args[2]) == getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)]
 end

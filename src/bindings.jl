@@ -25,6 +25,8 @@ refof(x::EXPR) = hasmeta(x) ? x.meta.ref : nothing
 
 
 
+# Note to self, check consistency of marking self-reference of bindings (i.e. 
+# for, `function f end` we resolve `f` to itself at this stage.)
 function mark_bindings!(x::EXPR, state)
     if hasbinding(x)
         return
@@ -82,7 +84,6 @@ function mark_bindings!(x::EXPR, state)
                 mark_binding!(x.args[3].args[i])
             end
         end
-        # markiterbinding!(x.args[3])
     elseif typof(x) === FunctionDef
         name = CSTParser.get_name(x)
         # mark external binding
@@ -295,7 +296,7 @@ function add_binding(x, state, scope = state.scope)
                 setref!(mn, bindingof(x))
             end
         else
-            if haskey(scope.names, name)
+            if scopehasbinding(scope, name)
                 bindingof(x).prev = scope.names[name]
                 scope.names[name] = bindingof(x)
                 bindingof(x).prev.next = bindingof(x)
@@ -305,11 +306,12 @@ function add_binding(x, state, scope = state.scope)
                     s1 = scope
                     while true
                         if s1.modules !== nothing
-                            if haskey(s1.modules, valof(parentof(parentof(bindingof(x).name))[1])) # this scope (s1) has a module with matching name
+                            
+                            if scopehasmodule(s1, Symbol(valof(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
                                 # haskey(s1.modules[valof(parentof(parentof(bindingof(x).name))[1])].vals, name)
-                                mod = s1.modules[valof(parentof(parentof(bindingof(x).name))[1])]
-                                if mod isa SymbolServer.ModuleStore && haskey(mod.vals, name)
-                                    bindingof(x).prev = mod.vals[name]
+                                mod = getscopemodule(s1, Symbol(valof(parentof(parentof(bindingof(x).name))[1])))
+                                if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
+                                    bindingof(x).prev = mod[Symbol(name)]
                                 end
                             end
                             break # We've reached a scope that loads modules, no need to keep searching upwards
@@ -331,17 +333,16 @@ function add_binding(x, state, scope = state.scope)
 end
 
 isglobal(name, scope) = false
-isglobal(name::String, scope) = haskey(scope.names, "#globals") && name in scope.names["#globals"].refs
+isglobal(name::String, scope) = scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
 
 function mark_globals(x, state)
     if typof(x) === CSTParser.Global
-        if !haskey(state.scope.names, "#globals")
-            
+        if !scopehasbinding(state.scope, "#globals")
             state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
         end
         if x.args isa Vector{EXPR}
             for i = 2:length(x.args)
-                if typof(x.args[i]) === CSTParser.IDENTIFIER && !haskey(state.scope.names, valof(x.args[i]))
+                if typof(x.args[i]) === CSTParser.IDENTIFIER && !scopehasbinding(state.scope, valof(x.args[i]))
                     push!(state.scope.names["#globals"].refs, valof(x.args[i]))
                 end
             end
