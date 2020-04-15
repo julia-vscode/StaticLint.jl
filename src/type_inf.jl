@@ -14,7 +14,7 @@ function infer_type(binding::Binding, scope, state)
                 elseif CSTParser.is_func_call(binding.val.args[3])
                     callname = CSTParser.get_name(binding.val.args[3])
                     if CSTParser.isidentifier(callname)
-                        resolve_ref(callname, scope, state)
+                        resolve_ref(callname, scope, state, [])
                         if hasref(callname)
                             rb = get_root_method(refof(callname), state.server)
                             if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
@@ -34,11 +34,11 @@ function infer_type(binding::Binding, scope, state)
             elseif kindof(binding.val.args[2]) === CSTParser.Tokens.DECLARATION
                 t = binding.val.args[3]
                 if CSTParser.isidentifier(t)
-                    resolve_ref(t, scope, state)
+                    resolve_ref(t, scope, state, [])
                 end
                 if typof(t) === CSTParser.Curly
                     t = t.args[1]
-                    resolve_ref(t, scope, state)
+                    resolve_ref(t, scope, state, [])
                 end
                 if typof(t) === CSTParser.BinaryOpCall && kindof(t.args[2]) === CSTParser.Tokens.DOT && t.args[3].args isa Vector && length(t.args[3].args) > 0
                     t = t.args[3].args[1]
