@@ -31,6 +31,7 @@ function check_resolved(s)
     [(refof(i) !== nothing) for i in IDs]
 end
 
+@testset "StaticLint" begin
 
 @testset "Basic bindings" begin 
 
@@ -732,4 +733,6 @@ end
         StaticLint.check_if_conds(cst[1])
         @test cst[1][2].meta.error == StaticLint.EqInIfConditional
     end
+end
+
 end
