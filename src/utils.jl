@@ -1,5 +1,5 @@
 quoted(x) = typof(x) === Quote || typof(x) === Quotenode
-unquoted(x) = typof(x) === UnaryOpCall && typof(x.args[1]) === OPERATOR && kindof(x.args[1]) == CSTParser.Tokens.EX_OR
+unquoted(x) = typof(x) === UnaryOpCall && typof(x[1]) === OPERATOR && kindof(x[1]) == CSTParser.Tokens.EX_OR
 
 function get_ids(x, q = false, ids = [])
     if quoted(x)
@@ -10,9 +10,9 @@ function get_ids(x, q = false, ids = [])
     end
     if isidentifier(x) 
         !q && push!(ids, x)
-    elseif x.args !== nothing
-        for i in 1:length(x.args)
-            get_ids(x.args[i], q, ids)
+    elseif length(x) > 0
+        for i in 1:length(x)
+            get_ids(x[i], q, ids)
         end
     end
     ids
@@ -25,10 +25,8 @@ function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
     if StaticLint.hasref(x)
         push!(refs, x)
     end
-    if x.args !== nothing
-        for a in x.args
-            collect_bindings_refs(a, bindings, refs)
-        end
+    for a in x
+        collect_bindings_refs(a, bindings, refs)
     end
     return bindings, refs
 end
@@ -98,10 +96,8 @@ function clear_meta(x::EXPR)
     clear_ref(x)
     clear_scope(x)
     clear_error(x)
-    if x.args !== nothing
-        for a in x.args
-            clear_meta(a)
-        end
+    for a in x
+        clear_meta(a)
     end
 end
 
@@ -151,7 +147,7 @@ end
 function find_return_statements(x::EXPR)
     rets = EXPR[]
     if CSTParser.defines_function(x)
-        find_return_statements(x.args[3], true, rets)
+        find_return_statements(x[3], true, rets)
     end
     return rets
 end
@@ -168,22 +164,20 @@ function find_return_statements(x::EXPR, last_stmt, rets)
     end
 
 
-    if x.args isa Vector{EXPR}
-        for i = 1:length(x.args)
-            _, stop_iter = find_return_statements(x.args[i], last_stmt && (i == length(x.args) || (typof(x) === CSTParser.If && typof(x.args[i]) === CSTParser.Block)), rets)
-            stop_iter && break
-        end
+    for i = 1:length(x)
+        _, stop_iter = find_return_statements(x[i], last_stmt && (i == length(x) || (typof(x) === CSTParser.If && typof(x[i]) === CSTParser.Block)), rets)
+        stop_iter && break
     end
     return rets, false
 end
 
 
 function _expr_assert(x::EXPR, typ, nargs)
-    typof(x) == typ && x.args isa Vector{EXPR} && length(x.args) == nargs
+    typof(x) == typ && length(x) == nargs
 end
 
 function _binary_assert(x, kind)
-    typof(x) === CSTParser.BinaryOpCall && x.args isa Vector{EXPR} && length(x.args) == 3 && typof(x.args[2]) === CSTParser.OPERATOR && kindof(x.args[2]) === kind
+    typof(x) === CSTParser.BinaryOpCall && length(x) == 3 && typof(x[2]) === CSTParser.OPERATOR && kindof(x[2]) === kind
 end
     
 # should only be called on Bindings to functions
@@ -222,12 +216,12 @@ end
 
 function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
-    for i in 1:length(x.args[3].args)
-        expr = x.args[3].args[i]
+    for i in 1:length(x[3])
+        expr = x[3][i]
         if typof(expr) == CSTParser.Export && 
             for j = 2:length(expr)
-                if CSTParser.isidentifier(expr.args[j]) && StaticLint.hasref(expr.args[j])
-                    push!(exported_vars, expr.args[j])
+                if CSTParser.isidentifier(expr[j]) && hasref(expr[j])
+                    push!(exported_vars, expr[j])
                 end
             end
         end
@@ -277,7 +271,7 @@ function _is_in_basedir(path::String)
     return ""
 end
 
-isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && m[k].exported
+isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && m[k] isa SymbolServer.SymStore && m[k].exported
 isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m)
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
@@ -288,8 +282,8 @@ function retrieve_toplevel_scope(x)
     elseif parentof(x) isa EXPR
         return retrieve_toplevel_scope(parentof(x))
     else
-        error("Tried to reach toplevel scope, no scope found.")
-        # Add some sort of useful recovery here?
+        @info "Tried to reach toplevel scope, no scope found. Final expression $(typof(x))"
+        return nothing
     end
 end
 
@@ -367,3 +361,8 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
     end
     return false
 end
+
+
+fcall_name(x::EXPR) = typof(x) === Call && length(x) > 0 && valof(x[1])
+
+is_getfield(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT 

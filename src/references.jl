@@ -44,8 +44,8 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
     hasref(x) && return true
 
     resolved = false
-    if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr.args) > 1 && CSTParser.typof(scope.expr.args[2]) === IDENTIFIER
-        s_m_name = scope.expr.args[2].val isa String ? scope.expr.args[2].val : ""
+    if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr) > 1 && CSTParser.typof(scope.expr[2]) === IDENTIFIER
+        s_m_name = scope.expr[2].val isa String ? scope.expr[2].val : ""
         if s_m_name in visited_scopes
             return resolved
         else
@@ -53,7 +53,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
         end
     end
     
-    if typof(x) === BinaryOpCall && kindof(x.args[2]) === CSTParser.Tokens.DOT
+    if is_getfield(x)
         return resolve_getindex(x, scope, state)
     elseif isidentifier(x)
         if typof(x) === IDENTIFIER
@@ -61,7 +61,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
             x1 = x
         else
             # NONSTDIDENTIFIER, e.g. var"name"
-            mn = valof(x.args[2])
+            mn = valof(x[2])
             x1 = x
         end
         if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
@@ -69,21 +69,21 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
             return true
         end
     elseif resolvable_macroname(x)
-        x1 = x.args[2]
+        x1 = x[2]
         mn = string("@", valof(x1))
     elseif typof(x) === x_Str
-        if typof(x.args[1]) === IDENTIFIER
-            x1 = x.args[1]
+        if typof(x[1]) === IDENTIFIER
+            x1 = x[1]
             mn = string("@", valof(x1), "_str")
         else
             return false
         end
     elseif typof(x) === CSTParser.Kw
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
-        if typof(x.args[1]) === IDENTIFIER
-            setref!(x.args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
-        elseif typof(x.args[1]) === BinaryOpCall && kindof(x.args[1].args[2]) === CSTParser.Tokens.DECLARATION && typof(x.args[1].args[1]) === IDENTIFIER
-            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
+        if typof(x[1]) === IDENTIFIER
+            setref!(x[1], Binding(noname, nothing, nothing, [], nothing, nothing))
+        elseif typof(x[1]) === BinaryOpCall && kindof(x[1][2]) === CSTParser.Tokens.DECLARATION && typof(x[1][1]) === IDENTIFIER
+            setref!(x[1][1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true
     else
@@ -128,7 +128,7 @@ function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visite
             end
         end
     elseif typof(x1) === MacroName
-        x = x1.args[2]
+        x = x1[2]
         mn = Symbol("@", valof(x))
         if isexportedby(mn, m)
             setref!(x, m[mn])
@@ -136,9 +136,9 @@ function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visite
         end
     elseif typof(x1) === x_Str
         mac = x1
-        mn = Symbol("@", valof(mac.args[1]), "_str")
+        mn = Symbol("@", valof(mac[1]), "_str")
         if isexportedby(mn, m)
-            setref!(mac.args[1], m[mn])
+            setref!(mac[1], m[mn])
             return true
         end
     end
@@ -156,15 +156,15 @@ end
 function resolve_getindex(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if typof(x.args[1]) === IDENTIFIER
-        resolved = resolve_ref(x.args[1], scope, state, [])
-        if resolved && typof(x.args[3]) === Quotenode && typof(x.args[3].args[1]) === IDENTIFIER
-            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1]), state)
+    if typof(x[1]) === IDENTIFIER
+        resolved = resolve_ref(x[1], scope, state, [])
+        if resolved && typof(x[3]) === Quotenode && typof(x[3][1]) === IDENTIFIER
+            resolved = resolve_getindex(x[3][1], refof(x[1]), state)
         end
-    elseif typof(x.args[1]) === BinaryOpCall && kindof(x.args[1].args[2]) === CSTParser.Tokens.DOT
-        resolved = resolve_ref(x.args[1], scope, state, [])
-        if resolved && typof(x.args[3]) === Quotenode && typof(x.args[3].args[1]) === IDENTIFIER
-            resolved = resolve_getindex(x.args[3].args[1], refof(x.args[1].args[3].args[1]), state)
+    elseif is_getfield(x[1])
+        resolved = resolve_ref(x[1], scope, state, [])
+        if resolved && typof(x[3]) === Quotenode && typof(x[3][1]) === IDENTIFIER
+            resolved = resolve_getindex(x[3][1], refof(x[1][3][1]), state)
         end
     end
     return resolved
@@ -235,7 +235,7 @@ function resolve_getindex(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     return resolved
 end
 
-resolvable_macroname(x::EXPR) = typof(x) === MacroName && length(x.args) == 2 && isidentifier(x.args[2]) && refof(x.args[2]) === nothing
+resolvable_macroname(x::EXPR) = typof(x) === MacroName && length(x) == 2 && isidentifier(x[2]) && refof(x[2]) === nothing
 
 function _in_macro_def(x::EXPR)
     if typof(x) === CSTParser.Macro
