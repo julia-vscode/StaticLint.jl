@@ -145,7 +145,7 @@ function followinclude(x, state::State)
         else
             path = ""
         end
-        if !isempty(path)
+        if hasfile(state.server, path)
             if path in state.included_files
                 seterror!(x, IncludeLoop)
                 return
