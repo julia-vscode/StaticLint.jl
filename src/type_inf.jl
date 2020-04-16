@@ -8,11 +8,11 @@ function infer_type(binding::Binding, scope, state)
         elseif binding.val isa EXPR && (typof(binding.val) === CSTParser.Struct || typof(binding.val) === CSTParser.Mutable || typof(binding.val) === CSTParser.Abstract  || typof(binding.val) === CSTParser.Primitive)
             binding.type = CoreTypes.DataType
         elseif binding.val isa EXPR && typof(binding.val) === BinaryOpCall
-            if kindof(binding.val.args[2]) === CSTParser.Tokens.EQ
-                if CSTParser.is_func_call(binding.val.args[1])
+            if kindof(binding.val[2]) === CSTParser.Tokens.EQ
+                if CSTParser.is_func_call(binding.val[1])
                     binding.type = CoreTypes.Function
-                elseif CSTParser.is_func_call(binding.val.args[3])
-                    callname = CSTParser.get_name(binding.val.args[3])
+                elseif CSTParser.is_func_call(binding.val[3])
+                    callname = CSTParser.get_name(binding.val[3])
                     if CSTParser.isidentifier(callname)
                         resolve_ref(callname, scope, state, [])
                         if hasref(callname)
@@ -22,27 +22,27 @@ function infer_type(binding::Binding, scope, state)
                             end
                         end
                     end
-                elseif kindof(binding.val.args[3]) === CSTParser.Tokens.INTEGER
+                elseif kindof(binding.val[3]) === CSTParser.Tokens.INTEGER
                     binding.type = CoreTypes.Int
-                elseif kindof(binding.val.args[3]) === CSTParser.Tokens.FLOAT
+                elseif kindof(binding.val[3]) === CSTParser.Tokens.FLOAT
                     binding.type = CoreTypes.Float64
-                elseif kindof(binding.val.args[3]) === CSTParser.Tokens.STRING || typof(binding.val.args[3]) === CSTParser.Tokens.TRIPLE_STRING
+                elseif kindof(binding.val[3]) === CSTParser.Tokens.STRING || typof(binding.val[3]) === CSTParser.Tokens.TRIPLE_STRING
                     binding.type = CoreTypes.String
-                elseif typof(binding.val.args[3]) === IDENTIFIER && refof(binding.val.args[3]) isa Binding
-                    binding.type = refof(binding.val.args[3]).type
+                elseif typof(binding.val[3]) === IDENTIFIER && refof(binding.val[3]) isa Binding
+                    binding.type = refof(binding.val[3]).type
                 end
-            elseif kindof(binding.val.args[2]) === CSTParser.Tokens.DECLARATION
-                t = binding.val.args[3]
+            elseif kindof(binding.val[2]) === CSTParser.Tokens.DECLARATION
+                t = binding.val[3]
                 if CSTParser.isidentifier(t)
                     resolve_ref(t, scope, state, [])
                 end
                 if typof(t) === CSTParser.Curly
-                    t = t.args[1]
+                    t = t[1]
                     resolve_ref(t, scope, state, [])
                 end
-                if typof(t) === CSTParser.BinaryOpCall && kindof(t.args[2]) === CSTParser.Tokens.DOT && t.args[3].args isa Vector && length(t.args[3].args) > 0
-                    t = t.args[3].args[1]
-                end             
+                if is_getfield(t) && length(t[3]) > 0
+                    t = t[3][1]
+                end
 
                 if refof(t) isa Binding
                     rb = get_root_method(refof(t), state.server)
