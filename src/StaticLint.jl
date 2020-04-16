@@ -1,6 +1,6 @@
 module StaticLint
 using SymbolServer, CSTParser
-using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR, isidentifier, Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof
+using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR, isidentifier, Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment
 
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
 baremodule CoreTypes # Convenience
@@ -80,32 +80,32 @@ Iterates across the child nodes of an EXPR in execution order (rather than
 storage order) calling `state` on each node.
 """
 function traverse(x::EXPR, state)
-    if typof(x) === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x.args[1]) || typof(x.args[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x.args[1]) === CSTParser.Curly)
-        state(x.args[3])
-        state(x.args[2])
-        state(x.args[1])
+    if typof(x) === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x[1]) || typof(x[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x[1]) === CSTParser.Curly)
+        state(x[3])
+        state(x[2])
+        state(x[1])
     elseif typof(x) === CSTParser.WhereOpCall
-        @inbounds for i = 3:length(x.args)
-            state(x.args[i])
+        @inbounds for i = 3:length(x)
+            state(x[i])
         end
-        state(x.args[1])
-        state(x.args[2])
+        state(x[1])
+        state(x[2])
     elseif typof(x) === CSTParser.Generator
-        @inbounds for i = 2:length(x.args)
-            state(x.args[i])
+        @inbounds for i = 2:length(x)
+            state(x[i])
         end
-        state(x.args[1])
-    elseif typof(x) === CSTParser.Flatten && x.args !== nothing && length(x.args) === 1 && x.args[1].args !== nothing && length(x.args[1]) >= 3 && length(x.args[1].args[1]) >= 3
-        for i = 3:length(x.args[1].args[1].args)
-            state(x.args[1].args[1].args[i])
+        state(x[1])
+    elseif typof(x) === CSTParser.Flatten  && length(x) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
+        for i = 3:length(x[1][1])
+            state(x[1][1][i])
         end
-        for i = 3:length(x.args[1].args)
-            state(x.args[1].args[i])
+        for i = 3:length(x[1])
+            state(x[1][i])
         end
-        state(x.args[1].args[1].args[1])
-    elseif x.args !== nothing
-        @inbounds for i in 1:length(x.args)
-            state(x.args[i])
+        state(x[1][1][1])
+    elseif length(x) > 0
+        @inbounds for i in 1:length(x)
+            state(x[i])
         end
     end
 end
@@ -121,7 +121,7 @@ If this is successful it traverses the code associated with the loaded file.
 
 """
 function followinclude(x, state::State)
-    if typof(x) === Call && typof(x.args[1]) === IDENTIFIER && valof(x.args[1]) == "include"
+    if typof(x) === Call && length(x) > 0 && typof(x[1]) === IDENTIFIER && valof(x[1]) == "include"
         path = get_path(x, state)
         if isempty(path)
         elseif hasfile(state.server, path)

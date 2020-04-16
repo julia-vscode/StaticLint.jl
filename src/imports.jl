@@ -2,33 +2,33 @@ function resolve_import(x, state::State)
     if typof(x) === Using || typof(x) === Import
         u = typof(x) === Using
         i = 2
-        n = length(x.args)
+        n = length(x)
         
         root = par = getsymbolserver(state.server)
         bindings = []
-        while i <= length(x.args)
-            arg = x.args[i]
+        while i <= n
+            arg = x[i]
             if isidentifier(arg) || typof(arg) === CSTParser.MacroName
-                if refof(x.args[i]) !== nothing
-                    par = refof(x.args[i])
+                if refof(x[i]) !== nothing
+                    par = refof(x[i])
                 else
                     par = _get_field(par, arg, state)
                 end
             elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.COMMA
                 # end of chain, make available
                 if i > 2
-                    _mark_import_arg(x.args[i - 1], par, state, u)
+                    _mark_import_arg(x[i - 1], par, state, u)
                 end
                 par = root
             elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
                 root = par
-                if par !== nothing && i > 2 && isidentifier(x.args[i - 1]) && refof(x.args[i - 1]) === nothing
-                    setref!(x.args[i - 1], par)
+                if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
+                    setref!(x[i - 1], par)
                 end
             elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.DOT
                 # dot between identifiers
-                if par !== nothing && i > 2 && isidentifier(x.args[i - 1]) && refof(x.args[i - 1]) === nothing
-                    setref!(x.args[i - 1], par)
+                if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
+                    setref!(x[i - 1], par)
                 end
             elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.DOT
                 # dot prexceding identifiser
@@ -43,7 +43,7 @@ function resolve_import(x, state::State)
                 return
             end
             if i == n 
-                _mark_import_arg(x.args[i], par, state, u)
+                _mark_import_arg(x[i], par, state, u)
             end
             i += 1
         end

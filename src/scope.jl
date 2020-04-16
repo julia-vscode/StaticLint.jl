@@ -29,11 +29,11 @@ scopehasbinding(s::Scope, n::String) = haskey(s.names, n)
 
 function introduces_scope(x::EXPR, state)
     if typof(x) === CSTParser.BinaryOpCall
-        if kindof(x.args[2]) === CSTParser.Tokens.EQ && CSTParser.is_func_call(x.args[1])
+        if kindof(x[2]) === CSTParser.Tokens.EQ && CSTParser.is_func_call(x[1])
             return true
-        elseif kindof(x.args[2]) === CSTParser.Tokens.EQ && typof(x.args[1]) === CSTParser.Curly
+        elseif kindof(x[2]) === CSTParser.Tokens.EQ && typof(x[1]) === CSTParser.Curly
             return true
-        elseif kindof(x.args[2]) === CSTParser.Tokens.ANON_FUNC
+        elseif kindof(x[2]) === CSTParser.Tokens.ANON_FUNC
             return true
         else
             return false
@@ -98,8 +98,8 @@ function scopes(x::EXPR, state)
         if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
             # state.scope.names[bindingof(x).name] = bindingof(x)
             add_binding(x, state)
-        elseif typof(x) === CSTParser.Flatten && typof(x.args[1]) === CSTParser.Generator && x.args[1].args isa Vector{EXPR} && length(x.args[1].args) > 0 && typof(x.args[1].args[1]) === CSTParser.Generator
-            setscope!(x.args[1].args[1], nothing)
+        elseif typof(x) === CSTParser.Flatten && typof(x[1]) === CSTParser.Generator && length(x[1]) > 0 && typof(x[1][1]) === CSTParser.Generator
+            setscope!(x[1][1], nothing)
         end
     end
     return s0
