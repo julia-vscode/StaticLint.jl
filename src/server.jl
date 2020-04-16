@@ -13,7 +13,7 @@ mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
     symbolserver::SymbolServer.EnvStore
-    symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
+    symbol_extends::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
 end
 FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
 

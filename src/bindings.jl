@@ -9,8 +9,8 @@ end
 Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothing)
 
 function Base.show(io::IO, b::Binding)
-    printstyled(io, "Binding(", Expr(b.name), 
-        b.type === nothing ? "" : ":: ", 
+    printstyled(io, "Binding(", Expr(b.name),
+        b.type === nothing ? "" : ":: ",
         b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color = :blue)
 end
 
@@ -29,12 +29,12 @@ function gotoobjectofref(x::EXPR)
     if r isa SymbolServer.SymStore
         return r
     elseif r isa Binding
-        
+
     end
 end
 
 
-# Note to self, check consistency of marking self-reference of bindings (i.e. 
+# Note to self, check consistency of marking self-reference of bindings (i.e.
 # for, `function f end` we resolve `f` to itself at this stage.)
 function mark_bindings!(x::EXPR, state)
     if hasbinding(x)
@@ -111,9 +111,9 @@ function mark_bindings!(x::EXPR, state)
             setref!(name, bindingof(x))
         end
         mark_sig_args!(CSTParser.get_sig(x))
-    elseif typof(x) === CSTParser.Try && length(x) > 3 
+    elseif typof(x) === CSTParser.Try && length(x) > 3
         mark_binding!(x[4])
-    elseif typof(x) === CSTParser.Abstract || typof(x) === CSTParser.Primitive 
+    elseif typof(x) === CSTParser.Abstract || typof(x) === CSTParser.Primitive
         name = CSTParser.get_name(x)
         x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
         if typof(name) === IDENTIFIER
@@ -144,7 +144,7 @@ function mark_bindings!(x::EXPR, state)
                 end
             end
         end
-        
+
     end
 end
 
@@ -351,6 +351,6 @@ function mark_globals(x::EXPR, state)
                 push!(state.scope.names["#globals"].refs, valof(x[i]))
             end
         end
-        
+
     end
 end

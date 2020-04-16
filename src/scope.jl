@@ -46,7 +46,7 @@ function introduces_scope(x::EXPR, state)
             typof(x) === CSTParser.For ||
             typof(x) === CSTParser.While ||
             typof(x) === CSTParser.Let ||
-            typof(x) === CSTParser.Generator || # and Flatten? 
+            typof(x) === CSTParser.Generator || # and Flatten?
             typof(x) === CSTParser.Try ||
             typof(x) === CSTParser.Do ||
             typof(x) === CSTParser.ModuleH ||

@@ -8,7 +8,7 @@ function get_ids(x, q = false, ids = [])
     if q && unquoted(x)
         q = false
     end
-    if isidentifier(x) 
+    if isidentifier(x)
         !q && push!(ids, x)
     elseif length(x) > 0
         for i in 1:length(x)
@@ -87,7 +87,7 @@ function clear_ref(x::EXPR)
     end
 end
 function clear_error(x::EXPR)
-    if hasmeta(x) && x.meta.error !== nothing 
+    if hasmeta(x) && x.meta.error !== nothing
         x.meta.error = nothing
     end
 end
@@ -140,7 +140,7 @@ function retrieve_scope(x)
     elseif parentof(x) isa EXPR
         return retrieve_scope(parentof(x))
     end
-    return 
+    return
 end
 
 
@@ -156,7 +156,7 @@ function find_return_statements(x::EXPR, last_stmt, rets)
     if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
         push!(rets, x)
         return rets, false
-    end 
+    end
 
     if typof(x) === CSTParser.Return
         push!(rets, x)
@@ -179,7 +179,7 @@ end
 function _binary_assert(x, kind)
     typof(x) === CSTParser.BinaryOpCall && length(x) == 3 && typof(x[2]) === CSTParser.OPERATOR && kindof(x[2]) === kind
 end
-    
+
 # should only be called on Bindings to functions
 function last_method(func::Binding)
     if func.next isa Binding && (func.next.type === CoreTypes.Function || (func.next.type === CoreTypes.DataType && func.type === CoreTypes.Function))
@@ -207,7 +207,7 @@ end
 function prev_method(func_iter::Tuple{T,Int}) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}
     func = func_iter[1]
     iter = func_iter[2]
-    if iter < length(func.methods) 
+    if iter < length(func.methods)
         return func, iter + 1
     else
         return nothing
@@ -218,7 +218,7 @@ function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
     for i in 1:length(x[3])
         expr = x[3][i]
-        if typof(expr) == CSTParser.Export && 
+        if typof(expr) == CSTParser.Export &&
             for j = 2:length(expr)
                 if CSTParser.isidentifier(expr[j]) && hasref(expr[j])
                     push!(exported_vars, expr[j])
@@ -265,7 +265,7 @@ function _is_in_basedir(path::String)
     !hasreadperm(path1) && return ""
     !isdir(path1) && return ""
     files = readdir(path1)
-    if all(f -> f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
+    if all(f->f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
         return path1
     end
     return ""
@@ -296,7 +296,7 @@ end
 
 function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
     if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
-        # above should be modified, 
+        # above should be modified,
         rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, b.extends.name) # check rootmod exists, and that it has the variable
             rootfunc = rootmod[b.extends.name]
@@ -307,7 +307,7 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
                     rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
                     !(rootmod isa SymbolServer.ModuleStore) && continue
                     if haskey(rootmod.vals, b.extends.name) && (rootmod.vals[b.extends.name] isa SymbolServer.FunctionStore || rootmod.vals[b.extends.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
-                        for m in rootmod.vals[b.extends.name].methods # 
+                        for m in rootmod.vals[b.extends.name].methods #
                             ret = f(m)
                             ret && return true
                         end
@@ -334,7 +334,7 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
         bname = b.name.name
     end
     if (bname in keys(getsymbolextendeds(server))) && tls.modules !== nothing
-        # above should be modified, 
+        # above should be modified,
         rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
             rootfunc = rootmod[bname.name]
@@ -345,7 +345,7 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
                     rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
                     !(rootmod isa SymbolServer.ModuleStore) && continue
                     if haskey(rootmod.vals, bname.name) && (rootmod.vals[bname.name] isa SymbolServer.FunctionStore || rootmod.vals[bname.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
-                        for m in rootmod.vals[bname.name].methods # 
+                        for m in rootmod.vals[bname.name].methods #
                             ret = f(m)
                             ret && return true
                         end
@@ -365,4 +365,4 @@ end
 
 fcall_name(x::EXPR) = typof(x) === Call && length(x) > 0 && valof(x[1])
 
-is_getfield(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT 
+is_getfield(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT

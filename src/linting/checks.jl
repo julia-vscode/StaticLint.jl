@@ -62,7 +62,7 @@ end
 # Call
 function struct_nargs(x::EXPR)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
-    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.MacroCall && return 0, typemax(Int), Symbol[], true 
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.MacroCall && return 0, typemax(Int), Symbol[], true
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = typof(x) === CSTParser.Mutable ? x[4] : x[3]
     length(args) == 0 && return 0, typemax(Int), kws, kwsplat
@@ -113,13 +113,13 @@ function func_nargs(x::EXPR)
             maxargs !== typemax(Int) && (maxargs += 1)
         end
     end
-    
+
     return minargs, maxargs, kws, kwsplat
 end
 
 function func_nargs(m::SymbolServer.MethodStore)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
-    
+
     for arg in m.sig
         if CoreTypes.isva(last(arg))
             maxargs = typemax(Int)
@@ -223,7 +223,7 @@ function check_call(x, server)
                 if !(b isa Binding) # Needs to be cleaned up
                     if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
                         tls = retrieve_toplevel_scope(x)
-                        tls == nothing && return 
+                        tls == nothing && return
                         iterate_over_ss_methods(b, tls, server, ff1) && return
                         break
                     else
@@ -235,7 +235,7 @@ function check_call(x, server)
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
                     tls = retrieve_toplevel_scope(x)
-                    tls == nothing && return 
+                    tls == nothing && return
                     iterate_over_ss_methods(b.val, tls, server, ff1) && return
                     break
                 else
@@ -299,7 +299,7 @@ function _get_top_binding(x::EXPR, name::String)
         return nothing
     end
 end
-# Given the name of a function binding lookup the last declared method (i.e. the one 
+# Given the name of a function binding lookup the last declared method (i.e. the one
 # stored in the scope)
 _get_last_method(x, b::Binding, server) = b
 
@@ -335,7 +335,7 @@ function _get_global_scope(s::Scope)
 end
 
 function check_if_conds(x::EXPR)
-    if typof(x) === CSTParser.If && length(x) > 2 
+    if typof(x) === CSTParser.If && length(x) > 2
         cond = typof(first(x)) == CSTParser.KEYWORD ? x[2] : x[1]
         if typof(cond) === CSTParser.LITERAL && (kindof(cond) === CSTParser.Tokens.TRUE || kindof(cond) === CSTParser.Tokens.FALSE)
             seterror!(cond, ConstIfCondition)
@@ -365,12 +365,12 @@ function check_is_callable(x::EXPR, server)
 
         if hasref(func)
         end
-    end    
+    end
 end
 
 function check_datatype_decl(x::EXPR, server)
     # Only call in function signatures
-    if typof(x) === CSTParser.BinaryOpCall && length(x) === 3 && kindof(x[2]) === CSTParser.Tokens.DECLARATION && 
+    if typof(x) === CSTParser.BinaryOpCall && length(x) === 3 && kindof(x[2]) === CSTParser.Tokens.DECLARATION &&
         parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Call
         if hasref(last(x))
             dt = refof(last(x))
@@ -381,7 +381,7 @@ function check_datatype_decl(x::EXPR, server)
                     safety_trip += 1
                     dt.prev === nothing && break
                     dt = dt.prev
-                    if safety_trip > 50 
+                    if safety_trip > 50
                         @warn string(Expr(dt.name))
                         return
                     end
@@ -393,13 +393,13 @@ function check_datatype_decl(x::EXPR, server)
         elseif typof(last(x)) === CSTParser.LITERAL
             seterror!(x, InvalidTypeDeclaration)
         end
-    end    
+    end
 end
 
 function check_modulename(x::EXPR)
     if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && # x is a module
         scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
-        (typof(parentof(scopeof(x)).expr) === CSTParser.ModuleH || 
+        (typof(parentof(scopeof(x)).expr) === CSTParser.ModuleH ||
         typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) && # the parent scope is a module
         valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
         seterror!(CSTParser.get_name(x), InvalidModuleName)
@@ -444,11 +444,11 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
     elseif isquoted && unquoted(x)
         isquoted = false
     end
-    if typof(x) === CSTParser.ErrorToken 
+    if typof(x) === CSTParser.ErrorToken
         # collect parse errors
         push!(errs, (pos, x))
     elseif !isquoted
-        if missing && CSTParser.isidentifier(x) && !hasref(x) && 
+        if missing && CSTParser.isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER) &&
             !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->typof(x) === CSTParser.Call && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
@@ -458,12 +458,12 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
         end
     end
     
-    
+
     for i in 1:length(x)
         collect_hints(x[i], missing, isquoted, errs, pos)
         pos += x[i].fullspan
     end
-    
+
     errs
 end
 
@@ -471,7 +471,7 @@ function check_typeparams(x::EXPR)
     if typof(x) === CSTParser.WhereOpCall
         for i = 3:length(x)
             if hasbinding(x[i])
-                if !(bindingof(x[i]).refs isa Vector) 
+                if !(bindingof(x[i]).refs isa Vector)
                     seterror!(x[i], UnusedTypeParameter)
                 elseif length(bindingof(x[i]).refs) == 1
                     # there should (will?) always be at least one reference in the where declaration
@@ -532,7 +532,7 @@ function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
             # explicitly imported, e.g. import ModuleName: somefunction
             return true
         end
-    elseif b.prev isa SymbolServer.FunctionStore && 
+    elseif b.prev isa SymbolServer.FunctionStore &&
         parentof(b.name) isa EXPR && typof(parentof(b.name)) === CSTParser.Quotenode && is_getfield(parentof(parentof(b.name)))
         fullname = parentof(parentof(b.name))
         # overwrites imported function by declaring full name, e.g. ModuleName.FunctionName

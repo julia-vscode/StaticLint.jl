@@ -14,8 +14,8 @@ function setref!(x::EXPR, binding)
 end
 
 
-# Main function to be called. Given the `state` tries to determine what `x` 
-# refers to. If it remains unresolved and is in a delayed evaluation scope 
+# Main function to be called. Given the `state` tries to determine what `x`
+# refers to. If it remains unresolved and is in a delayed evaluation scope
 # (i.e. a function) it gets pushed to list (.urefs) to be resolved after we've
 # run over the entire top-level scope.
 function _resolve_ref(x, state)
@@ -37,9 +37,9 @@ end
 # 3. Look in the scope's variable list for a binding matching the name.
 # 4. If 3. is unsuccessful, check whether the scope imports any modules then check them.
 # 5. If no match is found within this scope check the parent scope.
-# The return value is a boolean that is false if x should point to something but 
+# The return value is a boolean that is false if x should point to something but
 # can't be resolved. 
- 
+
 function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
     hasref(x) && return true
 
@@ -52,7 +52,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
             push!(visited_scopes, s_m_name)
         end
     end
-    
+
     if is_getfield(x)
         return resolve_getindex(x, scope, state)
     elseif isidentifier(x)
@@ -196,7 +196,7 @@ function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
         if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
             resolved = resolve_ref(x, scopeof(parent_type), state, [])
         elseif CSTParser.defines_struct(parent_type)
-            if scopehasbinding(scopeof(parent_type), valof(x)) 
+            if scopehasbinding(scopeof(parent_type), valof(x))
                 setref!(x, scopeof(parent_type).names[valof(x)])
                 resolved = true
             end
