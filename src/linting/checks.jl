@@ -14,7 +14,9 @@ UnusedTypeParameter,
 IncludeLoop,
 MissingFile,
 InvalidModuleName,
-TypePiracy)
+TypePiracy,
+CannotDeclareConst,
+InvalidRedefofConst)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
@@ -30,7 +32,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     IncludeLoop => "Loop detected, this file has already been included.",
     MissingFile => "The included file can not be found.",
     InvalidModuleName => "Module name matches that of its parent.",
-    TypePiracy => "An imported function has been extended without using module defined typed arguments.")
+    TypePiracy => "An imported function has been extended without using module defined typed arguments.",
+    CannotDeclareConst => "Cannot declare constant; it already has a value.",
+    InvalidRedefofConst => "Invalid redefinition of constant.")
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)
@@ -432,6 +436,8 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
+    check_const_decl(x)
+    check_const_redef(x)
     for i in 1:length(x)
         check_all(x[i], opts, server)
     end
@@ -543,4 +549,16 @@ function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
         end
     end
     return false
+end
+
+function check_const_decl(x::EXPR)
+    if CSTParser.defines_datatype(x) && hasbinding(x) && bindingof(x).prev !== nothing
+        seterror!(x, CannotDeclareConst)
+    end
+end
+
+function check_const_redef(x::EXPR)
+    if hasbinding(x) && bindingof(x).prev isa Binding && bindingof(x).prev.type === CoreTypes.DataType && bindingof(x).type !== CoreTypes.Function
+        seterror!(x, InvalidRedefofConst)
+    end
 end
