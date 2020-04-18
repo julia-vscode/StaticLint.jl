@@ -421,8 +421,9 @@ mutable struct LintOptions
     typeparam::Bool
     modname::Bool
     pirates::Bool
+    constredecl::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true)
+LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -436,8 +437,8 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
-    check_const_decl(x)
-    check_const_redef(x)
+    opts.constredecl && check_const_decl(x)
+    opts.constredecl && check_const_redef(x)
     for i in 1:length(x)
         check_all(x[i], opts, server)
     end
