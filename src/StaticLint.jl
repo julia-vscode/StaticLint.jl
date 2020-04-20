@@ -69,6 +69,12 @@ function (state::State)(x::EXPR)
 
     # return to previous states
     state.scope != s0 && (state.scope = s0)
+    
+    if hasscope(x) && scopeof(x) !== state.scope && typof(x) !== CSTParser.ModuleH && typof(x) !== CSTParser.BareModule && typof(x) !== CSTParser.FileH && !CSTParser.defines_datatype(x)
+        for (n,b) in scopeof(x).names
+            infer_type_by_getfield_calls(b, state.server)
+        end
+    end
     state.delayed = delayed
     return state.scope
 end

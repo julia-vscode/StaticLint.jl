@@ -735,4 +735,77 @@ end
     end
 end
 
+
+@testset "expr fieldnames" begin
+    let cst = parse_and_pass("""
+        struct T
+        end
+
+        struct T
+            a
+        end
+
+        struct T
+            a
+            b
+        end
+
+        struct T
+            a::S
+            b::S
+        end
+
+        mutable struct T
+            a::S
+            b::S
+        end
+        """)
+        @test StaticLint.cst_struct_fieldnames(cst[1]) == []
+        @test StaticLint.cst_struct_fieldnames(cst[2]) == [:a]
+        @test StaticLint.cst_struct_fieldnames(cst[3]) == [:a, :b]
+        @test StaticLint.cst_struct_fieldnames(cst[4]) == [:a, :b]
+        @test StaticLint.cst_struct_fieldnames(cst[5]) == [:a, :b]
+    end
+end
+
+
+
+@testset "fieldname inference" begin
+    let cst = parse_and_pass("""
+        struct T
+            fieldname1
+        end
+        struct S
+            fieldname2
+        end
+        function f(arg1, arg2, arg3)
+            arg1.fieldname1
+            arg2.fieldname2
+            arg3.fieldname1
+            arg3.fieldname2
+        end
+        """)
+        @test bindingof(cst[3][2][3]).type !== nothing
+        @test bindingof(cst[3][2][5]).type !== nothing
+        @test bindingof(cst[3][2][7]).type === nothing
+    end
+    let cst = parse_and_pass("""
+        struct T
+            fieldname1
+        end
+        struct S
+            fieldname2
+        end
+        function f(arg1)
+            if arg1 isa T
+                arg1.fieldname1
+            elseif arg1 isa S
+                arg1.fieldname2
+            end
+        end
+        """)
+        @test bindingof(cst[3][2][3]).type === nothing
+    end
+end
+
 end
