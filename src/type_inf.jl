@@ -183,5 +183,3 @@ function infer_type_by_getfield_calls(b::Binding, server)
         end
     end
 end
-
-
