@@ -42,6 +42,7 @@ function infer_type(binding::Binding, scope, state)
                 end
                 if is_getfield(t) && length(t[3]) > 0
                     t = t[3][1]
+                    resolve_ref(t, scope, state, [])
                 end
 
                 if refof(t) isa Binding
