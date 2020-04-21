@@ -32,7 +32,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     MissingFile => "The included file can not be found.",
     InvalidModuleName => "Module name matches that of its parent.",
     TypePiracy => "An imported function has been extended without using module defined typed arguments.",
-    UnusedFunctionArgument => "An argument is included in a function signature but not used with its body."
+    UnusedFunctionArgument => "An argument is included in a function signature but not used within its body."
     )
 
 haserror(m::Meta) = m.error !== nothing
