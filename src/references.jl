@@ -177,12 +177,12 @@ function resolve_getindex(x::EXPR, b::Binding, state::State)::Bool
         resolved = resolve_getindex(x, b.type.val, state)
     elseif b.val isa SymbolServer.ModuleStore
         resolved = resolve_getindex(x, b.val, state)
-    elseif b.type isa SymbolServer.DataTypeStore
-        resolved = resolve_getindex(x, b.type, state)
     elseif b.val isa EXPR && (typof(b.val) === ModuleH || typof(b.val) === BareModule)
         resolved = resolve_getindex(x, b.val, state)
     elseif b.val isa Binding && b.val.val isa EXPR && (typof(b.val.val) === ModuleH || typof(b.val.val) === BareModule)
         resolved = resolve_getindex(x, b.val.val, state)
+    elseif b.type isa SymbolServer.DataTypeStore
+        resolved = resolve_getindex(x, b.type, state)
     end
     return resolved
 end
