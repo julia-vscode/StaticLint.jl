@@ -2,7 +2,7 @@ using StaticLint, SymbolServer
 using CSTParser, Test
 using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
-server = StaticLint.FileServer(Dict(), Set(), deepcopy(SymbolServer.stdlibs));
+server = StaticLint.FileServer();
 
 function get_ids(x, ids = [])
     if StaticLint.typof(x) == CSTParser.IDENTIFIER
@@ -31,6 +31,7 @@ function check_resolved(s)
     [(refof(i) !== nothing) for i in IDs]
 end
 
+@testset "StaticLint" begin
 
 @testset "Basic bindings" begin 
 
@@ -734,6 +735,7 @@ end
     end
 end
 
+
 @testset "check_farg_unused" begin
     let cst = parse_and_pass("function f(arg1, arg2) arg1 end")
         StaticLint.check_farg_unused(cst[1])
@@ -765,3 +767,30 @@ end
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
     end
 end
+
+@testset "check redefinition of const" begin
+    let cst = parse_and_pass("""
+        T = 1
+        struct T end
+        """)
+        StaticLint.check_const_decl(cst[2])
+        @test cst[2].meta.error == StaticLint.CannotDeclareConst
+    end
+    let cst = parse_and_pass("""
+        struct T end
+        T = 1
+        """)
+        StaticLint.check_const_redef(cst[2][1])
+        @test cst[2][1].meta.error == StaticLint.InvalidRedefofConst
+    end
+    let cst = parse_and_pass("""
+        struct T end
+        T() = 1
+        """)
+        StaticLint.check_const_redef(cst[2])
+        @test cst[2].meta.error == nothing
+    end
+end
+
+end
+
