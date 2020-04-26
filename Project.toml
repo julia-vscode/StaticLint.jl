@@ -16,7 +16,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [compat]
 julia = "1"
 CSTParser = "2.1"
-SymbolServer = "4"
+SymbolServer = "4.1"
 
 [targets]
 test = ["Test", "Pkg", "SHA", "LibGit2"]
