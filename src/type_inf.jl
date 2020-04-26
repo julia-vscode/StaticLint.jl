@@ -118,18 +118,76 @@ function fieldname_type_map(s::Scope, server, l = Dict())
     for (n,b) in s.names
         b = get_root_method(b, server)
         # Todo: Allow for const rebindings of datatypes (i.e. `const dt = DataType`)
-        if b isa Binding && b.val isa EXPR && CSTParser.defines_datatype(b.val)
-            for f in cst_struct_fieldnames(b.val)
-                f = Symbol(f)
-                if haskey(l, f)
-                    push!(l[f], b)
-                else
-                    l[f] = [b]
+        if b isa Binding && b.val isa EXPR 
+            if CSTParser.defines_datatype(b.val)
+                for f in cst_struct_fieldnames(b.val)
+                    f = Symbol(f)
+                    if haskey(l, f)
+                        push!(l[f], b)
+                    else
+                        l[f] = [b]
+                    end
+                end
+            elseif CSTParser.defines_function(b.val) && n == "get_property"
+                # need to check this overwrites Base.get_property
+                # need to iterate over all methods
+                sig = CSTParser.get_sig(b.val)
+                if length(sig) > 5 && _binary_assert(sig[3], CSTParser.Tokens.DECLARATION) && hasref(sig[3][3])
+                    t_binding = refof(sig[3][3])
+                    if t_binding isa Binding
+                        if t_binding.type !== CoreTypes.DataType
+                            t_binding = get_root_method(t_binding, server)
+                            t_binding.type !== CoreTypes.DataType && continue
+                        end
+                        for f in get_property_shadow_fields(b.val)
+                            f = Symbol(f)
+                            if haskey(l, f)
+                                push!(l[f], t_binding)
+                            else
+                                l[f] = [t_binding]
+                            end
+                        end
+                    end
                 end
             end
         end
     end
     return l
+end
+
+"""
+    get_property_shadow_fields(func)
+
+Assumes `func` is the definition of a function for `get_property`. Searches for 
+comparisons within the body between the second argument of the function and
+symbols, returning a list of these symbols.
+
+e.g.
+```
+function get_property(x::SomeType, f::Symbol)
+    if f === :asdf
+    elseif f == :sdgs
+    end
+end
+```
+
+-> [:asdf, :sdgs]
+"""
+function get_property_shadow_fields(func)
+    # Get the argname for 2nd argument of get_property
+    str_sname = CSTParser.str_value(CSTParser.rem_decl(CSTParser.rem_where_decl(CSTParser.get_sig(func))[5]))
+    str_sname isa String || return []
+    function trav(x, out = [])        
+        if (_binary_assert(x, CSTParser.Tokens.EQEQEQ) || _binary_assert(x, CSTParser.Tokens.EQEQ)) && CSTParser.valof(x[1]) == str_sname &&
+            CSTParser.typof(x[3]) === CSTParser.Quotenode && length(x[3]) ==2 && CSTParser.is_colon(x[3][1]) && CSTParser.isidentifier(x[3][2])
+            push!(out, Expr(x[3][2]))
+        end
+        for a in x
+            trav(a, out)
+        end
+        out 
+    end
+    trav(func)
 end
 
 function fieldname_type_map(cache::SymbolServer.ModuleStore, l = Dict{Symbol,Any}())
