@@ -306,7 +306,7 @@ end
 # for a FunctionStore b, checks whether additional methods are provided by other packages
 # f is a function that returns `true` if we want to break early from the loop
 
-
+iterate_over_ss_methods(b, tls, server, f) = false
 function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
     if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
         # above should be modified, 
