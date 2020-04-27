@@ -759,4 +759,17 @@ end
     end
 end
 
+@testset "hoisting of inner constructors" begin
+    let cst = parse_and_pass("""
+        struct ASDF
+            x::Int
+            y::Int
+            ASDF(x::Int) = new(x, 1)
+        end
+        ASDF() = something
+        """)
+        @test bindingof(cst[1]) === bindingof(cst[1][3][3]).prev
+        @test bindingof(cst[1][3][3]) === bindingof(cst[2]).prev
+    end
+end
 end
