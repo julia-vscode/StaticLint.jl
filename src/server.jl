@@ -12,12 +12,14 @@ end
 mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
-    symbolserver::Dict{String,SymbolServer.ModuleStore}
+    symbolserver::SymbolServer.EnvStore
+    symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
     workspacepackages::Dict{String,File} # list of files that may represent within-workspace packages
 end
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
 
 # Interface spec.
-# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver
+# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
 # AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, scopepass, (get/set)server
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
@@ -35,17 +37,17 @@ function loadfile(server::FileServer, path::String)
     return getfile(server, path)
 end
 getsymbolserver(server::FileServer) = server.symbolserver
-
+getsymbolextendeds(server::FileServer) = server.symbol_extends
 
 function scopepass(file, target = nothing)
     server = file.server
-    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{String,Any}("Base" => getsymbolserver(server)["Base"], "Core" => getsymbolserver(server)["Core"]), false))
+    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), false))
     state = State(file, target, [getpath(file)], scopeof(getcst(file)), false, EXPR[], server)
     state(getcst(file))
     for uref in state.urefs
         s = retrieve_delayed_scope(uref)
         if s !== nothing
-            resolve_ref(uref, s, state)
+            resolve_ref(uref, s, state, [])
         end
     end
 end
@@ -96,18 +98,18 @@ Usually called on the argument to `include` calls, and attempts to determine
 the path of the file to be included. Has limited support for `joinpath` calls.
 """
 function get_path(x::EXPR, state)
-    if typof(x) === Call && length(x.args) == 4
-        parg = x.args[3]
+    if typof(x) === Call && length(x) == 4
+        parg = x[3]
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
             return normpath(path)
-        elseif typof(parg) === x_Str && length(parg.args) == 2 && CSTParser.isidentifier(parg.args[1]) && valof(parg.args[1]) == "raw" && typof(parg.args[2]) === CSTParser.LITERAL && (kindof(parg.args[2]) == CSTParser.Tokens.STRING || kindof(parg.args[2]) == CSTParser.Tokens.TRIPLE_STRING)
-            return normpath(CSTParser.str_value(parg.args[2]))
-        elseif typof(parg) === Call && typof(parg.args[1]) === IDENTIFIER && CSTParser.str_value(parg.args[1]) == "joinpath"
+        elseif typof(parg) === x_Str && length(parg) == 2 && CSTParser.isidentifier(parg[1]) && valof(parg[1]) == "raw" && typof(parg[2]) === CSTParser.LITERAL && (kindof(parg[2]) == CSTParser.Tokens.STRING || kindof(parg[2]) == CSTParser.Tokens.TRIPLE_STRING)
+            return normpath(CSTParser.str_value(parg[2]))
+        elseif typof(parg) === Call && typof(parg[1]) === IDENTIFIER && CSTParser.str_value(parg[1]) == "joinpath"
             path_elements = String[]
 
-            for i = 2:length(parg.args)
-                arg = parg.args[i]
+            for i = 2:length(parg)
+                arg = parg[i]
                 if typof(arg) === PUNCTUATION
                 elseif _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
@@ -124,6 +126,6 @@ function get_path(x::EXPR, state)
     return ""
 end
 
-_is_macrocall_to_BaseDIR(arg) = typof(arg) === CSTParser.MacroCall && length(arg.args) == 1 &&
-    typof(arg.args[1]) === CSTParser.MacroName && length(arg.args[1].args) == 2 &&
-    valof(arg.args[1].args[2]) == "__DIR__"
+_is_macrocall_to_BaseDIR(arg) = typof(arg) === CSTParser.MacroCall && length(arg) == 1 &&
+    typof(arg[1]) === CSTParser.MacroName && length(arg[1]) == 2 &&
+    valof(arg[1][2]) == "__DIR__"
