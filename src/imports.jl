@@ -106,9 +106,9 @@ end
 function _get_field(par, arg, state)
     arg_str_rep = CSTParser.str_value(arg)
     if par isa SymbolServer.EnvStore # package store
-        if has_workspace_package(state.server, CSTParser.str_value(arg))
-            return scopeof(getcst(state.server.workspacepackages[CSTParser.str_value(arg)])).names[CSTParser.str_value(arg)]
-        elseif haskey(par, CSTParser.str_value(arg))
+        if has_workspace_package(state.server, arg_str_rep)
+            return scopeof(getcst(state.server.workspacepackages[arg_str_rep])).names[arg_str_rep]
+        elseif haskey(par, Symbol(arg_str_rep))
             return par[Symbol(arg_str_rep)]
         end
     elseif par isa Scope
