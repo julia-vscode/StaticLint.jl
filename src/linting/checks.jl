@@ -507,7 +507,7 @@ end
 function refers_to_nonimported_type(arg::EXPR)
     if hasref(arg) && refof(arg) isa Binding
         return true
-    elseif typof(arg) === CSTParser.UnaryOpCall && length(arg) == 2 && kindof(arg[1]) === CSTParser.Tokens.DECLARATION
+    elseif typof(arg) === CSTParser.UnaryOpCall && length(arg) == 2 && (kindof(arg[1]) === CSTParser.Tokens.DECLARATION || kindof(arg[1]) === CSTParser.Tokens.ISSUBTYPE)
         return refers_to_nonimported_type(arg[2])
     elseif _binary_assert(arg, CSTParser.Tokens.DECLARATION)
         return refers_to_nonimported_type(arg[3])
