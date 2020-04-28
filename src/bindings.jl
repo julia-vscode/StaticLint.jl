@@ -329,6 +329,10 @@ function add_binding(x, state, scope = state.scope)
                         end
                     end
                 end
+                # hoist binding for inner constructor to parent scope
+                if (typof(scope.expr) === CSTParser.Struct || typof(scope.expr) === CSTParser.Mutable) && CSTParser.defines_function(x) && parentof(scope) isa Scope
+                    return add_binding(x, state, parentof(scope))
+                end
                 scope.names[name] = bindingof(x)
             end
         end

@@ -464,6 +464,23 @@ end
         StaticLint.check_for_pirates(cst[2])
         @test errorof(cst[2]) === nothing
     end
+    let cst = parse_and_pass("""
+        import Base:sin
+        abstract type T end
+        sin(x::Array{T}) = 1
+        sin(x::Array{<:T}) = 1
+        sin(x::Array{Number}) = 1
+        sin(x::Array{<:Number}) = 1
+        """)
+        StaticLint.check_for_pirates(cst[3])
+        StaticLint.check_for_pirates(cst[4])
+        StaticLint.check_for_pirates(cst[5])
+        StaticLint.check_for_pirates(cst[6])
+        @test errorof(cst[3]) === nothing
+        @test errorof(cst[4]) === nothing
+        @test errorof(cst[5]) === StaticLint.TypePiracy
+        @test errorof(cst[6]) === StaticLint.TypePiracy
+    end
 end
 
 @testset "docs for undescribed variables" begin
@@ -790,6 +807,18 @@ end
     end
 end
 
+@testset "hoisting of inner constructors" begin
+    let cst = parse_and_pass("""
+        struct ASDF
+            x::Int
+            y::Int
+            ASDF(x::Int) = new(x, 1)
+        end
+        ASDF() = something
+        """)
+        @test bindingof(cst[1]) === bindingof(cst[1][3][3]).prev
+        @test bindingof(cst[1][3][3]) === bindingof(cst[2]).prev
+    end
 include("type_inf.jl")
 end
 end
