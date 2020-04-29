@@ -789,4 +789,12 @@ end
         @test bindingof(cst[1][3][3]) === bindingof(cst[2]).prev
     end
 end
+
+@testset "using of self" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        using Base.Filesystem: Filesystem
+        """)
+        @test StaticLint.hasref(cst[1][6])
+    end
+end
 end
