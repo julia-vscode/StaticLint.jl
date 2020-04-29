@@ -13,21 +13,45 @@ function Base.show(io::IO, s::Scope)
     println(io)
 end
 
+"""
+scopehasmodule(s::Scope, mname::Symbol)::Bool
+
+Checks whether the module `mname` has been `using`ed in `s`.
+"""
 scopehasmodule(s::Scope, mname::Symbol) = s.modules !== nothing && haskey(s.modules, mname)
+
+"""
+    addmoduletoscope!(s, m, [mname::Symbol])
+
+Adds module `m` to the list of used modules in scope `s`.
+"""
 function addmoduletoscope!(s::Scope, m, mname::Symbol)
     if s.modules === nothing
         s.modules = Dict{Symbol,Any}()
     end
-    s.modules[m.name.name] = m
+    s.modules[mname] = m
 end
 addmoduletoscope!(s::Scope, m::SymbolServer.ModuleStore) = addmoduletoscope!(s, m, m.name.name)
-addmoduletoscope!(s::Scope, m::EXPR) = addmoduletoscope!(s, scopeof(m), Symbol(valof(CSTParser.get_name(m))))
+addmoduletoscope!(s::Scope, m::EXPR) =  CSTParser.defines_module(m) && addmoduletoscope!(s, scopeof(m), Symbol(valof(CSTParser.get_name(m))))
+addmoduletoscope!(s::Scope, s1::Scope) = CSTParser.defines_module(s1.expr) && addmoduletoscope!(s, s1, Symbol(valof(CSTParser.get_name(s1.expr))))
+
+
 getscopemodule(s::Scope, m::Symbol) = s.modules[m]
 
+"""
+    scopehasbinding(s::Scope, n::String)
+
+Checks whether s has a binding for variable named `n`.
+"""
 scopehasbinding(s::Scope, n::String) = haskey(s.names, n)
 
+"""
+    introduces_scope(x::EXPR, state)
 
+Does this expression introduce a new scope?
+"""
 function introduces_scope(x::EXPR, state)
+    #TODO: remove unused 2nd argument.
     if typof(x) === CSTParser.BinaryOpCall
         if kindof(x[2]) === CSTParser.Tokens.EQ && CSTParser.is_func_call(x[1])
             return true
@@ -75,6 +99,13 @@ function setscope!(x::EXPR, s)
     x.meta.scope = s
 end
 
+"""
+    scopes(x::EXPR, state)
+
+Called when traversing the syntax tree and handles the association of
+scopes with expressions. On the first pass this will add scopes as
+necessary, on following passes it empties it. 
+"""
 function scopes(x::EXPR, state)
     clear_scope(x)
     if scopeof(x) === nothing && introduces_scope(x, state)
@@ -99,6 +130,7 @@ function scopes(x::EXPR, state)
         end
         if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
             # state.scope.names[bindingof(x).name] = bindingof(x)
+            # TODO: move this to the binding stage
             add_binding(x, state)
         elseif typof(x) === CSTParser.Flatten && typof(x[1]) === CSTParser.Generator && length(x[1]) > 0 && typof(x[1][1]) === CSTParser.Generator
             setscope!(x[1][1], nothing)
