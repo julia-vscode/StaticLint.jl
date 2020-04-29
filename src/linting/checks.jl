@@ -192,9 +192,9 @@ function check_call(x, server)
     if typof(x) === Call
         parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Do && return # TODO: add number of args specified in do block.
         length(x) == 0 && return
-        if typof(first(x)) === IDENTIFIER && hasref(first(x))
+        if isidentifier(first(x)) && hasref(first(x))
             func_ref = refof(first(x))
-        elseif _binary_assert(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && typof(x[1][3][1]) === IDENTIFIER && hasref(first(x)[3][1])
+        elseif _binary_assert(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
             func_ref = refof(first(last(first(x))))
         else
             return

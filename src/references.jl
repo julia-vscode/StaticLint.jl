@@ -156,14 +156,14 @@ end
 function resolve_getindex(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if typof(x[1]) === IDENTIFIER
+    if isidentifier(x[1])
         resolved = resolve_ref(x[1], scope, state, [])
-        if resolved && typof(x[3]) === Quotenode && typof(x[3][1]) === IDENTIFIER
+        if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
             resolved = resolve_getindex(x[3][1], refof(x[1]), state)
         end
     elseif is_getfield(x[1])
         resolved = resolve_ref(x[1], scope, state, [])
-        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && typof(x[3][1]) === IDENTIFIER
+        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
             resolved = resolve_getindex(x[3][1], refof(x[1][3][1]), state)
         end
     end
