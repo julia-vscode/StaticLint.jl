@@ -105,7 +105,7 @@ function get_path(x::EXPR, state)
             return normpath(path)
         elseif typof(parg) === x_Str && length(parg) == 2 && CSTParser.isidentifier(parg[1]) && valof(parg[1]) == "raw" && typof(parg[2]) === CSTParser.LITERAL && (kindof(parg[2]) == CSTParser.Tokens.STRING || kindof(parg[2]) == CSTParser.Tokens.TRIPLE_STRING)
             return normpath(CSTParser.str_value(parg[2]))
-        elseif typof(parg) === Call && typof(parg[1]) === IDENTIFIER && CSTParser.str_value(parg[1]) == "joinpath"
+        elseif typof(parg) === Call && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
             path_elements = String[]
 
             for i = 2:length(parg)

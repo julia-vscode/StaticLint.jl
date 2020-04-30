@@ -151,19 +151,41 @@ function resolve_ref(x::EXPR, m, state::State, visited_scopes)::Bool
 end
 
 
-# Special case to resolve `a.b`. Steps:
-# 1. Resolve lhs
+"""
+    resolve_getindex(x::EXPR, parent::Union{EXPR,Scope,ModuleStore,Binding}, state::State)::Bool
+
+Given an expression of the form `parent.x` try to resolve `x`. The method
+called with `parent::EXPR` resolves the reference for `parent`, other methods
+then check whether the Binding/Scope/ModuleStore to which `parent` points has
+a field matching `x`.
+"""
+function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
+    hasref(x) && return true
+    resolved = false
+    if CSTParser.isidentifier(x)
+        if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
+            resolved = resolve_ref(x, scopeof(parent_type), state, [])
+        elseif CSTParser.defines_struct(parent_type)
+            if scopehasbinding(scopeof(parent_type), valof(x)) 
+                setref!(x, scopeof(parent_type).names[valof(x)])
+                resolved = true
+            end
+        end
+    end
+    return resolved
+end
+
 function resolve_getindex(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if typof(x[1]) === IDENTIFIER
+    if isidentifier(x[1])
         resolved = resolve_ref(x[1], scope, state, [])
-        if resolved && typof(x[3]) === Quotenode && typof(x[3][1]) === IDENTIFIER
+        if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
             resolved = resolve_getindex(x[3][1], refof(x[1]), state)
         end
-    elseif is_getfield(x[1])
+    elseif is_getfield_w_quotenode(x[1])
         resolved = resolve_ref(x[1], scope, state, [])
-        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && typof(x[3][1]) === IDENTIFIER
+        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
             resolved = resolve_getindex(x[3][1], refof(x[1][3][1]), state)
         end
     end
@@ -190,21 +212,6 @@ end
 function resolve_getindex(x::EXPR, parent_type, state::State)::Bool
     hasref(x) && return true
     return false
-end
-function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
-    hasref(x) && return true
-    resolved = false
-    if CSTParser.isidentifier(x)
-        if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
-            resolved = resolve_ref(x, scopeof(parent_type), state, [])
-        elseif CSTParser.defines_struct(parent_type)
-            if scopehasbinding(scopeof(parent_type), valof(x)) 
-                setref!(x, scopeof(parent_type).names[valof(x)])
-                resolved = true
-            end
-        end
-    end
-    return resolved
 end
 
 function resolve_getindex(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool

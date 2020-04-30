@@ -9,8 +9,8 @@ function resolve_import(x, state::State)
         while i <= n
             arg = x[i]
             if isidentifier(arg) || typof(arg) === CSTParser.MacroName
-                if refof(x[i]) !== nothing
-                    par = refof(x[i])
+                if refof(arg) !== nothing
+                    par = refof(arg)
                 else
                     par = _get_field(par, arg, state)
                 end
@@ -124,7 +124,9 @@ function _get_field(par, arg, state)
                 return scopeof(par.val).names[arg_str_rep]
             end
         elseif par.val isa SymbolServer.ModuleStore
-            if haskey(par.val, Symbol(arg_str_rep))
+            if Symbol(arg_str_rep) === par.val.name.name
+                return par
+            elseif haskey(par.val, Symbol(arg_str_rep))
                 par = par.val[Symbol(arg_str_rep)]
                 if par isa SymbolServer.VarRef # reference to dependency
                     return SymbolServer._lookup(par, getsymbolserver(state.server), true)
@@ -133,7 +135,9 @@ function _get_field(par, arg, state)
             end
         end
     elseif par isa SymbolServer.ModuleStore # imported module
-        if haskey(par, Symbol(arg_str_rep))
+        if Symbol(arg_str_rep) === par.name.name
+            return par
+        elseif haskey(par, Symbol(arg_str_rep))
             par = par[Symbol(arg_str_rep)]
             if par isa SymbolServer.VarRef # reference to dependency
                 return SymbolServer._lookup(par, getsymbolserver(state.server), true)
