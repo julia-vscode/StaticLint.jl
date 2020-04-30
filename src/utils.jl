@@ -366,3 +366,5 @@ end
 fcall_name(x::EXPR) = typof(x) === Call && length(x) > 0 && valof(x[1])
 
 is_getfield(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT 
+
+is_getfield_w_quotenode(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 
