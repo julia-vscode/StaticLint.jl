@@ -100,7 +100,7 @@ function mark_bindings!(x::EXPR, state)
             setref!(name, bindingof(x))
         end
         mark_sig_args!(CSTParser.get_sig(x))
-    elseif typof(x) === ModuleH || typof(x) === BareModule
+    elseif CSTParser.defines_module(x)
         x.meta.binding = Binding(x[2], x, CoreTypes.Module, [], nothing, nothing)
         setref!(x[2], bindingof(x))
     elseif typof(x) === CSTParser.Try && length(x) > 3 && isidentifier(x[4])

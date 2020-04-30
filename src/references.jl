@@ -54,7 +54,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
     end
     
     if is_getfield(x)
-        return resolve_getindex(x, scope, state)
+        return resolve_getfield(x, scope, state)
     elseif isidentifier(x)
         if typof(x) === IDENTIFIER
             mn = valof(x)
@@ -152,18 +152,36 @@ end
 
 
 """
-    resolve_getindex(x::EXPR, parent::Union{EXPR,Scope,ModuleStore,Binding}, state::State)::Bool
+    resolve_getfield(x::EXPR, parent::Union{EXPR,Scope,ModuleStore,Binding}, state::State)::Bool
 
 Given an expression of the form `parent.x` try to resolve `x`. The method
 called with `parent::EXPR` resolves the reference for `parent`, other methods
 then check whether the Binding/Scope/ModuleStore to which `parent` points has
 a field matching `x`.
 """
-function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
+function resolve_getfield(x::EXPR, scope::Scope, state::State)::Bool
+    hasref(x) && return true
+    resolved = false
+    if isidentifier(x[1])
+        resolved = resolve_ref(x[1], scope, state, [])
+        if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
+            resolved = resolve_getfield(x[3][1], refof(x[1]), state)
+        end
+    elseif is_getfield_w_quotenode(x[1])
+        resolved = resolve_ref(x[1], scope, state, [])
+        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
+            resolved = resolve_getfield(x[3][1], refof(x[1][3][1]), state)
+        end
+    end
+    return resolved
+end
+
+
+function resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x)
-        if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
+        if CSTParser.defines_module(parent_type) && scopeof(parent_type) isa Scope
             resolved = resolve_ref(x, scopeof(parent_type), state, [])
         elseif CSTParser.defines_struct(parent_type)
             if scopehasbinding(scopeof(parent_type), valof(x)) 
@@ -175,46 +193,30 @@ function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
     return resolved
 end
 
-function resolve_getindex(x::EXPR, scope::Scope, state::State)::Bool
-    hasref(x) && return true
-    resolved = false
-    if isidentifier(x[1])
-        resolved = resolve_ref(x[1], scope, state, [])
-        if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
-            resolved = resolve_getindex(x[3][1], refof(x[1]), state)
-        end
-    elseif is_getfield_w_quotenode(x[1])
-        resolved = resolve_ref(x[1], scope, state, [])
-        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
-            resolved = resolve_getindex(x[3][1], refof(x[1][3][1]), state)
-        end
-    end
-    return resolved
-end
 
-function resolve_getindex(x::EXPR, b::Binding, state::State)::Bool
+function resolve_getfield(x::EXPR, b::Binding, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if b.type isa Binding
-        resolved = resolve_getindex(x, b.type.val, state)
+        resolved = resolve_getfield(x, b.type.val, state)
     elseif b.val isa SymbolServer.ModuleStore
-        resolved = resolve_getindex(x, b.val, state)
+        resolved = resolve_getfield(x, b.val, state)
     elseif b.type isa SymbolServer.DataTypeStore
-        resolved = resolve_getindex(x, b.type, state)
-    elseif b.val isa EXPR && (typof(b.val) === ModuleH || typof(b.val) === BareModule)
-        resolved = resolve_getindex(x, b.val, state)
-    elseif b.val isa Binding && b.val.val isa EXPR && (typof(b.val.val) === ModuleH || typof(b.val.val) === BareModule)
-        resolved = resolve_getindex(x, b.val.val, state)
+        resolved = resolve_getfield(x, b.type, state)
+    elseif b.val isa EXPR && CSTParser.defines_module(b.val)
+        resolved = resolve_getfield(x, b.val, state)
+    elseif b.val isa Binding && b.val.val isa EXPR && CSTParser.defines_module(b.val.val)
+        resolved = resolve_getfield(x, b.val.val, state)
     end
     return resolved
 end
 
-function resolve_getindex(x::EXPR, parent_type, state::State)::Bool
+function resolve_getfield(x::EXPR, parent_type, state::State)::Bool
     hasref(x) && return true
     return false
 end
 
-function resolve_getindex(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
+function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x) && haskey(m, Symbol(valof(x)))
@@ -229,7 +231,7 @@ function resolve_getindex(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     return resolved
 end
 
-function resolve_getindex(x::EXPR, parent::SymbolServer.DataTypeStore, state::State)::Bool
+function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if CSTParser.isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
