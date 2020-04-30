@@ -821,4 +821,12 @@ end
     end
 include("type_inf.jl")
 end
+
+@testset "using of self" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        using Base.Filesystem: Filesystem
+        """)
+        @test StaticLint.hasref(cst[1][6])
+    end
+end
 end
