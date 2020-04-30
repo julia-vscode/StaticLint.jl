@@ -159,22 +159,6 @@ called with `parent::EXPR` resolves the reference for `parent`, other methods
 then check whether the Binding/Scope/ModuleStore to which `parent` points has
 a field matching `x`.
 """
-function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
-    hasref(x) && return true
-    resolved = false
-    if CSTParser.isidentifier(x)
-        if (typof(parent_type) === ModuleH || typof(parent_type) === BareModule) && scopeof(parent_type) isa Scope
-            resolved = resolve_ref(x, scopeof(parent_type), state, [])
-        elseif CSTParser.defines_struct(parent_type)
-            if scopehasbinding(scopeof(parent_type), valof(x)) 
-                setref!(x, scopeof(parent_type).names[valof(x)])
-                resolved = true
-            end
-        end
-    end
-    return resolved
-end
-
 function resolve_getindex(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
@@ -192,6 +176,24 @@ function resolve_getindex(x::EXPR, scope::Scope, state::State)::Bool
     return resolved
 end
 
+
+function resolve_getindex(x::EXPR, parent_type::EXPR, state::State)::Bool
+    hasref(x) && return true
+    resolved = false
+    if CSTParser.isidentifier(x)
+        if CSTParser.defines_module(parent_type) && scopeof(parent_type) isa Scope
+            resolved = resolve_ref(x, scopeof(parent_type), state, [])
+        elseif CSTParser.defines_struct(parent_type)
+            if scopehasbinding(scopeof(parent_type), valof(x)) 
+                setref!(x, scopeof(parent_type).names[valof(x)])
+                resolved = true
+            end
+        end
+    end
+    return resolved
+end
+
+
 function resolve_getindex(x::EXPR, b::Binding, state::State)::Bool
     hasref(x) && return true
     resolved = false
@@ -201,9 +203,9 @@ function resolve_getindex(x::EXPR, b::Binding, state::State)::Bool
         resolved = resolve_getindex(x, b.val, state)
     elseif b.type isa SymbolServer.DataTypeStore
         resolved = resolve_getindex(x, b.type, state)
-    elseif b.val isa EXPR && (typof(b.val) === ModuleH || typof(b.val) === BareModule)
+    elseif b.val isa EXPR && CSTParser.defines_module(b.val)
         resolved = resolve_getindex(x, b.val, state)
-    elseif b.val isa Binding && b.val.val isa EXPR && (typof(b.val.val) === ModuleH || typof(b.val.val) === BareModule)
+    elseif b.val isa Binding && b.val.val isa EXPR && CSTParser.defines_module(b.val.val)
         resolved = resolve_getindex(x, b.val.val, state)
     end
     return resolved
