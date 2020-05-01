@@ -462,9 +462,13 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
             # collect lint hints
             push!(errs, (pos, x))
         end
+    elseif isquoted && should_mark_missing_getfield_ref(x)
+        lhsref = refof_maybe_getfield(parentof(parentof(x))[1])
+        if getfield_should_be_resolved(lhsref)
+            push!(errs, (pos, x))
+        end
     end
-    
-    
+
     for i in 1:length(x)
         collect_hints(x[i], missing, isquoted, errs, pos)
         pos += x[i].fullspan
@@ -472,6 +476,28 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
     
     errs
 end
+
+function refof_maybe_getfield(x::EXPR)
+    if isidentifier(x) 
+        return refof(x)
+    elseif is_getfield_w_quotenode(x)
+        return refof(x[3][1])
+    end
+end
+
+function should_mark_missing_getfield_ref(x)
+    CSTParser.isidentifier(x) && !hasref(x) && 
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x))) 
+end
+
+function getfield_should_be_resolved(lhsref)
+    lhsref isa SymbolServer.ModuleStore ||
+            (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore) ||
+            (lhsref isa Binding && lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name))) ||
+            (lhsref isa Binding && lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val))
+end
+
+isunionfaketype(t::SymbolServer.FakeTypeName) = t.name.name === :Union && t.name.parent isa SymbolServer.VarRef && t.name.parent.name === :Core
 
 function check_typeparams(x::EXPR)
     if typof(x) === CSTParser.WhereOpCall

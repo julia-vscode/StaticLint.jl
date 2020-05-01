@@ -197,16 +197,14 @@ end
 function resolve_getfield(x::EXPR, b::Binding, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if b.type isa Binding
-        resolved = resolve_getfield(x, b.type.val, state)
-    elseif b.val isa SymbolServer.ModuleStore
+    if b.val isa Binding
         resolved = resolve_getfield(x, b.val, state)
+    elseif b.val isa SymbolServer.ModuleStore || ( b.val isa EXPR && CSTParser.defines_module(b.val))
+        resolved = resolve_getfield(x, b.val, state)
+    elseif b.type isa Binding
+        resolved = resolve_getfield(x, b.type.val, state)
     elseif b.type isa SymbolServer.DataTypeStore
         resolved = resolve_getfield(x, b.type, state)
-    elseif b.val isa EXPR && CSTParser.defines_module(b.val)
-        resolved = resolve_getfield(x, b.val, state)
-    elseif b.val isa Binding && b.val.val isa EXPR && CSTParser.defines_module(b.val.val)
-        resolved = resolve_getfield(x, b.val.val, state)
     end
     return resolved
 end
