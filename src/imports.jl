@@ -89,7 +89,6 @@ function _mark_import_arg(arg, par, state, u)
             else
                 state.scope.modules = Dict(Symbol(valof(arg)) => scopeof(par.val.val))
             end
-            
         end
     end
 end
@@ -111,29 +110,6 @@ function _get_field(par, arg, state)
         elseif haskey(par, Symbol(arg_str_rep))
             return par[Symbol(arg_str_rep)]
         end
-    elseif par isa Scope
-        if scopehasbinding(par, arg_str_rep)
-            return par.names[arg_str_rep]
-        end
-    elseif par isa Binding 
-        if par.val isa Binding
-            par = par.val
-        end
-        if par.val isa EXPR && (typof(par.val) === ModuleH || typof(par.val) === BareModule)
-            if scopeof(par.val) isa Scope && scopehasbinding(scopeof(par.val), arg_str_rep)
-                return scopeof(par.val).names[arg_str_rep]
-            end
-        elseif par.val isa SymbolServer.ModuleStore
-            if Symbol(arg_str_rep) === par.val.name.name
-                return par
-            elseif haskey(par.val, Symbol(arg_str_rep))
-                par = par.val[Symbol(arg_str_rep)]
-                if par isa SymbolServer.VarRef # reference to dependency
-                    return SymbolServer._lookup(par, getsymbolserver(state.server), true)
-                end
-                return par
-            end
-        end
     elseif par isa SymbolServer.ModuleStore # imported module
         if Symbol(arg_str_rep) === par.name.name
             return par
@@ -143,6 +119,16 @@ function _get_field(par, arg, state)
                 return SymbolServer._lookup(par, getsymbolserver(state.server), true)
             end
             return par
+        end
+    elseif par isa Scope && scopehasbinding(par, arg_str_rep)
+        return par.names[arg_str_rep]
+    elseif par isa Binding 
+        if par.val isa Binding
+            return _get_field(par.val, arg, state)
+        elseif par.val isa EXPR && CSTParser.defines_module(par.val) && scopeof(par.val) isa Scope 
+            return _get_field(scopeof(par.val), arg, state)
+        elseif par.val isa SymbolServer.ModuleStore
+            return _get_field(par.val, arg, state)
         end
     end
     return
