@@ -16,7 +16,7 @@ mutable struct FileServer <: AbstractServer
     symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
     workspacepackages::Dict{String,File} # list of files that may represent within-workspace packages
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Dict{String,File}())
 
 # Interface spec.
 # AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
