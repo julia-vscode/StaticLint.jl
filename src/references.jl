@@ -21,9 +21,6 @@ end
 function _resolve_ref(x, state)
     if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
         resolved = resolve_ref(x, state.scope, state, [])
-        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
-            push!(state.urefs, x)
-        end
     end
 end
 
