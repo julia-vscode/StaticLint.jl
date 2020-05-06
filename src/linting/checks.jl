@@ -457,6 +457,10 @@ mutable struct LintOptions
 end
 LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true, true)
 
+# Default all linting options on
+LintOptions(options::Vararg{Union{Bool,Nothing},9}) =
+    LintOptions(something.(options, true))
+
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
     opts.call && check_call(x, server)
