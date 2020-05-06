@@ -16,7 +16,8 @@ MissingFile,
 InvalidModuleName,
 TypePiracy,
 CannotDeclareConst,
-InvalidRedefofConst)
+InvalidRedefofConst,
+NotEqDef)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
@@ -34,7 +35,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     InvalidModuleName => "Module name matches that of its parent.",
     TypePiracy => "An imported function has been extended without using module defined typed arguments.",
     CannotDeclareConst => "Cannot declare constant; it already has a value.",
-    InvalidRedefofConst => "Invalid redefinition of constant.")
+    InvalidRedefofConst => "Invalid redefinition of constant.",
+    NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.")
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)
@@ -489,9 +491,11 @@ function check_typeparams(x::EXPR)
 end
 
 function check_for_pirates(x::EXPR)
-    if CSTParser.defines_function(x) && hasbinding(x) && overwrites_imported_function(bindingof(x))
+    if CSTParser.defines_function(x)
         sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
-        if typof(sig) == CSTParser.Call
+        if fname_is_noteq(CSTParser.get_name(sig))
+            seterror!(x, NotEqDef)
+        elseif typof(sig) == CSTParser.Call && hasbinding(x) && overwrites_imported_function(bindingof(x))
             for i = 2:length(sig)
                 if hasbinding(sig[i]) && bindingof(sig[i]).type isa Binding
                     return
@@ -502,6 +506,18 @@ function check_for_pirates(x::EXPR)
             seterror!(x, TypePiracy)
         end
     end
+end
+
+function fname_is_noteq(x)
+    if x isa EXPR
+        if typof(x) === CSTParser.OPERATOR && kindof(x) === CSTParser.Tokens.NOT_EQ
+            return true
+        elseif is_getfield_w_quotenode(x) && length(x[3]) == 2 && CSTParser.is_colon(x[3][1])
+
+            return fname_is_noteq(x[3][2])
+        end
+    end
+    return false
 end
 
 function refers_to_nonimported_type(arg::EXPR)
