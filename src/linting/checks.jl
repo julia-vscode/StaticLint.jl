@@ -419,17 +419,16 @@ end
 function check_farg_unused(x::EXPR)
     if CSTParser.defines_function(x)
         sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
-        if typof(x) === CSTParser.FunctionDef && length(x.args) == 4 && x.args[3] isa EXPR && x.args[3].args !== nothing && length(x.args[3].args) == 1 && CSTParser.isliteral(x.args[3].args[1])
-            return
-        elseif typof(x.args[3]) === CSTParser.Block && x.args[3].args !== nothing && length(x.args[3].args) == 1 && CSTParser.isliteral(x.args[3].args[1])
-            return
+        if (typof(x) === CSTParser.FunctionDef && length(x) == 4 && x[3] isa EXPR && length(x[3]) == 1 && CSTParser.isliteral(x[3][1])) ||
+            (typof(x[3]) === CSTParser.Block && length(x[3]) == 1 && CSTParser.isliteral(x[3][1]))
+            return # Allow functions that return constants
         end
         if typof(sig) === CSTParser.Call
-            for i = 2:length(sig.args)
-                if hasbinding(sig.args[i])
-                    arg = sig.args[i]
-                elseif typof(sig.args[i]) === CSTParser.Kw && hasbinding(sig.args[i].args[1])
-                    arg = sig.args[i].args[1]
+            for i = 2:length(sig)
+                if hasbinding(sig[i])
+                    arg = sig[i]
+                elseif typof(sig[i]) === CSTParser.Kw && hasbinding(sig[i][1])
+                    arg = sig[i][1]
                 else
                     continue
                 end
