@@ -118,6 +118,8 @@ function get_path(x::EXPR, state)
                     return ""
                 end
             end
+            isempty(path_elements) && return ""
+
             path = normpath(joinpath(path_elements...))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
