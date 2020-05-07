@@ -653,7 +653,7 @@ if !(VERSION < v"1.3")
         func
         func1
         """)
-        StaticLint.collect_hints(cst)
+        StaticLint.collect_hints(cst, server)
         @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
         @test StaticLint.hasref(cst[4])
         @test StaticLint.hasref(cst[5])
@@ -677,7 +677,7 @@ let cst = parse_and_pass("""
     @variable(model, x6 >= some_bound)
     # @variable(model, some_bound >= x7)
     """)
-    @test isempty(StaticLint.collect_hints(cst))
+    @test isempty(StaticLint.collect_hints(cst, server))
 end
 
 let cst = parse_and_pass("""
@@ -693,7 +693,7 @@ let cst = parse_and_pass("""
     @variable model x6 >= some_bound
     # @variable(model, some_bound >= x7)
     """)
-    @test isempty(StaticLint.collect_hints(cst))
+    @test isempty(StaticLint.collect_hints(cst, server))
 end
 
 let cst = parse_and_pass("""
@@ -711,7 +711,7 @@ let cst = parse_and_pass("""
     some_bound = 1
     @expression(model, ex, some_bound >= 1)
     """)
-    @test isempty(StaticLint.collect_hints(cst))
+    @test isempty(StaticLint.collect_hints(cst, server))
 end
 
 let cst = parse_and_pass("""
@@ -721,7 +721,7 @@ let cst = parse_and_pass("""
     @constraint(model, con1, expr)
     @constraint model con2 expr
     """)
-    @test isempty(StaticLint.collect_hints(cst))
+    @test isempty(StaticLint.collect_hints(cst, server))
 end
 end
 end
@@ -729,8 +729,8 @@ end
 @testset "stdcall" begin
     let cst = parse_and_pass("""
         ccall(:GetCurrentProcess, stdcall, Ptr{Cvoid}, ())""")
-        StaticLint.collect_hints(cst)
-        @test isempty(StaticLint.collect_hints(cst))
+        StaticLint.collect_hints(cst, server)
+        @test isempty(StaticLint.collect_hints(cst, server))
     end
     let cst = parse_and_pass("""
         stdcall
@@ -842,6 +842,53 @@ end
         using Base.Filesystem: Filesystem
         """)
         @test StaticLint.hasref(cst[1][6])
+    end
+end
+
+@testset "don't report unknown getfields when a custom getproperty is defined" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        struct T end
+        Base.getproperty(x::T, s) = 1
+        T
+        """)
+        @test StaticLint.has_getproperty_method(bindingof(cst[1]))
+        @test StaticLint.has_getproperty_method(refof(cst[3]))
+    end
+    let cst = parse_and_pass("""
+        struct T
+            f1
+            f2
+        end
+        Base.getproperty(x::T, s) = 1
+        f(x::T) = x.f3
+        """)
+        @test !StaticLint.hasref(cst[3][3][1][3][1])
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    let cst = parse_and_pass("""
+        struct T{S}
+            f1
+            f2
+        end
+        Base.getproperty(x::T{Int}, s) = 1
+        f(x::T) = x.f3
+        """)
+        @test !StaticLint.hasref(cst[3][3][1][3][1])
+        @test StaticLint.is_type_of_call_to_getproperty(cst[2][1][3][3][1])
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    
+    let cst = parse_and_pass("""
+        f(x::Module) = x.parent1
+        """)
+        @test StaticLint.has_getproperty_method(server.symbolserver[:Core][:Module], server)
+        @test !StaticLint.has_getproperty_method(server.symbolserver[:Core][:DataType], server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    let cst = parse_and_pass("""
+        f(x::DataType) = x.sdf
+        """)
+        @test !isempty(StaticLint.collect_hints(cst, server))
     end
 end
 end

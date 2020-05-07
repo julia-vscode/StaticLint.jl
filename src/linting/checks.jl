@@ -478,7 +478,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
 end
 
 
-function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+function collect_hints(x::EXPR, server, missing = true, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -496,16 +496,103 @@ function collect_hints(x::EXPR, missing = true, isquoted = false, errs = Tuple{I
             # collect lint hints
             push!(errs, (pos, x))
         end
+    elseif isquoted && should_mark_missing_getfield_ref(x, server)
+            push!(errs, (pos, x))
     end
-    
-    
+
     for i in 1:length(x)
-        collect_hints(x[i], missing, isquoted, errs, pos)
+        collect_hints(x[i], server, missing, isquoted, errs, pos)
         pos += x[i].fullspan
     end
     
     errs
 end
+
+function refof_maybe_getfield(x::EXPR)
+    if isidentifier(x) 
+        return refof(x)
+    elseif is_getfield_w_quotenode(x)
+        return refof(x[3][1])
+    end
+end
+
+function should_mark_missing_getfield_ref(x, server)
+    if CSTParser.isidentifier(x) && !hasref(x) && # x has no ref
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode && parentof(parentof(x)) isa EXPR && 
+        is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
+        lhsref = refof_maybe_getfield(parentof(parentof(x))[1])
+        if lhsref isa SymbolServer.ModuleStore || (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore) 
+            # a module, we should know this.
+            return true
+        elseif lhsref isa Binding
+            if lhsref.val isa Binding
+                lhsref = lhsref.val
+            end
+            lhsref = get_root_method(lhsref, nothing)
+            if lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
+                return true
+            elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+unwrap_fakeunionall(x) = x isa SymbolServer.FakeUnionAll ? unwrap_fakeunionall(x.body) : x
+function has_getproperty_method(b::SymbolServer.DataTypeStore, server)
+    getprop_vr = SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Base), :getproperty)
+    if haskey(getsymbolextendeds(server), getprop_vr)
+        for ext in getsymbolextendeds(server)[getprop_vr]
+            for m in SymbolServer._lookup(ext, getsymbolserver(server))[:getproperty].methods
+                t = unwrap_fakeunionall(m.sig[1][2])
+                t.name == b.name.name && return true
+            end
+        end
+    else
+        for m in getsymbolserver(server)[:Base][:getproperty].methods
+            t = unwrap_fakeunionall(m.sig[1][2])
+            t.name == b.name.name && return true
+        end
+    end
+    return false
+end
+
+function has_getproperty_method(b::Binding)
+    if b.val isa Binding
+        return has_getproperty_method(b.val)
+    elseif b.val isa SymbolServer.DataTypeStore
+        return has_getproperty_method(b.val)
+    elseif  b isa Binding && b.type === CoreTypes.DataType
+        while b !== nothing
+            for ref in b.refs
+                if is_type_of_call_to_getproperty(ref)
+                    return true
+                end
+            end
+            b = b.next isa Binding && b.next.type === CoreTypes.Function ? b.next : nothing
+        end
+        
+    end
+    return false
+end
+
+function is_type_of_call_to_getproperty(x::EXPR)
+    function is_call_to_getproperty(x::EXPR) 
+        if typof(x) === CSTParser.Call 
+            func_name = x[1]
+            return (isidentifier(func_name) && valof(func_name) == "getproperty") || # getproperty()
+            (is_getfield_w_quotenode(func_name) && isidentifier(func_name[3][1]) && valof(func_name[3][1]) == "getproperty") # Base.getproperty()
+        end
+        return false
+    end
+
+    return parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && 
+        ((_binary_assert(parentof(x), CSTParser.Tokens.DECLARATION) && x === parentof(x)[3] && is_call_to_getproperty(parentof(parentof(x)))) || 
+        (typof(parentof(x)) === CSTParser.Curly && x === parentof(x)[1] && _binary_assert(parentof(parentof(x)), CSTParser.Tokens.DECLARATION) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
+end
+
+isunionfaketype(t::SymbolServer.FakeTypeName) = t.name.name === :Union && t.name.parent isa SymbolServer.VarRef && t.name.parent.name === :Core
 
 function check_typeparams(x::EXPR)
     if typof(x) === CSTParser.WhereOpCall
