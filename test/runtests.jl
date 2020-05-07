@@ -287,7 +287,7 @@ f(arg) = arg
     let cst = parse_and_pass("""
         sin(1,2,3)
         """)
-        check_all(cst, StaticLint.LintOptions(),server)
+        check_all(cst, StaticLint.LintOptions(:),server)
         @test errorof(cst[1]) === StaticLint.IncorrectCallArgs
     end
     let cst = parse_and_pass("""
@@ -296,7 +296,7 @@ f(arg) = arg
         for i in 1 end
         for i in 1:1 end
         """)
-        check_all(cst, StaticLint.LintOptions(),server)
+        check_all(cst, StaticLint.LintOptions(:),server)
         @test errorof(cst[1][2]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[3][2]) === StaticLint.IncorrectIterSpec
@@ -309,7 +309,7 @@ f(arg) = arg
         [i for i in 1 end]
         [i for i in 1:1 end]
         """)
-        check_all(cst, StaticLint.LintOptions(),server)
+        check_all(cst, StaticLint.LintOptions(:),server)
         @test errorof(cst[1][2][3]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[2][2][3]) === StaticLint.IncorrectIterSpec
         @test errorof(cst[3][2][3]) === StaticLint.IncorrectIterSpec
@@ -317,7 +317,7 @@ f(arg) = arg
     end
 
     let cst = parse_and_pass("a == nothing")
-        check_all(cst, StaticLint.LintOptions(),server)
+        check_all(cst, StaticLint.LintOptions(:),server)
         @test errorof(cst[1][2]) === StaticLint.NothingEquality 
     end
 
@@ -406,7 +406,7 @@ end
         f() where {T,S}
         f() where {T<:Any}
         """)
-        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
         @test StaticLint.errorof(cst[1][3]) == StaticLint.UnusedTypeParameter
         @test StaticLint.errorof(cst[2][4]) == StaticLint.UnusedTypeParameter
         @test StaticLint.errorof(cst[2][6]) == StaticLint.UnusedTypeParameter
@@ -417,7 +417,7 @@ end
         f(x::T,y::S) where {T,S}
         f(x::T) where {T<:Any}
         """)
-        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
         @test !StaticLint.haserror(cst[1][3])
         @test !StaticLint.haserror(cst[2][4])
         @test !StaticLint.haserror(cst[2][6])
