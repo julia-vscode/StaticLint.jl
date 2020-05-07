@@ -442,6 +442,7 @@ function check_farg_unused(x::EXPR)
     end
 end
 
+const default_options = (false, true, false, true, true, false, true, true, true, true)
 
 mutable struct LintOptions
     call::Bool
@@ -455,11 +456,11 @@ mutable struct LintOptions
     pirates::Bool
     useoffuncargs::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true, true)
+LintOptions() = LintOptions(default_options...)
+LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
 
-# Default all linting options on
-LintOptions(options::Vararg{Union{Bool,Nothing},9}) =
-    LintOptions(something.(options, true))
+LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
+    LintOptions(something.(options, default_options)...)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
