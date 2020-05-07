@@ -66,8 +66,6 @@ An `AbstractFile` must support the following:
 
 `StaticLint.getpath(file)` : Retrieve the path of a file.
 
-`StaticLint.setpath(file, path)` : Set the path of a file.
-
 `StaticLint.getroot(file)` : Retrieve the root of a file. The root is the main/first file in a file structure. For example the `StaticLint.jl` file is the root of all files (including itself) in `src/`.
 
 `StaticLint.setroot(file, root)` : Set the root of a file.
