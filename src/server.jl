@@ -43,21 +43,19 @@ getsymbolfieldtypemap(server::FileServer) = server.symbol_fieldtypemap
 function scopepass(file, target = nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), false))
-    state = State(file, target, [getpath(file)], scopeof(getcst(file)), false, EXPR[], server)
+    state = Toplevel(file, target, [getpath(file)], scopeof(getcst(file)), EXPR[], server)
     state(getcst(file))
-    for uref in state.urefs
-        s = retrieve_delayed_scope(uref)
-        if s !== nothing
-            resolve_ref(uref, s, state, [])
+    for x in state.delayed
+        if hasscope(x)
+            traverse(x, Delayed(scopeof(x), server))
+        else 
+            ds = retrieve_delayed_scope(x)
+            traverse(x, Delayed(ds, server))
         end
     end
 end
 
 getpath(file::File) = file.path
-function setpath(file::File, path)
-    file.path = path
-    return file
-end
 
 getroot(file::File) = file.root
 function setroot(file::File, root::File)
@@ -103,9 +101,13 @@ function get_path(x::EXPR, state)
         parg = x[3]
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
-            return normpath(path)
+            path = normpath(path)
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
         elseif typof(parg) === x_Str && length(parg) == 2 && CSTParser.isidentifier(parg[1]) && valof(parg[1]) == "raw" && typof(parg[2]) === CSTParser.LITERAL && (kindof(parg[2]) == CSTParser.Tokens.STRING || kindof(parg[2]) == CSTParser.Tokens.TRIPLE_STRING)
-            return normpath(CSTParser.str_value(parg[2]))
+            path = normpath(CSTParser.str_value(parg[2]))
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
         elseif typof(parg) === Call && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
             path_elements = String[]
 
@@ -120,7 +122,10 @@ function get_path(x::EXPR, state)
                     return ""
                 end
             end
+            isempty(path_elements) && return ""
+
             path = normpath(joinpath(path_elements...))
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
         end
     end
