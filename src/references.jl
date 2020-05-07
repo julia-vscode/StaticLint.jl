@@ -42,8 +42,16 @@ end
  
 function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
     hasref(x) && return true
+
     resolved = false
-    module_safety_trip(scope, visited_scopes) && return false
+    if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr) > 1 && CSTParser.typof(scope.expr[2]) === IDENTIFIER
+        s_m_name = scope.expr[2].val isa String ? scope.expr[2].val : ""
+        if s_m_name in visited_scopes
+            return resolved
+        else
+            push!(visited_scopes, s_m_name)
+        end
+    end
     
     if is_getfield(x)
         return resolve_getfield(x, scope, state)
@@ -86,7 +94,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
         for m in scope.modules
-            resolved = resolve_ref_from_module(x, m[2], state, visited_scopes)
+            resolved = resolve_ref(x, m[2], state, visited_scopes)
             resolved && return true
         end
     end
@@ -97,7 +105,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
 end
 
 # Searches a module store for a binding/variable that matches the reference `x1`.
-function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visited_scopes)::Bool
+function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visited_scopes)::Bool
     hasref(x1) && return true
     if isidentifier(x1)
         x = x1
@@ -132,57 +140,6 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
         if isexportedby(mn, m)
             setref!(mac[1], m[mn])
             return true
-        end
-    end
-    return false
-end
-
-function resolve_ref_from_module(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
-    hasref(x) && return true
-    resolved = false
-    module_safety_trip(scope, visited_scopes) && return false
-
-    if isidentifier(x)
-        if typof(x) === IDENTIFIER
-            mn = valof(x)
-            x1 = x
-        else
-            # NONSTDIDENTIFIER, e.g. var"name"
-            mn = valof(x[2])
-            x1 = x
-        end
-    elseif resolvable_macroname(x)
-        x1 = x[2]
-        mn = string("@", valof(x1))
-    elseif typof(x) === x_Str
-        if typof(x[1]) === IDENTIFIER
-            x1 = x[1]
-            mn = string("@", valof(x1), "_str")
-        else
-            return false
-        end
-    else
-        return true # TODO: Should be false?
-    end
-
-    if scope_exports(scope, mn)
-        setref!(x1, scope.names[mn])
-        resolved = true
-    end
-    return resolved
-end
-
-"""
-    scope_exports(scope::Scope, name::String)
-
-Does the scope export a variable called `name`?
-"""
-function scope_exports(scope::Scope, name::String)
-    if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
-        for ref in b.refs
-            if ref isa EXPR && parentof(ref) isa EXPR && typof(parentof(ref)) === CSTParser.Export
-                return true
-            end
         end
     end
     return false
@@ -299,22 +256,4 @@ function _in_macro_def(x::EXPR)
     else
         return false
     end
-end
-
-"""
-    module_safety_trip(scope::Scope,  visited_scopes)
-
-Checks whether the scope is a module and we've visited it before, 
-otherwise adds the module to the list.
-"""
-function module_safety_trip(scope::Scope,  visited_scopes)
-    if CSTParser.defines_module(scope.expr) && CSTParser.length(scope.expr) > 1 && CSTParser.typof(scope.expr[2]) === IDENTIFIER
-        s_m_name = scope.expr[2].val isa String ? scope.expr[2].val : ""
-        if s_m_name in visited_scopes
-            return true
-        else
-            push!(visited_scopes, s_m_name)
-        end
-    end
-    return false
 end
