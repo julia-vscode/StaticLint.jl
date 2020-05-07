@@ -444,7 +444,7 @@ end
 
 const default_options = (false, true, false, true, true, false, true, true, true, true)
 
-mutable struct LintOptions
+struct LintOptions
     call::Bool
     iter::Bool
     nothingcomp::Bool
