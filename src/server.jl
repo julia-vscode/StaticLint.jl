@@ -52,10 +52,6 @@ function scopepass(file, target = nothing)
 end
 
 getpath(file::File) = file.path
-function setpath(file::File, path)
-    file.path = path
-    return file
-end
 
 getroot(file::File) = file.root
 function setroot(file::File, root::File)
