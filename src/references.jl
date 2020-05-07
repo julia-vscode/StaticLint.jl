@@ -219,8 +219,7 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.isidentifier(x) && haskey(m, Symbol(valof(x)))
-        val = m[Symbol(valof(x))]
+    if CSTParser.isidentifier(x) && (val = SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server))) !== nothing
         if val isa SymbolServer.VarRef
             val = SymbolServer._lookup(val, getsymbolserver(state.server))
             !(val isa SymbolServer.SymStore) && return false
