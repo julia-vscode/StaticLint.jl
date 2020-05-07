@@ -93,10 +93,23 @@ function _mark_import_arg(arg, par, state, u)
     end
 end
 
+function has_workspace_package(server, name)
+    haskey(server.workspacepackages, name) &&
+    hasscope(getcst(server.workspacepackages[name])) &&
+    haskey(scopeof(getcst(server.workspacepackages[name])).names, name) &&
+    scopeof(getcst(server.workspacepackages[name])).names[name] isa Binding && 
+    scopeof(getcst(server.workspacepackages[name])).names[name].val isa EXPR && 
+    (typof(scopeof(getcst(server.workspacepackages[name])).names[name].val) in (ModuleH,BareModule))
+end 
+
 function _get_field(par, arg, state)
     arg_str_rep = CSTParser.str_value(arg)
-    if par isa SymbolServer.EnvStore && haskey(par, Symbol(arg_str_rep))
-        return par[Symbol(arg_str_rep)]
+    if par isa SymbolServer.EnvStore # package store
+        if has_workspace_package(state.server, arg_str_rep)
+            return scopeof(getcst(state.server.workspacepackages[arg_str_rep])).names[arg_str_rep]
+        elseif haskey(par, Symbol(arg_str_rep))
+            return par[Symbol(arg_str_rep)]
+        end
     elseif par isa SymbolServer.ModuleStore # imported module
         if Symbol(arg_str_rep) === par.name.name
             return par
