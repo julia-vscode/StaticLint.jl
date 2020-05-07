@@ -21,9 +21,6 @@ end
 function _resolve_ref(x, state)
     if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
         resolved = resolve_ref(x, state.scope, state, [])
-        if !resolved && (state.delayed || isglobal(valof(x), state.scope))
-            push!(state.urefs, x)
-        end
     end
 end
 
@@ -44,40 +41,10 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
     hasref(x) && return true
 
     resolved = false
-    if (typof(scope.expr) === CSTParser.ModuleH || typof(scope.expr) === CSTParser.BareModule) && CSTParser.length(scope.expr) > 1 && CSTParser.typof(scope.expr[2]) === IDENTIFIER
-        s_m_name = scope.expr[2].val isa String ? scope.expr[2].val : ""
-        if s_m_name in visited_scopes
-            return resolved
-        else
-            push!(visited_scopes, s_m_name)
-        end
-    end
-    
+    module_safety_trip(scope::Scope,  visited_scopes) && return
+
     if is_getfield(x)
         return resolve_getfield(x, scope, state)
-    elseif isidentifier(x)
-        if typof(x) === IDENTIFIER
-            mn = valof(x)
-            x1 = x
-        else
-            # NONSTDIDENTIFIER, e.g. var"name"
-            mn = valof(x[2])
-            x1 = x
-        end
-        if (mn == "__source__" || mn == "__module__") && _in_macro_def(x)
-            setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
-            return true
-        end
-    elseif resolvable_macroname(x)
-        x1 = x[2]
-        mn = string("@", valof(x1))
-    elseif typof(x) === x_Str
-        if typof(x[1]) === IDENTIFIER
-            x1 = x[1]
-            mn = string("@", valof(x1), "_str")
-        else
-            return false
-        end
     elseif typof(x) === CSTParser.Kw
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
         if typof(x[1]) === IDENTIFIER
@@ -86,15 +53,20 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
             setref!(x[1][1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true
-    else
+    elseif isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && _in_macro_def(x)
+        setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
         return true
     end
+
+    x1, mn = nameof_expr_to_resolve(x)
+    mn == true && return true
+
     if scopehasbinding(scope, mn)
         setref!(x1, scope.names[mn])
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
-        for m in scope.modules
-            resolved = resolve_ref(x, m[2], state, visited_scopes)
+        for m in values(scope.modules)
+            resolved = resolve_ref_from_module(x, m, state)
             resolved && return true
         end
     end
@@ -105,7 +77,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
 end
 
 # Searches a module store for a binding/variable that matches the reference `x1`.
-function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visited_scopes)::Bool
+function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x1) && return true
     if isidentifier(x1)
         x = x1
@@ -140,6 +112,36 @@ function resolve_ref(x1::EXPR, m::SymbolServer.ModuleStore, state::State, visite
         if isexportedby(mn, m)
             setref!(mac[1], m[mn])
             return true
+        end
+    end
+    return false
+end
+
+function resolve_ref_from_module(x::EXPR, scope::Scope, state::State)::Bool
+    hasref(x) && return true
+    resolved = false
+
+    x1, mn = nameof_expr_to_resolve(x)
+    mn == true && return true
+
+    if scope_exports(scope, mn)
+        setref!(x1, scope.names[mn])
+        resolved = true
+    end
+    return resolved
+end
+
+"""
+    scope_exports(scope::Scope, name::String)
+
+Does the scope export a variable called `name`?
+"""
+function scope_exports(scope::Scope, name::String)
+    if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
+        for ref in b.refs
+            if ref isa EXPR && parentof(ref) isa EXPR && typof(parentof(ref)) === CSTParser.Export
+                return true
+            end
         end
     end
     return false
@@ -199,7 +201,7 @@ function resolve_getfield(x::EXPR, b::Binding, state::State)::Bool
     resolved = false
     if b.val isa Binding
         resolved = resolve_getfield(x, b.val, state)
-    elseif b.val isa SymbolServer.ModuleStore || ( b.val isa EXPR && CSTParser.defines_module(b.val))
+    elseif b.val isa SymbolServer.ModuleStore || (b.val isa EXPR && CSTParser.defines_module(b.val))
         resolved = resolve_getfield(x, b.val, state)
     elseif b.type isa Binding
         resolved = resolve_getfield(x, b.type.val, state)
@@ -254,3 +256,46 @@ function _in_macro_def(x::EXPR)
         return false
     end
 end
+
+"""
+    module_safety_trip(scope::Scope,  visited_scopes)
+
+Checks whether the scope is a module and we've visited it before, 
+otherwise adds the module to the list.
+"""
+function module_safety_trip(scope::Scope,  visited_scopes)
+    if CSTParser.defines_module(scope.expr) && CSTParser.length(scope.expr) > 1 && CSTParser.typof(scope.expr[2]) === IDENTIFIER
+        s_m_name = scope.expr[2].val isa String ? scope.expr[2].val : ""
+        if s_m_name in visited_scopes
+            return true
+        else
+            push!(visited_scopes, s_m_name)
+        end
+    end
+    return false
+end
+
+
+function nameof_expr_to_resolve(x)
+    if isidentifier(x)
+        x1 = x
+        mn = valofid(x)
+    elseif resolvable_macroname(x)
+        x1 = x[2]
+        mn = string("@", valofid(x1))
+    elseif typof(x) === x_Str && isidentifier(x[1])
+        x1 = x[1]
+        mn = string("@", valofid(x1), "_str")
+    else
+        return x, true
+    end
+    x1, mn
+end
+
+"""
+    valofid(x)
+
+Returns the string value of an expression for which `isidentifier` is true, 
+i.e. handles NONSTDIDENTIFIERs.
+"""
+valofid(x::EXPR) = typof(x) === CSTParser.IDENTIFIER ? valof(x) : valof(x[2])

@@ -41,12 +41,14 @@ getsymbolextendeds(server::FileServer) = server.symbol_extends
 function scopepass(file, target = nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), false))
-    state = State(file, target, [getpath(file)], scopeof(getcst(file)), false, EXPR[], server)
+    state = Toplevel(file, target, [getpath(file)], scopeof(getcst(file)), EXPR[], server)
     state(getcst(file))
-    for uref in state.urefs
-        s = retrieve_delayed_scope(uref)
-        if s !== nothing
-            resolve_ref(uref, s, state, [])
+    for x in state.delayed
+        if hasscope(x)
+            traverse(x, Delayed(scopeof(x), server))
+        else 
+            ds = retrieve_delayed_scope(x)
+            traverse(x, Delayed(ds, server))
         end
     end
 end
@@ -118,6 +120,8 @@ function get_path(x::EXPR, state)
                     return ""
                 end
             end
+            isempty(path_elements) && return ""
+
             path = normpath(joinpath(path_elements...))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
