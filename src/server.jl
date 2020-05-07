@@ -54,10 +54,6 @@ function scopepass(file, target = nothing)
 end
 
 getpath(file::File) = file.path
-function setpath(file::File, path)
-    file.path = path
-    return file
-end
 
 getroot(file::File) = file.root
 function setroot(file::File, root::File)
@@ -103,9 +99,13 @@ function get_path(x::EXPR, state)
         parg = x[3]
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
-            return normpath(path)
+            path = normpath(path)
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
         elseif typof(parg) === x_Str && length(parg) == 2 && CSTParser.isidentifier(parg[1]) && valof(parg[1]) == "raw" && typof(parg[2]) === CSTParser.LITERAL && (kindof(parg[2]) == CSTParser.Tokens.STRING || kindof(parg[2]) == CSTParser.Tokens.TRIPLE_STRING)
-            return normpath(CSTParser.str_value(parg[2]))
+            path = normpath(CSTParser.str_value(parg[2]))
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
         elseif typof(parg) === Call && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
             path_elements = String[]
 
@@ -120,7 +120,10 @@ function get_path(x::EXPR, state)
                     return ""
                 end
             end
+            isempty(path_elements) && return ""
+
             path = normpath(joinpath(path_elements...))
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
         end
     end
