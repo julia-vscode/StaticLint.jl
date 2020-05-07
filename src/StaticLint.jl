@@ -76,7 +76,7 @@ function (state::Toplevel)(x::EXPR)
             infer_type_by_use(b, state.server)
         end
     end
-    state.delayed = delayed
+
     return state.scope
 end
 
@@ -95,6 +95,7 @@ function (state::Delayed)(x::EXPR)
 
     traverse(x, state)
     
+    # needs to call to add infer_type_by_use
     state.scope != s0 && (state.scope = s0)
     return state.scope
 end
