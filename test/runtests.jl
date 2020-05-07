@@ -481,6 +481,20 @@ end
         @test errorof(cst[5]) === StaticLint.TypePiracy
         @test errorof(cst[6]) === StaticLint.TypePiracy
     end
+    let cst = parse_and_pass("""
+        !=(a,b) = true
+        Base.:!=(a,b) = true
+        !=(a::T,b::T) = true
+        !=(a::T,b::T) where T= true
+        """)
+        StaticLint.check_for_pirates.(cst)
+        
+        
+        @test errorof(cst[1]) === StaticLint.NotEqDef
+        @test errorof(cst[2]) === StaticLint.NotEqDef
+        @test errorof(cst[3]) === StaticLint.NotEqDef
+        @test errorof(cst[4]) === StaticLint.NotEqDef
+    end
 end
 
 @testset "docs for undescribed variables" begin
