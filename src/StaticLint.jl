@@ -1,4 +1,7 @@
 module StaticLint
+
+include("exception_types.jl")
+
 using SymbolServer, CSTParser
 using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR, isidentifier, Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment
 
@@ -40,23 +43,18 @@ hasscope(m::Meta) = m.scope isa Scope
 scopeof(m::Meta) = m.scope
 bindingof(m::Meta) = m.binding
 
-mutable struct State{T}
+abstract type State end
+mutable struct Toplevel{T} <: State
     file::T
     targetfile::Union{Nothing,T}
     included_files::Vector{String}
     scope::Scope
-    delayed::Bool
-    urefs::Vector{EXPR}
+    delayed::Vector{EXPR}
     server
 end
 
-function (state::State)(x::EXPR)
-    delayed = state.delayed # store states
-    
+function (state::Toplevel)(x::EXPR)
     resolve_import(x, state)
-    if typof(x) === Export # Allow delayed resolution
-        state.delayed = true
-    end
     mark_bindings!(x, state)
     add_binding(x, state)
     mark_globals(x, state)
@@ -65,11 +63,32 @@ function (state::State)(x::EXPR)
     _resolve_ref(x, state)
     followinclude(x, state)
 
-    traverse(x, state)
+    if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || typof(x) === CSTParser.Export
+        push!(state.delayed, x)
+    else
+        traverse(x, state)
+    end
 
-    # return to previous states
     state.scope != s0 && (state.scope = s0)
-    state.delayed = delayed
+    return state.scope
+end
+
+mutable struct Delayed <: State
+    scope::Scope
+    server
+end
+
+function (state::Delayed)(x::EXPR)
+    mark_bindings!(x, state)
+    add_binding(x, state)
+    mark_globals(x, state)
+    handle_macro(x, state)
+    s0 = scopes(x, state)
+    _resolve_ref(x, state)
+
+    traverse(x, state)
+    
+    state.scope != s0 && (state.scope = s0)
     return state.scope
 end
 
