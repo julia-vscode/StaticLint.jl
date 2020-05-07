@@ -126,10 +126,8 @@ function retrieve_delayed_scope(x)
         else
             return scopeof(x)
         end
-    elseif typof(x) === Export
+    else 
         return retrieve_scope(x)
-    elseif parentof(x) !== nothing
-        return retrieve_delayed_scope(parentof(x))
     end
     return nothing
 end

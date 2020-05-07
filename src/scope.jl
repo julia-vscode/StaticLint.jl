@@ -115,9 +115,6 @@ function scopes(x::EXPR, state)
     if typof(x) === FileH
         setscope!(x, state.scope)
     elseif scopeof(x) isa Scope
-        if CSTParser.defines_function(x) || CSTParser.defines_macro(x)
-            state.delayed = true # Allow delayed resolution
-        end
         scopeof(x) != s0 && setparent!(scopeof(x), s0)
         state.scope = scopeof(x)
         if typof(x) === ModuleH # Add default modules to a new module
