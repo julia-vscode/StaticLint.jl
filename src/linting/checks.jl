@@ -15,9 +15,11 @@ IncludeLoop,
 MissingFile,
 InvalidModuleName,
 TypePiracy,
+UnusedFunctionArgument,
 CannotDeclareConst,
 InvalidRedefofConst,
 NotEqDef)
+
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
@@ -34,6 +36,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     MissingFile => "The included file can not be found.",
     InvalidModuleName => "Module name matches that of its parent.",
     TypePiracy => "An imported function has been extended without using module defined typed arguments.",
+    UnusedFunctionArgument => "An argument is included in a function signature but not used within its body.",
     CannotDeclareConst => "Cannot declare constant; it already has a value.",
     InvalidRedefofConst => "Invalid redefinition of constant.",
     NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.")
@@ -412,6 +415,33 @@ function check_modulename(x::EXPR)
     end
 end
 
+# Check whether function arguments are unused
+function check_farg_unused(x::EXPR)
+    if CSTParser.defines_function(x)
+        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        if (typof(x) === CSTParser.FunctionDef && length(x) == 4 && x[3] isa EXPR && length(x[3]) == 1 && CSTParser.isliteral(x[3][1])) ||
+            (typof(x[3]) === CSTParser.Block && length(x[3]) == 1 && CSTParser.isliteral(x[3][1]))
+            return # Allow functions that return constants
+        end
+        if typof(sig) === CSTParser.Call
+            for i = 2:length(sig)
+                if hasbinding(sig[i])
+                    arg = sig[i]
+                elseif typof(sig[i]) === CSTParser.Kw && hasbinding(sig[i][1])
+                    arg = sig[i][1]
+                else
+                    continue
+                end
+                b = bindingof(arg)
+                if (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
+                    b.next === nothing
+                    seterror!(arg, UnusedFunctionArgument)
+                end
+            end
+        end
+    end
+end
+
 
 mutable struct LintOptions
     call::Bool
@@ -423,8 +453,9 @@ mutable struct LintOptions
     typeparam::Bool
     modname::Bool
     pirates::Bool
+    useoffuncargs::Bool
 end
-LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true)
+LintOptions() = LintOptions(true, true, true, true, true, false, true, true, true, true)
 
 function check_all(x::EXPR, opts::LintOptions, server)
     # Do checks
@@ -438,6 +469,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
+    opts.useoffuncargs && check_farg_unused(x)
     check_const_decl(x)
     check_const_redef(x)
     for i in 1:length(x)
