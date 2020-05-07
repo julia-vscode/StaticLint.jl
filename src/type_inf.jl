@@ -1,11 +1,11 @@
 function infer_type(binding::Binding, scope, state)
     if binding isa Binding
         binding.type !== nothing && return
-        if binding.val isa EXPR && (typof(binding.val) === CSTParser.ModuleH || typof(binding.val) === CSTParser.BareModule)
+        if binding.val isa EXPR && CSTParser.defines_module(binding.val)
             binding.type = CoreTypes.Module
         elseif binding.val isa EXPR && typof(binding.val) === CSTParser.FunctionDef
             binding.type = CoreTypes.Function
-        elseif binding.val isa EXPR && (typof(binding.val) === CSTParser.Struct || typof(binding.val) === CSTParser.Mutable || typof(binding.val) === CSTParser.Abstract  || typof(binding.val) === CSTParser.Primitive)
+        elseif binding.val isa EXPR && CSTParser.defines_datatype(binding.val)
             binding.type = CoreTypes.DataType
         elseif binding.val isa EXPR && typof(binding.val) === BinaryOpCall
             if kindof(binding.val[2]) === CSTParser.Tokens.EQ
