@@ -118,6 +118,8 @@ function get_path(x::EXPR, state)
                     return ""
                 end
             end
+            isempty(path_elements) && return ""
+
             path = normpath(joinpath(path_elements...))
             return path
         end
