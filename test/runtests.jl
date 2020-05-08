@@ -20,7 +20,7 @@ function parse_and_pass(s)
     f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
     StaticLint.setroot(f, f)
     StaticLint.setfile(server, "", f)
-    StaticLint.scopepass(f)
+    StaticLint.scopepass(f, f)
     return f.cst
 end
 
@@ -821,6 +821,37 @@ end
         StaticLint.check_const_redef(cst[2])
         @test cst[2].meta.error == nothing
     end
+
+@testset "expr fieldnames" begin
+    let cst = parse_and_pass("""
+        struct T
+        end
+
+        struct T
+            a
+        end
+
+        struct T
+            a
+            b
+        end
+
+        struct T
+            a::S
+            b::S
+        end
+
+        mutable struct T
+            a::S
+            b::S
+        end
+        """)
+        @test StaticLint.cst_struct_fieldnames(cst[1]) == []
+        @test StaticLint.cst_struct_fieldnames(cst[2]) == [:a]
+        @test StaticLint.cst_struct_fieldnames(cst[3]) == [:a, :b]
+        @test StaticLint.cst_struct_fieldnames(cst[4]) == [:a, :b]
+        @test StaticLint.cst_struct_fieldnames(cst[5]) == [:a, :b]
+    end
 end
 
 @testset "hoisting of inner constructors" begin
@@ -835,6 +866,7 @@ end
         @test bindingof(cst[1]) === bindingof(cst[1][3][3]).prev
         @test bindingof(cst[1][3][3]) === bindingof(cst[2]).prev
     end
+include("type_inf.jl")
 end
 
 @testset "using of self" begin # e.g. `using StaticLint: StaticLint`

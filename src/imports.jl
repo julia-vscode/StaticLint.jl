@@ -50,7 +50,15 @@ function resolve_import(x, state::State)
     end
 end
 
-function _mark_import_arg(arg, par, state, u)
+function add_to_imported_modules(scope::Scope, name::Symbol, val)
+    if scope.modules isa Dict
+        scope.modules[name] = val
+    else
+        modules = Dict(name => val)
+    end
+end
+
+function _mark_import_arg(arg, par, state, usinged)
     if par !== nothing && (typof(arg) === IDENTIFIER || typof(arg) === MacroName)
         if par isa Binding # mark reference to binding
             push!(par.refs, arg)
@@ -65,29 +73,15 @@ function _mark_import_arg(arg, par, state, u)
             end
             arg.meta.binding = Binding(arg, par, _typeof(par, state), [], nothing, nothing)
         end
-        if u && par isa SymbolServer.ModuleStore
-            if state.scope.modules isa Dict
-                state.scope.modules[Symbol(valof(arg))] = par
-            else
-                state.scope.modules = Dict(Symbol(valof(arg)) => par)
-            end
-        elseif u && par isa Binding && par.val isa SymbolServer.ModuleStore 
-            if state.scope.modules isa Dict
-                state.scope.modules[Symbol(valof(arg))] = par.val
-            else
-                state.scope.modules = Dict(Symbol(valof(arg)) => par.val)
-            end
-        elseif u && par isa Binding && par.val isa EXPR && (typof(par.val) === CSTParser.ModuleH || typof(par.val) === CSTParser.BareModule)
-            if state.scope.modules isa Dict
-                state.scope.modules[Symbol(valof(arg))] = scopeof(par.val)
-            else
-                state.scope.modules = Dict(Symbol(valof(arg)) => scopeof(par.val))
-            end
-        elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && (typof(par.val.val) === CSTParser.ModuleH || typof(par.val.val) === CSTParser.BareModule)
-            if state.scope.modules isa Dict
-                state.scope.modules[Symbol(valof(arg))] = scopeof(par.val.val)
-            else
-                state.scope.modules = Dict(Symbol(valof(arg)) => scopeof(par.val.val))
+        if usinged
+            if par isa SymbolServer.ModuleStore
+                add_to_imported_modules(state.scope, Symbol(valof(arg)), par)
+            elseif par isa Binding && par.val isa SymbolServer.ModuleStore 
+                add_to_imported_modules(state.scope, Symbol(valof(arg)), par.val)
+            elseif par isa Binding && par.val isa EXPR && (typof(par.val) === CSTParser.ModuleH || typof(par.val) === CSTParser.BareModule)
+                add_to_imported_modules(state.scope, Symbol(valof(arg)), scopeof(par.val))
+            elseif par isa Binding && par.val isa Binding && par.val.val isa EXPR && (typof(par.val.val) === CSTParser.ModuleH || typof(par.val.val) === CSTParser.BareModule)
+                add_to_imported_modules(state.scope, Symbol(valof(arg)), scopeof(par.val.val))
             end
         end
     end

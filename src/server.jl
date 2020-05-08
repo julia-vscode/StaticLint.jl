@@ -14,8 +14,9 @@ mutable struct FileServer <: AbstractServer
     roots::Set{File}
     symbolserver::SymbolServer.EnvStore
     symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
+    symbol_fieldtypemap::Dict{Symbol, Vector{SymbolServer.VarRef}}
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), fieldname_type_map(SymbolServer.stdlibs))
 
 # Interface spec.
 # AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
@@ -37,6 +38,7 @@ function loadfile(server::FileServer, path::String)
 end
 getsymbolserver(server::FileServer) = server.symbolserver
 getsymbolextendeds(server::FileServer) = server.symbol_extends
+getsymbolfieldtypemap(server::FileServer) = server.symbol_fieldtypemap
 
 function scopepass(file, target = nothing)
     server = file.server

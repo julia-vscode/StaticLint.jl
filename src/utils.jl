@@ -119,6 +119,18 @@ function get_root_method(b::Binding, server, b1 = nothing, visited_bindings = Bi
     end
 end
 
+function get_last_method(b::Binding, server, visited_bindings = Binding[])
+    if b.next === nothing || b == b.next || !(b.next isa Binding) || b in visited_bindings
+        return b
+    end
+    push!(visited_bindings, b)
+    if b.type == b.next.type == CoreTypes.Function
+        return get_last_method(b.next, server, visited_bindings)
+    else
+        return b
+    end
+end
+
 function retrieve_delayed_scope(x)
     if (CSTParser.defines_function(x) || CSTParser.defines_macro(x)) && scopeof(x) !== nothing
         if parentof(scopeof(x)) !== nothing
@@ -274,7 +286,8 @@ isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
-function retrieve_toplevel_scope(x)
+function retrieve_toplevel_scope(x) end
+function retrieve_toplevel_scope(x::EXPR)
     if scopeof(x) !== nothing && (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule || typof(x) === CSTParser.FileH)
         return scopeof(x)
     elseif parentof(x) isa EXPR

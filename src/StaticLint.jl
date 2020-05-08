@@ -70,6 +70,13 @@ function (state::Toplevel)(x::EXPR)
     end
 
     state.scope != s0 && (state.scope = s0)
+    
+    if state.file == state.targetfile && hasscope(x) && scopeof(x) !== state.scope && typof(x) !== CSTParser.ModuleH && typof(x) !== CSTParser.BareModule && typof(x) !== CSTParser.FileH && !CSTParser.defines_datatype(x)
+        for (n,b) in scopeof(x).names
+            infer_type_by_use(b, state.server)
+        end
+    end
+
     return state.scope
 end
 
@@ -88,6 +95,7 @@ function (state::Delayed)(x::EXPR)
 
     traverse(x, state)
     
+    # needs to call to add infer_type_by_use
     state.scope != s0 && (state.scope = s0)
     return state.scope
 end
