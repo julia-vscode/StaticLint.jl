@@ -1,6 +1,6 @@
 name = "StaticLint"
 uuid = "b3cc710f-9c33-5bdb-a03d-a94903873e97"
-version = "4.1.1-DEV"
+version = "4.3.1-DEV"
 
 [deps]
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"

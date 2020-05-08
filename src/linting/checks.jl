@@ -442,7 +442,7 @@ function check_farg_unused(x::EXPR)
     end
 end
 
-const default_options = (false, true, false, true, true, false, true, true, true, true)
+const default_options = (true, true, true, true, true, true, true, true, true, true)
 
 struct LintOptions
     call::Bool
@@ -483,7 +483,13 @@ function check_all(x::EXPR, opts::LintOptions, server)
 end
 
 
-function collect_hints(x::EXPR, server, missing = true, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+"""
+collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+
+Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
+identifiers are marked, the :all option will mark identifiers used in getfield calls."
+"""
+function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -493,7 +499,7 @@ function collect_hints(x::EXPR, server, missing = true, isquoted = false, errs =
         # collect parse errors
         push!(errs, (pos, x))
     elseif !isquoted
-        if missing && CSTParser.isidentifier(x) && !hasref(x) && 
+        if missingrefs != :none && CSTParser.isidentifier(x) && !hasref(x) && 
             !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER) &&
             !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->typof(x) === CSTParser.Call && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
@@ -501,12 +507,12 @@ function collect_hints(x::EXPR, server, missing = true, isquoted = false, errs =
             # collect lint hints
             push!(errs, (pos, x))
         end
-    elseif isquoted && should_mark_missing_getfield_ref(x, server)
+    elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, server)
             push!(errs, (pos, x))
     end
 
     for i in 1:length(x)
-        collect_hints(x[i], server, missing, isquoted, errs, pos)
+        collect_hints(x[i], server, missingrefs, isquoted, errs, pos)
         pos += x[i].fullspan
     end
     

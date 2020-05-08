@@ -237,10 +237,9 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
         fi = findfirst(f->Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
         val = SymbolServer._lookup(ft, getsymbolserver(state.server))
-        if val !== nothing
-            setref!(x, Binding(noname, nothing, val, [], nothing, nothing))
-            resolved = true
-        end
+        # TODO: Need to handle the case where we get back a FakeUnion, etc.
+        setref!(x, Binding(noname, nothing, val, [], nothing, nothing))
+        resolved = true
     end
     return resolved
 end
