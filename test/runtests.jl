@@ -905,10 +905,13 @@ end
         names = :adf
         names_vect = [:adf, :asdf]
         names_tuple = (:adf, :asdf)
+        for for_names_tuple in (:adf, :asdf)
+        end
         """)
         @test StaticLint.maybeget_listofnames(scopeof(cst).names["names"]) == [cst[1][3][2]]
         @test StaticLint.maybeget_listofnames(scopeof(cst).names["names_vect"]) == [cst[2][3][2][2], cst[2][3][4][2]]
         @test StaticLint.maybeget_listofnames(scopeof(cst).names["names_tuple"]) == [cst[3][3][2][2], cst[3][3][4][2]]
+        @test !isempty(StaticLint.maybeget_listofnames(scopeof(cst[4]).names["for_names_tuple"]))
     end
     let cst = parse_and_pass("""
         let name = :adf
@@ -946,6 +949,17 @@ end
         StaticLint.check_all(cst, StaticLint.LintOptions(), server)
         @test StaticLint.scopehasbinding(scopeof(cst), "adf")
         @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+        @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
+    end
+    let cst = parse_and_pass("""
+        for name in (:sdf, :asdf)
+            @eval \$name(x) = 1
+        end
+        sdf(1,2)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test StaticLint.scopehasbinding(scopeof(cst), "sdf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "asdf")
         @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
     end
 end
