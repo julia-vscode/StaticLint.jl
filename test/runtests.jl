@@ -891,5 +891,63 @@ end
         @test !isempty(StaticLint.collect_hints(cst, server))
     end
 end
+
+@testset "interpret @eval" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        let 
+            @eval adf = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+    end
+    let cst = parse_and_pass("""
+        names = :adf
+        names_vect = [:adf, :asdf]
+        names_tuple = (:adf, :asdf)
+        """)
+        @test StaticLint.maybeget_listofnames(scopeof(cst).names["names"]) == [cst[1][3][2]]
+        @test StaticLint.maybeget_listofnames(scopeof(cst).names["names_vect"]) == [cst[2][3][2][2], cst[2][3][4][2]]
+        @test StaticLint.maybeget_listofnames(scopeof(cst).names["names_tuple"]) == [cst[3][3][2][2], cst[3][3][4][2]]
+    end
+    let cst = parse_and_pass("""
+        let name = :adf
+            @eval \$name = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+    end
+
+    let cst = parse_and_pass("""
+        let name = [:adf, :asdf, :asdfs]
+            @eval \$name = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdfs")
+    end
+    let cst = parse_and_pass("""
+        let name = (:adf, :asdf, :asdfs)
+            @eval \$name = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdfs")
+    end
+    let cst = parse_and_pass("""
+        let name = :adf
+            @eval \$name(x) = 1
+        end
+        adf(1,2)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+        @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
+    end
+end
 end
 

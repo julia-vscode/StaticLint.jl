@@ -20,6 +20,33 @@ function handle_macro(x::EXPR, state)
             elseif isidentifier(x[2])
                 mark_binding!(x[2], x)
             end
+        elseif _points_to_Base_macro(x[1], :eval, state) && length(x) == 2 && state isa Toplevel # Only do this in top-level pass?
+            setscope!(x[2], Scope(x[2])) # add a special scope here?
+            setparent!(scopeof(x[2]), state.scope)
+            state(x[2]) # make sure we have bindings etc
+            if hasbinding(x[2]) || (is_assignment(x[2]) && hasbinding(x[2][1])) # does expr create a binding
+                tls = retrieve_toplevel_scope(x[2])
+                expr = hasbinding(x[2]) ? x[2] : x[2][1]
+                if isidentifier(bindingof(expr).name)
+                    add_binding(expr, state, tls)
+                elseif CSTParser.is_exor(bindingof(expr).name)
+                    variable_name = parentof(bindingof(expr).name)[2]
+                    resolve_ref(variable_name, state.scope, state, [])
+                    if hasref(variable_name) && (nameslist = maybeget_listofnames(refof(variable_name))) !== nothing
+                        for name in nameslist
+                            # Adds Bindings that aren't attached to an expression
+                            b = Binding(name, bindingof(expr).val, bindingof(expr).type, [], nothing, nothing)
+                            if scopehasbinding(tls, valofid(b.name))
+                                b.prev = tls.names[valofid(b.name)]
+                                tls.names[valofid(b.name)] = b
+                                b.prev.next = b
+                            else
+                                tls.names[valofid(b.name)] = b
+                            end
+                        end
+                    end
+                end
+            end
         elseif _points_to_Base_macro(x[1], :enum, state)
             for i = 2:length(x)
                 if !(typof(x[i]) === PUNCTUATION)
@@ -115,4 +142,36 @@ end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
     length(x) == 2 && isidentifier(x[2]) && valof(x[2]) == name && haskey(getsymbolserver(state.server), Symbol(module_name)) && haskey(getsymbolserver(state.server)[Symbol(module_name)], Symbol("@", name)) && refof(x[2]) == getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)]
+end
+
+function maybe_eventually_get_id(x::EXPR)
+    if isidentifier(x) 
+        return x
+    elseif typof(x) === CSTParser.InvisBrackets && length(x) == 3
+        return maybe_eventually_get_id(x[2])
+    end
+    return nothing
+end
+isquoted(x::EXPR) = typof(x) === CSTParser.Quotenode && length(x) == 2 && kindof(x[1]) === CSTParser.Tokens.COLON
+maybeget_quotedsymbol(x::EXPR) = isquoted(x) ? maybe_eventually_get_id(x[2]) : nothing
+
+function maybeget_listofnames(b::Binding)
+    if is_assignment(b.val)
+        rhs = b.val[3]
+        if (rhsval = maybeget_quotedsymbol(rhs)) !== nothing
+            return [rhsval]
+        elseif typof(rhs) === CSTParser.Vect || typof(rhs) === CSTParser.TupleH
+            names = EXPR[]
+            for i = 1:length(rhs)
+                CSTParser.ispunctuation(rhs[i]) && continue
+                name = maybeget_quotedsymbol(rhs[i])
+                if name !== nothing
+                    push!(names, name)
+                else
+                    return nothing
+                end
+            end
+            return names
+        end
+    end
 end
