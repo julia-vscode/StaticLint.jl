@@ -910,5 +910,21 @@ end
     end 
 end
 
+@testset "check for " begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        module A
+        module B
+        struct T end
+        end
+        using .B
+        function T(t::B.T)
+        end
+        end
+        """)
+        @test bindingof(cst[1][3][3]) != refof(cst[1][3][3][2][3][3][3][1])
+        @test bindingof(cst[1][3][1][3][1]) == refof(cst[1][3][3][2][3][3][3][1])
+    end 
+end
+
 end
 
