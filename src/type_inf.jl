@@ -40,9 +40,11 @@ function infer_type(binding::Binding, scope, state)
                     t = t[1]
                     resolve_ref(t, scope, state, [])
                 end
-                if is_getfield(t) && length(t[3]) > 0
+                if is_getfield_w_quotenode(t)
+                    # resolve_ref(t, scope, state, [])
+                    resolve_getfield(t, scope, state)
                     t = t[3][1]
-                    resolve_ref(t, scope, state, [])
+                    
                 end
 
                 if refof(t) isa Binding

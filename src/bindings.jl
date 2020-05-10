@@ -140,7 +140,7 @@ end
 
 
 function mark_binding!(x::EXPR, val = x)
-    if typof(x) === CSTParser.Kw || (typof(x) === CSTParser.BinaryOpCall && kindof(x[2]) === CSTParser.Tokens.DECLARATION && typof(x[1]) === CSTParser.TupleH)
+    if typof(x) === CSTParser.Kw || (is_declaration(x) && typof(x[1]) === CSTParser.TupleH)
         mark_binding!(x[1], x)
     elseif typof(x) === CSTParser.TupleH || typof(x) === Parameters
         for arg in x
@@ -185,7 +185,7 @@ end
 
 function mark_sig_args!(x::EXPR)
     if typof(x) === Call || typof(x) === CSTParser.TupleH
-        if typof(x[1]) === CSTParser.InvisBrackets && typof(x[1][2]) === BinaryOpCall && kindof(x[1][2][2]) === CSTParser.Tokens.DECLARATION
+        if typof(x[1]) === CSTParser.InvisBrackets && is_declaration(x[1][2])
             mark_binding!(x[1][2])
         end
         for i = 2:length(x) - 1
@@ -238,7 +238,7 @@ function _in_func_def(x::EXPR)
     # check 1st arg contains a call (or op call)
     ex = x[1]
     while true
-        if typof(ex) === WhereOpCall || (typof(ex) === BinaryOpCall && kindof(ex[2]) === CSTParser.Tokens.DECLARATION)
+        if typof(ex) === WhereOpCall || is_declaration(ex)
             ex = ex[1]
         elseif typof(ex) === Call || (typof(ex) === BinaryOpCall && kindof(ex[2]) !== CSTParser.Tokens.DOT) || typof(ex) == CSTParser.UnaryOpCall
             break

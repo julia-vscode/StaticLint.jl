@@ -49,7 +49,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
         if typof(x[1]) === IDENTIFIER
             setref!(x[1], Binding(noname, nothing, nothing, [], nothing, nothing))
-        elseif typof(x[1]) === BinaryOpCall && kindof(x[1][2]) === CSTParser.Tokens.DECLARATION && typof(x[1][1]) === IDENTIFIER
+        elseif is_declaration(x[1]) && typof(x[1][1]) === IDENTIFIER
             setref!(x[1][1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true

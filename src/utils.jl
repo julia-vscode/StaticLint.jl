@@ -360,9 +360,9 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
     return false
 end
 
-
+# CST utils
 fcall_name(x::EXPR) = typof(x) === Call && length(x) > 0 && valof(x[1])
-
-is_getfield(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT 
-
-is_getfield_w_quotenode(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 
+is_binary_call(x::EXPR) = typof(x) === BinaryOpCall && length(x) == 3
+is_getfield(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT 
+is_getfield_w_quotenode(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 
+is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens.DECLARATION
