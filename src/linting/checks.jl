@@ -113,7 +113,7 @@ function func_nargs(x::EXPR)
                 maxargs !== typemax(Int) && (maxargs += 1)
             end
         elseif (typof(arg) === UnaryOpCall && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
-            (_binary_assert(arg, CSTParser.Tokens.DECLARATION) &&
+            (is_declaration(arg) &&
             ((typof(arg[3]) === CSTParser.IDENTIFIER && valof(arg[3]) == "Vararg") ||
             (typof(arg[3]) === CSTParser.Curly && typof(arg[3][1]) === CSTParser.IDENTIFIER && valof(arg[3][1]) == "Vararg")))
             maxargs = typemax(Int)
@@ -211,7 +211,7 @@ function check_call(x, server)
                 return compare_f_call(m_counts, call_counts)
             end
             tls = retrieve_toplevel_scope(x)
-            tls == nothing && return
+            tls === nothing && return
             iterate_over_ss_methods(func_ref, tls, server, ff) && return # returns if ff(m) == true for any methods
             seterror!(x, IncorrectCallArgs)
         elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
@@ -232,7 +232,7 @@ function check_call(x, server)
                 if !(b isa Binding) # Needs to be cleaned up
                     if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
                         tls = retrieve_toplevel_scope(x)
-                        tls == nothing && return 
+                        tls === nothing && return 
                         iterate_over_ss_methods(b, tls, server, ff1) && return
                         break
                     else
@@ -244,7 +244,7 @@ function check_call(x, server)
                     m_counts = struct_nargs(b.val)
                 elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
                     tls = retrieve_toplevel_scope(x)
-                    tls == nothing && return 
+                    tls === nothing && return 
                     iterate_over_ss_methods(b.val, tls, server, ff1) && return
                     break
                 else
@@ -377,27 +377,30 @@ function check_is_callable(x::EXPR, server)
     end    
 end
 
+is_never_datatype(b, server) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server)
+    !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
+end
+function is_never_datatype(b::Binding, server)
+    if b.val isa Binding
+        return is_never_datatype(b.val, server)
+    elseif b.type == CoreTypes.DataType
+        return false
+    elseif b.type == CoreTypes.Function && b.prev !== nothing
+        return is_never_datatype(b.prev, server)
+    elseif b.type !== nothing
+        return true
+    end
+    return false
+end
+
 function check_datatype_decl(x::EXPR, server)
-    # Only call in function signatures
-    if typof(x) === CSTParser.BinaryOpCall && length(x) === 3 && kindof(x[2]) === CSTParser.Tokens.DECLARATION && 
-        parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Call
-        if hasref(last(x))
-            dt = refof(last(x))
-            if dt isa SymbolServer.DataTypeStore || dt isa Binding && dt.val isa SymbolServer.DataTypeStore
-            elseif dt isa Binding && dt.type !== nothing
-                safety_trip = 0
-                while dt.type == CoreTypes.Function
-                    safety_trip += 1
-                    dt.prev === nothing && break
-                    dt = dt.prev
-                    if safety_trip > 50 
-                        @warn string(Expr(dt.name))
-                        return
-                    end
-                end
-                if dt.type !== nothing && dt.type !== CoreTypes.DataType
-                    seterror!(x, InvalidTypeDeclaration)
-                end
+    # Only call in function signatures?
+    if is_declaration(x) && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Call
+        if (dt = refof_maybe_getfield(last(x))) !== nothing
+            if is_never_datatype(dt, server)
+                seterror!(x, InvalidTypeDeclaration)
             end
         elseif typof(last(x)) === CSTParser.LITERAL
             seterror!(x, InvalidTypeDeclaration)
@@ -599,8 +602,8 @@ function is_type_of_call_to_getproperty(x::EXPR)
     end
 
     return parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && 
-        ((_binary_assert(parentof(x), CSTParser.Tokens.DECLARATION) && x === parentof(x)[3] && is_call_to_getproperty(parentof(parentof(x)))) || 
-        (typof(parentof(x)) === CSTParser.Curly && x === parentof(x)[1] && _binary_assert(parentof(parentof(x)), CSTParser.Tokens.DECLARATION) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
+        ((is_declaration(parentof(x)) && x === parentof(x)[3] && is_call_to_getproperty(parentof(parentof(x)))) || 
+        (typof(parentof(x)) === CSTParser.Curly && x === parentof(x)[1] && is_declaration(parentof(parentof(x))) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
 end
 
 isunionfaketype(t::SymbolServer.FakeTypeName) = t.name.name === :Union && t.name.parent isa SymbolServer.VarRef && t.name.parent.name === :Core
@@ -655,7 +658,7 @@ function refers_to_nonimported_type(arg::EXPR)
         return true
     elseif typof(arg) === CSTParser.UnaryOpCall && length(arg) == 2 && (kindof(arg[1]) === CSTParser.Tokens.DECLARATION || kindof(arg[1]) === CSTParser.Tokens.ISSUBTYPE)
         return refers_to_nonimported_type(arg[2])
-    elseif _binary_assert(arg, CSTParser.Tokens.DECLARATION)
+    elseif is_declaration(arg)
         return refers_to_nonimported_type(arg[3])
     elseif typof(arg) === CSTParser.Curly
         for i = 1:length(arg)
