@@ -62,34 +62,34 @@ function mark_bindings!(x::EXPR, state)
         end
     elseif is_where(x)
         for i = 3:length(x)
-            typof(x[i]) === PUNCTUATION && continue
+            ispunctuation(x[i]) && continue
             mark_binding!(x[i])
         end
     elseif typof(x) === CSTParser.For
         markiterbinding!(x[2])
     elseif typof(x) === CSTParser.Generator
         for i = 3:length(x)
-            typof(x[i]) === PUNCTUATION && continue
+            ispunctuation(x[i]) && continue
             markiterbinding!(x[i])
         end
     elseif typof(x) === CSTParser.Filter
         for i = 1:length(x) - 2
-            typof(x[i]) === PUNCTUATION && continue
+            ispunctuation(x[i]) && continue
             markiterbinding!(x[i])
         end
     elseif typof(x) === CSTParser.Flatten && length(x) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
         for i = 3:length(x[1][1])
-            typof(x[1][1][i]) === PUNCTUATION && continue
+            ispunctuation(x[1][1][i]) && continue
             markiterbinding!(x[1][1][i])
         end
         for i = 3:length(x[1])
-            typof(x[1][i]) === PUNCTUATION && continue
+            ispunctuation(x[1][i]) && continue
             markiterbinding!(x[1][i])
         end
     elseif typof(x) === CSTParser.Do
         if typof(x[3]) === CSTParser.TupleH
             for i in 1:length(x[3])
-                typof(x[3][i]) === PUNCTUATION && continue
+                ispunctuation(x[3][i])ispunctuation && continue
                 mark_binding!(x[3][i])
             end
         end
@@ -144,7 +144,7 @@ function mark_binding!(x::EXPR, val = x)
         mark_binding!(x[1], x)
     elseif typof(x) === CSTParser.TupleH || typof(x) === Parameters
         for arg in x
-            typof(arg) === PUNCTUATION && continue
+            ispunctuation(arg) && continue
             mark_binding!(arg, val)
         end
     elseif typof(x) === CSTParser.InvisBrackets
@@ -163,7 +163,7 @@ function mark_parameters(sig::EXPR)
     signame = CSTParser.rem_where_subtype(sig)
     if typof(signame) === CSTParser.Curly
         for i = 3:length(signame) - 1
-            typof(signame[i]) === PUNCTUATION && continue
+            ispunctuation(signame[i]) && continue
             mark_binding!(signame[i])
         end
     end
@@ -176,7 +176,7 @@ function markiterbinding!(iter::EXPR)
         mark_binding!(iter[1], iter)
     elseif typof(iter) === CSTParser.Block
         for i = 1:length(iter)
-            typof(iter[i]) === PUNCTUATION && continue
+            ispunctuation(iter[i]) && continue
             markiterbinding!(iter[i])
         end
     end
@@ -193,17 +193,17 @@ function mark_sig_args!(x::EXPR)
             if typof(a) === Parameters
                 for j = 1:length(a)
                     aa = a[j]
-                    if !(typof(aa) === PUNCTUATION)
+                    if !ispunctuation(aa)
                         mark_binding!(aa)
                     end
                 end
-            elseif !(typof(a) === PUNCTUATION)
+            elseif !ispunctuation(a)
                 mark_binding!(a)
             end
         end
     elseif is_where(x)
         for i in 3:length(x)
-            if !(typof(x[i]) === PUNCTUATION)
+            if !ispunctuation(x[i])
                 mark_binding!(x[i])
             end
         end

@@ -111,7 +111,7 @@ function get_path(x::EXPR, state)
 
             for i = 2:length(parg)
                 arg = parg[i]
-                if typof(arg) === PUNCTUATION
+                if ispunctuation(arg)
                 elseif _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.is_lit_string(arg)

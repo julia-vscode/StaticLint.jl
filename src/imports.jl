@@ -14,7 +14,7 @@ function resolve_import(x, state::State)
                 else
                     par = _get_field(par, arg, state)
                 end
-            elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.COMMA
+            elseif ispunctuation(arg) && kindof(arg) == CSTParser.Tokens.COMMA
                 # end of chain, make available
                 if i > 2
                     _mark_import_arg(x[i - 1], par, state, u)
@@ -25,7 +25,7 @@ function resolve_import(x, state::State)
                 if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
                     setref!(x[i - 1], par)
                 end
-            elseif typof(arg) === PUNCTUATION && kindof(arg) == CSTParser.Tokens.DOT
+            elseif ispunctuation(arg) && kindof(arg) == CSTParser.Tokens.DOT
                 # dot between identifiers
                 if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
                     setref!(x[i - 1], par)

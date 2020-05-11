@@ -22,7 +22,7 @@ function handle_macro(x::EXPR, state)
             end
         elseif _points_to_Base_macro(x[1], :enum, state)
             for i = 2:length(x)
-                if !(typof(x[i]) === PUNCTUATION)
+                if !ispunctuation(x[i])
                     if bindingof(x[i]) !== nothing
                         break
                     end
@@ -45,7 +45,7 @@ function handle_macro(x::EXPR, state)
             end
         elseif length(x[1]) == 2 && isidentifier(x[1][2]) && valof(x[1][2]) == "nospecialize"
             for i = 2:length(x)
-                if !(typof(x[i]) === PUNCTUATION)
+                if !ispunctuation(x[i])
                     if bindingof(x[i]) !== nothing
                         break
                     end
@@ -64,7 +64,7 @@ function handle_macro(x::EXPR, state)
         elseif _points_to_arbitrary_macro(x[1], :JuMP, :variable, state)
             if length(x) < 3
                 return
-            elseif length(x) >= 5 && typof(x[2]) === PUNCTUATION
+            elseif length(x) >= 5 && ispunctuation(x[2])
                 _mark_JuMP_binding(x[5])
             else
                 _mark_JuMP_binding(x[3])
@@ -72,7 +72,7 @@ function handle_macro(x::EXPR, state)
         elseif (_points_to_arbitrary_macro(x[1], :JuMP, :expression, state) || 
             _points_to_arbitrary_macro(x[1], :JuMP, :NLexpression, state) ||
             _points_to_arbitrary_macro(x[1], :JuMP, :constraint, state) || _points_to_arbitrary_macro(x[1], :JuMP, :NLconstraint, state)) && length(x) > 1
-            if typof(x[2]) === PUNCTUATION 
+            if ispunctuation(x[2])
                 if length(x) == 8
                     _mark_JuMP_binding(x[5])
                 end

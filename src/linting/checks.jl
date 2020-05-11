@@ -95,7 +95,7 @@ function func_nargs(x::EXPR)
                 arg = arg[2]
             end
         end
-        if typof(arg) === CSTParser.PUNCTUATION
+        if ispunctuation(arg)
             # skip
         elseif typof(arg) === CSTParser.Parameters
             for j = 1:length(arg)
@@ -152,7 +152,7 @@ function call_nargs(x::EXPR)
     if length(x) > 0
         for i = 2:length(x)
             arg = x[i]
-            if typof(arg) === CSTParser.PUNCTUATION
+            if ispunctuation(arg)
                 # skip
             elseif typof(x[i]) === CSTParser.Parameters
                 for j = 1:length(x[i])
