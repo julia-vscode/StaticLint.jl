@@ -107,12 +107,12 @@ function func_nargs(x::EXPR)
                 end
             end
         elseif typof(arg) === CSTParser.Kw
-            if typof(arg[1]) === UnaryOpCall && kindof(arg[1][2]) === CSTParser.Tokens.DDDOT
+            if is_unary_call(arg[1]) && kindof(arg[1][2]) === CSTParser.Tokens.DDDOT
                 maxargs = typemax(Int)
             else
                 maxargs !== typemax(Int) && (maxargs += 1)
             end
-        elseif (typof(arg) === UnaryOpCall && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
+        elseif (is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
             (is_declaration(arg) &&
             ((typof(arg[3]) === CSTParser.IDENTIFIER && valof(arg[3]) == "Vararg") ||
             (typof(arg[3]) === CSTParser.Curly && typof(arg[3][1]) === CSTParser.IDENTIFIER && valof(arg[3][1]) == "Vararg")))
@@ -163,7 +163,7 @@ function call_nargs(x::EXPR)
                 end
             elseif typof(arg) === CSTParser.Kw
                 push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg[1]))))
-            elseif typof(arg) === CSTParser.UnaryOpCall && kindof(arg[2]) === CSTParser.Tokens.DDDOT
+            elseif is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT
                 maxargs = typemax(Int)
             else
                 minargs += 1
@@ -656,7 +656,7 @@ end
 function refers_to_nonimported_type(arg::EXPR)
     if hasref(arg) && refof(arg) isa Binding
         return true
-    elseif typof(arg) === CSTParser.UnaryOpCall && length(arg) == 2 && (kindof(arg[1]) === CSTParser.Tokens.DECLARATION || kindof(arg[1]) === CSTParser.Tokens.ISSUBTYPE)
+    elseif is_unary_call(arg) && (kindof(arg[1]) === CSTParser.Tokens.DECLARATION || kindof(arg[1]) === CSTParser.Tokens.ISSUBTYPE)
         return refers_to_nonimported_type(arg[2])
     elseif is_declaration(arg)
         return refers_to_nonimported_type(arg[3])

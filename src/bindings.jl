@@ -149,7 +149,7 @@ function mark_binding!(x::EXPR, val = x)
         end
     elseif typof(x) === CSTParser.InvisBrackets
         mark_binding!(CSTParser.rem_invis(x), val)
-    elseif !(typof(x) == UnaryOpCall && kindof(x[1]) === CSTParser.Tokens.DECLARATION)
+    elseif !(is_unary_call(x) && kindof(x[1]) === CSTParser.Tokens.DECLARATION)
         if !hasmeta(x)
             x.meta = Meta()
         end
@@ -215,7 +215,7 @@ function mark_sig_args!(x::EXPR)
             mark_binding!(x[1])
             mark_binding!(x[3])
         end
-    elseif typof(x) == UnaryOpCall && typof(x[2]) == CSTParser.InvisBrackets
+    elseif is_unary_call(x) && typof(x[2]) == CSTParser.InvisBrackets
         mark_binding!(x[2][2])
     end
 end
@@ -240,7 +240,7 @@ function _in_func_def(x::EXPR)
     while true
         if typof(ex) === WhereOpCall || is_declaration(ex)
             ex = ex[1]
-        elseif typof(ex) === Call || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || typof(ex) == CSTParser.UnaryOpCall
+        elseif typof(ex) === Call || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)
             break
         else
             return false
