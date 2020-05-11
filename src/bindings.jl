@@ -60,7 +60,7 @@ function mark_bindings!(x::EXPR, state)
         elseif kindof(x[2]) === CSTParser.Tokens.ANON_FUNC
             mark_binding!(x[1], x)
         end
-    elseif typof(x) === WhereOpCall
+    elseif is_where(x)
         for i = 3:length(x)
             typof(x[i]) === PUNCTUATION && continue
             mark_binding!(x[i])
@@ -201,7 +201,7 @@ function mark_sig_args!(x::EXPR)
                 mark_binding!(a)
             end
         end
-    elseif typof(x) === WhereOpCall
+    elseif is_where(x)
         for i in 3:length(x)
             if !(typof(x[i]) === PUNCTUATION)
                 mark_binding!(x[i])
@@ -238,7 +238,7 @@ function _in_func_def(x::EXPR)
     # check 1st arg contains a call (or op call)
     ex = x[1]
     while true
-        if typof(ex) === WhereOpCall || is_declaration(ex)
+        if is_where(ex) || is_declaration(ex)
             ex = ex[1]
         elseif typof(ex) === Call || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)
             break
@@ -251,7 +251,7 @@ function _in_func_def(x::EXPR)
     while true
         if !(parentof(ex) isa EXPR)
             return false
-        elseif typof(parentof(ex)) === WhereOpCall || typof(parentof(ex)) === CSTParser.InvisBrackets
+        elseif is_where(parentof(ex)) || typof(parentof(ex)) === CSTParser.InvisBrackets
             ex = parentof(ex)
         elseif typof(parentof(ex)) === FunctionDef || CSTParser.is_assignment(parentof(ex))
             return true

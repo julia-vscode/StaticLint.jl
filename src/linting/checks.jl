@@ -608,7 +608,7 @@ end
 isunionfaketype(t::SymbolServer.FakeTypeName) = t.name.name === :Union && t.name.parent isa SymbolServer.VarRef && t.name.parent.name === :Core
 
 function check_typeparams(x::EXPR)
-    if typof(x) === CSTParser.WhereOpCall
+    if is_where(x)
         for i = 3:length(x)
             if hasbinding(x[i])
                 if !(bindingof(x[i]).refs isa Vector) 

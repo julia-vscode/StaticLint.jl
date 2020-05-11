@@ -62,7 +62,7 @@ function introduces_scope(x::EXPR, state)
         else
             return false
         end
-    elseif typof(x) === CSTParser.WhereOpCall
+    elseif is_where(x)
         # unless in func def signature
         return !_in_func_def(x)
     elseif typof(x) === CSTParser.TupleH && length(x) > 2 && typof(x[1]) === CSTParser.PUNCTUATION && is_assignment(x[2])
