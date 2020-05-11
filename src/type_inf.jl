@@ -28,7 +28,7 @@ function infer_type(binding::Binding, scope, state)
                     binding.type = CoreTypes.Float64
                 elseif kindof(binding.val[3]) === CSTParser.Tokens.STRING || typof(binding.val[3]) === CSTParser.Tokens.TRIPLE_STRING
                     binding.type = CoreTypes.String
-                elseif typof(binding.val[3]) === IDENTIFIER && refof(binding.val[3]) isa Binding
+                elseif isidentifier(binding.val[3]) && refof(binding.val[3]) isa Binding
                     binding.type = refof(binding.val[3]).type
                 end
             elseif kindof(binding.val[2]) === CSTParser.Tokens.DECLARATION

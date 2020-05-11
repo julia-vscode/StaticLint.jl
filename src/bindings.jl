@@ -266,10 +266,8 @@ function add_binding(x, state, scope = state.scope)
     if bindingof(x) isa Binding
         bindingof(x).prev = nothing
         bindingof(x).next = nothing
-        if typof(bindingof(x).name) === IDENTIFIER
-            name = valof(bindingof(x).name)
-        elseif typof(bindingof(x).name) === CSTParser.NONSTDIDENTIFIER
-            name = valof(bindingof(x).name[2])
+        if isidentifier(bindingof(x).name)
+            name = valofid(bindingof(x).name)
         elseif is_macroname(bindingof(x).name)
             name = string(Expr(bindingof(x).name))
         elseif isoperator(bindingof(x).name)
@@ -295,12 +293,12 @@ function add_binding(x, state, scope = state.scope)
                 bindingof(x).prev.next = bindingof(x)
             else
                 # Checks for bindings which overwrite other module's bindings
-                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && is_binary_call(parentof(parentof(bindingof(x).name))) && typof(parentof(parentof(bindingof(x).name))[1]) === IDENTIFIER # Only checks 1 level (e.g. M.name)
+                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && is_binary_call(parentof(parentof(bindingof(x).name))) && isidentifier(parentof(parentof(bindingof(x).name))[1]) # Only checks 1 level (e.g. M.name)
                     s1 = scope
                     while true
                         if s1.modules !== nothing
-                            if scopehasmodule(s1, Symbol(valof(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
-                                mod = getscopemodule(s1, Symbol(valof(parentof(parentof(bindingof(x).name))[1])))
+                            if scopehasmodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
+                                mod = getscopemodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1])))
                                 if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
                                     bindingof(x).prev = mod[Symbol(name)]
                                 end
@@ -315,7 +313,7 @@ function add_binding(x, state, scope = state.scope)
                     end
                 end
                 # hoist binding for inner constructor to parent scope
-                if (typof(scope.expr) === CSTParser.Struct || typof(scope.expr) === CSTParser.Mutable) && CSTParser.defines_function(x) && parentof(scope) isa Scope
+                if CSTParser.defines_struct(scope.expr) && CSTParser.defines_function(x) && parentof(scope) isa Scope
                     return add_binding(x, state, parentof(scope))
                 end
                 scope.names[name] = bindingof(x)
@@ -333,11 +331,11 @@ isglobal(name::String, scope) = scopehasbinding(scope, "#globals") && name in sc
 function mark_globals(x::EXPR, state)
     if typof(x) === CSTParser.Global
         if !scopehasbinding(state.scope, "#globals")
-            state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
+            state.scope.names["#globals"] = Binding(EXPR(CSTParser.IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
         end
         for i = 2:length(x)
-            if typof(x[i]) === IDENTIFIER && !scopehasbinding(state.scope, valof(x[i]))
-                push!(state.scope.names["#globals"].refs, valof(x[i]))
+            if isidentifier(x[i]) && !scopehasbinding(state.scope, valofid(x[i]))
+                push!(state.scope.names["#globals"].refs, valofid(x[i]))
             end
         end
         

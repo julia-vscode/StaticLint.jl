@@ -36,14 +36,14 @@ function handle_macro(x::EXPR, state)
                 end
             end
         elseif _points_to_Base_macro(x[1], :goto, state)
-            if length(x) == 2 && typof(x[2]) === CSTParser.IDENTIFIER
+            if length(x) == 2 && isidentifier(x[2])
                 setref!(x[2], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
             end
         elseif _points_to_Base_macro(x[1], :label, state)
-            if length(x) == 2 && typof(x[2]) === CSTParser.IDENTIFIER
+            if length(x) == 2 && isidentifier(x[2])
                 mark_binding!(x[2])
             end
-        elseif length(x[1]) == 2 && isidentifier(x[1][2]) && valof(x[1][2]) == "nospecialize"
+        elseif length(x[1]) == 2 && isidentifier(x[1][2]) && valofid(x[1][2]) == "nospecialize"
             for i = 2:length(x)
                 if !ispunctuation(x[i])
                     if bindingof(x[i]) !== nothing
@@ -110,7 +110,7 @@ function _mark_JuMP_binding(arg)
 end
 
 function _points_to_Base_macro(x::EXPR, name, state)
-    length(x) == 2 && isidentifier(x[2]) && Symbol(valof(x[2])) == name && refof(x[2]) == getsymbolserver(state.server)[:Base][Symbol("@", name)]
+    length(x) == 2 && isidentifier(x[2]) && Symbol(valofid(x[2])) == name && refof(x[2]) == getsymbolserver(state.server)[:Base][Symbol("@", name)]
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)

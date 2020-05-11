@@ -114,8 +114,8 @@ function func_nargs(x::EXPR)
             end
         elseif (is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
             (is_declaration(arg) &&
-            ((typof(arg[3]) === CSTParser.IDENTIFIER && valof(arg[3]) == "Vararg") ||
-            (typof(arg[3]) === CSTParser.Curly && typof(arg[3][1]) === CSTParser.IDENTIFIER && valof(arg[3][1]) == "Vararg")))
+            ((isidentifier(arg[3]) && valofid(arg[3]) == "Vararg") ||
+            (typof(arg[3]) === CSTParser.Curly && isidentifier(arg[3][1]) && valofid(arg[3][1]) == "Vararg")))
             maxargs = typemax(Int)
         else
             minargs += 1
@@ -492,7 +492,7 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
         push!(errs, (pos, x))
     elseif !isquoted
         if missingrefs != :none && CSTParser.isidentifier(x) && !hasref(x) && 
-            !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER) &&
+            !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
             !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
