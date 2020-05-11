@@ -3,7 +3,7 @@ module StaticLint
 include("exception_types.jl")
 
 using SymbolServer, CSTParser
-using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR, isidentifier, Call, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment
+using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR, isidentifier, Call, WhereOpCall, Import, Using, Export, TopLevel, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment
 
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
 baremodule CoreTypes # Convenience

@@ -77,13 +77,13 @@ function _mark_import_arg(arg, par, state, u)
             else
                 state.scope.modules = Dict(Symbol(valof(arg)) => par.val)
             end
-        elseif u && par isa Binding && par.val isa EXPR && (typof(par.val) === CSTParser.ModuleH || typof(par.val) === CSTParser.BareModule)
+        elseif u && par isa Binding && par.val isa EXPR && CSTParser.defines_module(par.val)
             if state.scope.modules isa Dict
                 state.scope.modules[Symbol(valof(arg))] = scopeof(par.val)
             else
                 state.scope.modules = Dict(Symbol(valof(arg)) => scopeof(par.val))
             end
-        elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && (typof(par.val.val) === CSTParser.ModuleH || typof(par.val.val) === CSTParser.BareModule)
+        elseif u && par isa Binding && par.val isa Binding && par.val.val isa EXPR && CSTParser.defines_module(par.val.val)
             if state.scope.modules isa Dict
                 state.scope.modules[Symbol(valof(arg))] = scopeof(par.val.val)
             else

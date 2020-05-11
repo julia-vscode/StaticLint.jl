@@ -5,7 +5,7 @@ mutable struct Scope
     modules::Union{Nothing,Dict{Symbol,Any}}
     ismodule::Bool
 end
-Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, typof(expr) === CSTParser.ModuleH || typof(expr) === CSTParser.BareModule)
+Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, CSTParser.defines_module(expr))
 function Base.show(io::IO, s::Scope)
     printstyled(io, typof(s.expr))
     printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
@@ -75,8 +75,7 @@ function introduces_scope(x::EXPR, state)
             typof(x) === CSTParser.Generator || # and Flatten? 
             typof(x) === CSTParser.Try ||
             typof(x) === CSTParser.Do ||
-            typof(x) === CSTParser.ModuleH ||
-            typof(x) === CSTParser.BareModule ||
+            CSTParser.defines_module(x) ||
             typof(x) === CSTParser.Abstract ||
             typof(x) === CSTParser.Primitive ||
             typof(x) === CSTParser.Mutable ||
@@ -117,15 +116,15 @@ function scopes(x::EXPR, state)
     elseif scopeof(x) isa Scope
         scopeof(x) != s0 && setparent!(scopeof(x), s0)
         state.scope = scopeof(x)
-        if typof(x) === ModuleH # Add default modules to a new module
+        if typof(x) === CSTParser.ModuleH # Add default modules to a new module
             state.scope.modules = Dict{Symbol,Any}()
             state.scope.modules[:Base] = getsymbolserver(state.server)[:Base]
             state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
-        elseif typof(x) === BareModule
+        elseif typof(x) === CSTParser.BareModule
             state.scope.modules = Dict{String,Any}()
             state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
         end
-        if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
+        if CSTParser.defines_module(x) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
             # state.scope.names[bindingof(x).name] = bindingof(x)
             # TODO: move this to the binding stage
             add_binding(x, state)

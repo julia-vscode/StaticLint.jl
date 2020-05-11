@@ -56,7 +56,7 @@ function _typeof(x, state)
     if x isa EXPR
         if typof(x) in (CSTParser.Abstract, CSTParser.Primitive, CSTParser.Struct, CSTParser.Mutable)
             return CoreTypes.DataType
-        elseif typof(x) in (CSTParser.ModuleH, CSTParser.BareModule)
+        elseif CSTParser.defines_module(x)
             return CoreTypes.Module
         elseif CSTParser.defines_function(x)
             return CoreTypes.Function
@@ -409,10 +409,9 @@ function check_datatype_decl(x::EXPR, server)
 end
 
 function check_modulename(x::EXPR)
-    if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && # x is a module
+    if CSTParser.defines_module(x) && # x is a module
         scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
-        (typof(parentof(scopeof(x)).expr) === CSTParser.ModuleH || 
-        typof(parentof(scopeof(x)).expr) === CSTParser.BareModule) && # the parent scope is a module
+        CSTParser.defines_module(parentof(scopeof(x)).expr) && # the parent scope is a module
         valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
         seterror!(CSTParser.get_name(x), InvalidModuleName)
     end

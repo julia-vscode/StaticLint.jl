@@ -271,7 +271,7 @@ isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
 function retrieve_toplevel_scope(x)
-    if scopeof(x) !== nothing && (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule || typof(x) === CSTParser.FileH)
+    if scopeof(x) !== nothing && (CSTParser.defines_module(x) || typof(x) === CSTParser.FileH)
         return scopeof(x)
     elseif parentof(x) isa EXPR
         return retrieve_toplevel_scope(parentof(x))
