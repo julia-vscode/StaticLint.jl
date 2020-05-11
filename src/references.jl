@@ -182,7 +182,7 @@ end
 function resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.isidentifier(x)
+    if isidentifier(x)
         if CSTParser.defines_module(parent_type) && scopeof(parent_type) isa Scope
             resolved = resolve_ref(x, scopeof(parent_type), state, [])
         elseif CSTParser.defines_struct(parent_type)
@@ -219,7 +219,7 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.isidentifier(x) && (val = SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server))) !== nothing
+    if isidentifier(x) && (val = SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server))) !== nothing
         if val isa SymbolServer.VarRef
             val = SymbolServer._lookup(val, getsymbolserver(state.server))
             !(val isa SymbolServer.SymStore) && return false
@@ -233,7 +233,7 @@ end
 function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
+    if isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
         fi = findfirst(f->Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
         val = SymbolServer._lookup(ft, getsymbolserver(state.server))

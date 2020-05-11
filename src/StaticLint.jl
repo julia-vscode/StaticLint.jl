@@ -99,7 +99,7 @@ Iterates across the child nodes of an EXPR in execution order (rather than
 storage order) calling `state` on each node.
 """
 function traverse(x::EXPR, state)
-    if is_binary_call(x) && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x[1]) || typof(x[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x[1]) === CSTParser.Curly)
+    if is_binary_call(x) && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x[1]) || typof(x[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && is_curly(x[1]))
         state(x[3])
         state(x[2])
         state(x[1])

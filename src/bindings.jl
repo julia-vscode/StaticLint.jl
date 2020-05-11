@@ -52,7 +52,7 @@ function mark_bindings!(x::EXPR, state)
                 if isidentifier(name)
                     setref!(name, bindingof(x))
                 end
-            elseif typof(x[1]) === CSTParser.Curly
+            elseif is_curly(x[1])
                 mark_typealias_bindings!(x)
             else
                 mark_binding!(x[1], x)
@@ -161,7 +161,7 @@ end
 
 function mark_parameters(sig::EXPR)
     signame = CSTParser.rem_where_subtype(sig)
-    if typof(signame) === CSTParser.Curly
+    if is_curly(signame)
         for i = 3:length(signame) - 1
             ispunctuation(signame[i]) && continue
             mark_binding!(signame[i])

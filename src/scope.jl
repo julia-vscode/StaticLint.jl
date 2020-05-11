@@ -55,7 +55,7 @@ function introduces_scope(x::EXPR, state)
     if is_binary_call(x)
         if kindof(x[2]) === CSTParser.Tokens.EQ && CSTParser.is_func_call(x[1])
             return true
-        elseif kindof(x[2]) === CSTParser.Tokens.EQ && typof(x[1]) === CSTParser.Curly
+        elseif kindof(x[2]) === CSTParser.Tokens.EQ && is_curly(x[1])
             return true
         elseif kindof(x[2]) === CSTParser.Tokens.ANON_FUNC
             return true

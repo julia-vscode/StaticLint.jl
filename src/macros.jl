@@ -96,10 +96,10 @@ function _rem_ref(x::EXPR)
 end
 
 function _mark_JuMP_binding(arg)
-    if CSTParser.isidentifier(arg) || typof(arg) === CSTParser.Ref
+    if isidentifier(arg) || typof(arg) === CSTParser.Ref
         mark_binding!(_rem_ref(arg))
     elseif is_binary_call(arg, CSTParser.Tokens.EQEQ) || is_binary_call(arg, CSTParser.Tokens.LESS_EQ)  || is_binary_call(arg, CSTParser.Tokens.GREATER_EQ)
-        if CSTParser.isidentifier(arg[1]) || typof(arg[1]) === CSTParser.Ref
+        if isidentifier(arg[1]) || typof(arg[1]) === CSTParser.Ref
             mark_binding!(_rem_ref(arg[1]))
         else
             mark_binding!(_rem_ref(arg[3]))

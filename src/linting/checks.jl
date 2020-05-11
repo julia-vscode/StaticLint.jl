@@ -115,7 +115,7 @@ function func_nargs(x::EXPR)
         elseif (is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
             (is_declaration(arg) &&
             ((isidentifier(arg[3]) && valofid(arg[3]) == "Vararg") ||
-            (typof(arg[3]) === CSTParser.Curly && isidentifier(arg[3][1]) && valofid(arg[3][1]) == "Vararg")))
+            (is_curly(arg[3]) && isidentifier(arg[3][1]) && valofid(arg[3][1]) == "Vararg")))
             maxargs = typemax(Int)
         else
             minargs += 1
@@ -491,7 +491,7 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
         # collect parse errors
         push!(errs, (pos, x))
     elseif !isquoted
-        if missingrefs != :none && CSTParser.isidentifier(x) && !hasref(x) && 
+        if missingrefs != :none && isidentifier(x) && !hasref(x) && 
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
             !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
@@ -520,7 +520,7 @@ function refof_maybe_getfield(x::EXPR)
 end
 
 function should_mark_missing_getfield_ref(x, server)
-    if CSTParser.isidentifier(x) && !hasref(x) && # x has no ref
+    if isidentifier(x) && !hasref(x) && # x has no ref
     parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode && parentof(parentof(x)) isa EXPR && 
         is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x))[1])
@@ -592,7 +592,7 @@ function is_type_of_call_to_getproperty(x::EXPR)
 
     return parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && 
         ((is_declaration(parentof(x)) && x === parentof(x)[3] && is_call_to_getproperty(parentof(parentof(x)))) || 
-        (typof(parentof(x)) === CSTParser.Curly && x === parentof(x)[1] && is_declaration(parentof(parentof(x))) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
+        (is_curly(parentof(x)) && x === parentof(x)[1] && is_declaration(parentof(parentof(x))) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
 end
 
 isunionfaketype(t::SymbolServer.FakeTypeName) = t.name.name === :Union && t.name.parent isa SymbolServer.VarRef && t.name.parent.name === :Core
@@ -649,7 +649,7 @@ function refers_to_nonimported_type(arg::EXPR)
         return refers_to_nonimported_type(arg[2])
     elseif is_declaration(arg)
         return refers_to_nonimported_type(arg[3])
-    elseif typof(arg) === CSTParser.Curly
+    elseif is_curly(arg)
         for i = 1:length(arg)
             if refers_to_nonimported_type(arg[i])
                 return true
@@ -680,7 +680,7 @@ function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
         parentof(b.name) isa EXPR && typof(parentof(b.name)) === CSTParser.Quotenode && is_getfield(parentof(parentof(b.name)))
         fullname = parentof(parentof(b.name))
         # overwrites imported function by declaring full name, e.g. ModuleName.FunctionName
-        if CSTParser.isidentifier(fullname[1]) && refof(fullname[1]) isa SymbolServer.ModuleStore
+        if isidentifier(fullname[1]) && refof(fullname[1]) isa SymbolServer.ModuleStore
             return true
         elseif is_getfield(fullname[1]) && typof(fullname[1][3]) === CSTParser.Quotenode && refof(fullname[1][3][1]) isa SymbolServer.ModuleStore
             return true

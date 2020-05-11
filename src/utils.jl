@@ -214,7 +214,7 @@ function find_exported_names(x::EXPR)
         expr = x[3][i]
         if typof(expr) == CSTParser.Export && 
             for j = 2:length(expr)
-                if CSTParser.isidentifier(expr[j]) && hasref(expr[j])
+                if isidentifier(expr[j]) && hasref(expr[j])
                     push!(exported_vars, expr[j])
                 end
             end
@@ -373,3 +373,4 @@ isnonstdid(x::EXPR) = typof(x) === CSTParser.NONSTDIDENTIFIER
 is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
 is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
+is_curly(x::EXPR) = typof(x) === CSTParser.Curly
