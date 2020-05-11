@@ -941,5 +941,11 @@ end
         @test isempty(StaticLint.collect_hints(cst, server))
     end
 end
+@testset "Test self" begin
+    empty!(server.files)
+    f = StaticLint.loadfile(server, joinpath(@__DIR__, "..", "src", "StaticLint.jl"))
+    StaticLint.scopepass(f)
+end
+
 end
 
