@@ -642,7 +642,7 @@ end
 
 function fname_is_noteq(x)
     if x isa EXPR
-        if typof(x) === CSTParser.OPERATOR && kindof(x) === CSTParser.Tokens.NOT_EQ
+        if isoperator(x) && kindof(x) === CSTParser.Tokens.NOT_EQ
             return true
         elseif is_getfield_w_quotenode(x) && length(x[3]) == 2 && CSTParser.is_colon(x[3][1])
 

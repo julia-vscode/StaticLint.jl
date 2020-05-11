@@ -272,7 +272,7 @@ function add_binding(x, state, scope = state.scope)
             name = valof(bindingof(x).name[2])
         elseif CSTParser.typof(bindingof(x).name) === CSTParser.MacroName
             name = string(Expr(bindingof(x).name))
-        elseif CSTParser.typof(bindingof(x).name) === CSTParser.OPERATOR
+        elseif isoperator(bindingof(x).name)
             name = string(Expr(bindingof(x).name))
         else
             return

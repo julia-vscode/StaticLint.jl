@@ -20,7 +20,7 @@ function resolve_import(x, state::State)
                     _mark_import_arg(x[i - 1], par, state, u)
                 end
                 par = root
-            elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.COLON
+            elseif isoperator(arg) && kindof(arg) == CSTParser.Tokens.COLON
                 root = par
                 if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
                     setref!(x[i - 1], par)
@@ -30,7 +30,7 @@ function resolve_import(x, state::State)
                 if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
                     setref!(x[i - 1], par)
                 end
-            elseif typof(arg) === OPERATOR && kindof(arg) == CSTParser.Tokens.DOT
+            elseif isoperator(arg) && kindof(arg) == CSTParser.Tokens.DOT
                 # dot prexceding identifiser
                 if par == root == getsymbolserver(state.server)
                     par = state.scope

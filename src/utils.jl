@@ -1,5 +1,5 @@
 quoted(x) = typof(x) === Quote || typof(x) === Quotenode
-unquoted(x) = is_unary_call(x) && typof(x[1]) === OPERATOR && kindof(x[1]) == CSTParser.Tokens.EX_OR
+unquoted(x) = is_unary_call(x) && isoperator(x[1]) && kindof(x[1]) == CSTParser.Tokens.EX_OR
 
 function get_ids(x, q = false, ids = [])
     if quoted(x)
