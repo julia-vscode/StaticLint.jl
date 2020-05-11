@@ -45,7 +45,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
 
     if is_getfield(x)
         return resolve_getfield(x, scope, state)
-    elseif typof(x) === CSTParser.Kw
+    elseif is_kwarg(x)
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
         if isidentifier(x[1])
             setref!(x[1], Binding(noname, nothing, nothing, [], nothing, nothing))
@@ -247,7 +247,7 @@ end
 resolvable_macroname(x::EXPR) = is_macroname(x) && isidentifier(x[2]) && refof(x[2]) === nothing
 
 function _in_macro_def(x::EXPR)
-    if typof(x) === CSTParser.Macro
+    if CSTParser.defines_macro(x)
         return true
     elseif parentof(x) isa EXPR
         return _in_macro_def(parentof(x))

@@ -100,13 +100,13 @@ function func_nargs(x::EXPR)
         elseif typof(arg) === CSTParser.Parameters
             for j = 1:length(arg)
                 arg1 = arg[j]
-                if typof(arg1) === CSTParser.Kw
+                if is_kwarg(arg1)
                     push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1[1]))))
                 elseif is_binary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
                     kwsplat = true
                 end
             end
-        elseif typof(arg) === CSTParser.Kw
+        elseif is_kwarg(arg)
             if is_unary_call(arg[1]) && kindof(arg[1][2]) === CSTParser.Tokens.DDDOT
                 maxargs = typemax(Int)
             else
@@ -157,11 +157,11 @@ function call_nargs(x::EXPR)
             elseif typof(x[i]) === CSTParser.Parameters
                 for j = 1:length(x[i])
                     arg = x[i][j]
-                    if typof(arg) === CSTParser.Kw
+                    if is_kwarg(arg)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg[1]))))
                     end
                 end
-            elseif typof(arg) === CSTParser.Kw
+            elseif is_kwarg(arg)
                 push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg[1]))))
             elseif is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT
                 maxargs = typemax(Int)
@@ -345,7 +345,7 @@ end
 
 function check_if_conds(x::EXPR)
     if typof(x) === CSTParser.If && length(x) > 2 
-        cond = typof(first(x)) == CSTParser.KEYWORD ? x[2] : x[1]
+        cond = iskw(first(x)) ? x[2] : x[1]
         if typof(cond) === CSTParser.LITERAL && (kindof(cond) === CSTParser.Tokens.TRUE || kindof(cond) === CSTParser.Tokens.FALSE)
             seterror!(cond, ConstIfCondition)
         elseif is_binary_call(cond, CSTParser.Tokens.EQ)
@@ -420,7 +420,7 @@ function check_farg_unused(x::EXPR)
             for i = 2:length(sig)
                 if hasbinding(sig[i])
                     arg = sig[i]
-                elseif typof(sig[i]) === CSTParser.Kw && hasbinding(sig[i][1])
+                elseif is_kwarg(sig[i]) && hasbinding(sig[i][1])
                     arg = sig[i][1]
                 else
                     continue

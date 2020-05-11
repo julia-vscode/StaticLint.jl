@@ -151,7 +151,7 @@ function find_return_statements(x::EXPR)
 end
 
 function find_return_statements(x::EXPR, last_stmt, rets)
-    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
+    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || iskw(x))
         push!(rets, x)
         return rets, false
     end 
@@ -370,3 +370,5 @@ is_getfield_w_quotenode(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == 
 is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens.DECLARATION
 is_where(x::EXPR) = typof(x) === CSTParser.WhereOpCall
 isnonstdid(x::EXPR) = typof(x) === CSTParser.NONSTDIDENTIFIER
+is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
+is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH

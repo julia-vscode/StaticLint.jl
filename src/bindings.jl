@@ -87,13 +87,13 @@ function mark_bindings!(x::EXPR, state)
             markiterbinding!(x[1][i])
         end
     elseif typof(x) === CSTParser.Do
-        if typof(x[3]) === CSTParser.TupleH
+        if is_tuple(x[3])
             for i in 1:length(x[3])
                 ispunctuation(x[3][i])ispunctuation && continue
                 mark_binding!(x[3][i])
             end
         end
-    elseif typof(x) === FunctionDef || typof(x) === Macro
+    elseif typof(x) === FunctionDef || CSTParser.defines_macro(x)
         name = CSTParser.get_name(x)
         x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
         if isidentifier(name)
@@ -125,7 +125,7 @@ function mark_bindings!(x::EXPR, state)
             if isidentifier(x[2])
                 mark_binding!(x[2])
                 setref!(x[2], bindingof(x[2]))
-            elseif typof(x[2]) === CSTParser.TupleH
+            elseif is_tuple(x[2])
                 for i = 1:length(x[2])
                     if isidentifier(x[2][i])
                         mark_binding!(x[2][i])
@@ -140,9 +140,9 @@ end
 
 
 function mark_binding!(x::EXPR, val = x)
-    if typof(x) === CSTParser.Kw || (is_declaration(x) && typof(x[1]) === CSTParser.TupleH)
+    if is_kwarg(x) || (is_declaration(x) && is_tuple(x[1]))
         mark_binding!(x[1], x)
-    elseif typof(x) === CSTParser.TupleH || typof(x) === Parameters
+    elseif is_tuple(x) || typof(x) === Parameters
         for arg in x
             ispunctuation(arg) && continue
             mark_binding!(arg, val)
@@ -184,7 +184,7 @@ function markiterbinding!(iter::EXPR)
 end
 
 function mark_sig_args!(x::EXPR)
-    if is_call(x) || typof(x) === CSTParser.TupleH
+    if is_call(x) || is_tuple(x)
         if typof(x[1]) === CSTParser.InvisBrackets && is_declaration(x[1][2])
             mark_binding!(x[1][2])
         end
@@ -280,7 +280,7 @@ function add_binding(x, state, scope = state.scope)
             scope = _get_global_scope(state.scope)
         end
 
-        if typof(x) === Macro
+        if CSTParser.defines_macro(x)
             scope.names[string("@", name)] = bindingof(x)
             mn = CSTParser.get_name(x)
             if isidentifier(mn)
