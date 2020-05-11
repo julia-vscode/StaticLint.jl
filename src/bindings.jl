@@ -43,7 +43,7 @@ function mark_bindings!(x::EXPR, state)
     if !hasmeta(x)
         x.meta = Meta()
     end
-    if typof(x) === BinaryOpCall
+    if is_binary_call(x)
         if kindof(x[2]) === CSTParser.Tokens.EQ
             if CSTParser.is_func_call(x[1])
                 name = CSTParser.get_name(x)
@@ -52,7 +52,7 @@ function mark_bindings!(x::EXPR, state)
                 if isidentifier(name)
                     setref!(name, bindingof(x))
                 end
-            elseif typof(x[1]) === CSTParser.Curly
+            elseif is_curly(x[1])
                 mark_typealias_bindings!(x)
             else
                 mark_binding!(x[1], x)
@@ -60,40 +60,40 @@ function mark_bindings!(x::EXPR, state)
         elseif kindof(x[2]) === CSTParser.Tokens.ANON_FUNC
             mark_binding!(x[1], x)
         end
-    elseif typof(x) === WhereOpCall
+    elseif is_where(x)
         for i = 3:length(x)
-            typof(x[i]) === PUNCTUATION && continue
+            ispunctuation(x[i]) && continue
             mark_binding!(x[i])
         end
     elseif typof(x) === CSTParser.For
         markiterbinding!(x[2])
     elseif typof(x) === CSTParser.Generator
         for i = 3:length(x)
-            typof(x[i]) === PUNCTUATION && continue
+            ispunctuation(x[i]) && continue
             markiterbinding!(x[i])
         end
     elseif typof(x) === CSTParser.Filter
         for i = 1:length(x) - 2
-            typof(x[i]) === PUNCTUATION && continue
+            ispunctuation(x[i]) && continue
             markiterbinding!(x[i])
         end
     elseif typof(x) === CSTParser.Flatten && length(x) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
         for i = 3:length(x[1][1])
-            typof(x[1][1][i]) === PUNCTUATION && continue
+            ispunctuation(x[1][1][i]) && continue
             markiterbinding!(x[1][1][i])
         end
         for i = 3:length(x[1])
-            typof(x[1][i]) === PUNCTUATION && continue
+            ispunctuation(x[1][i]) && continue
             markiterbinding!(x[1][i])
         end
     elseif typof(x) === CSTParser.Do
-        if typof(x[3]) === CSTParser.TupleH
+        if is_tuple(x[3])
             for i in 1:length(x[3])
-                typof(x[3][i]) === PUNCTUATION && continue
+                ispunctuation(x[3][i])ispunctuation && continue
                 mark_binding!(x[3][i])
             end
         end
-    elseif typof(x) === FunctionDef || typof(x) === Macro
+    elseif typof(x) === FunctionDef || CSTParser.defines_macro(x)
         name = CSTParser.get_name(x)
         x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
         if isidentifier(name)
@@ -125,7 +125,7 @@ function mark_bindings!(x::EXPR, state)
             if isidentifier(x[2])
                 mark_binding!(x[2])
                 setref!(x[2], bindingof(x[2]))
-            elseif typof(x[2]) === CSTParser.TupleH
+            elseif is_tuple(x[2])
                 for i = 1:length(x[2])
                     if isidentifier(x[2][i])
                         mark_binding!(x[2][i])
@@ -140,16 +140,16 @@ end
 
 
 function mark_binding!(x::EXPR, val = x)
-    if typof(x) === CSTParser.Kw || (is_declaration(x) && typof(x[1]) === CSTParser.TupleH)
+    if is_kwarg(x) || (is_declaration(x) && is_tuple(x[1]))
         mark_binding!(x[1], x)
-    elseif typof(x) === CSTParser.TupleH || typof(x) === Parameters
+    elseif is_tuple(x) || is_parameters(x)
         for arg in x
-            typof(arg) === PUNCTUATION && continue
+            ispunctuation(arg) && continue
             mark_binding!(arg, val)
         end
     elseif typof(x) === CSTParser.InvisBrackets
         mark_binding!(CSTParser.rem_invis(x), val)
-    elseif !(typof(x) == UnaryOpCall && kindof(x[1]) === CSTParser.Tokens.DECLARATION)
+    elseif !(is_unary_call(x) && kindof(x[1]) === CSTParser.Tokens.DECLARATION)
         if !hasmeta(x)
             x.meta = Meta()
         end
@@ -161,9 +161,9 @@ end
 
 function mark_parameters(sig::EXPR)
     signame = CSTParser.rem_where_subtype(sig)
-    if typof(signame) === CSTParser.Curly
+    if is_curly(signame)
         for i = 3:length(signame) - 1
-            typof(signame[i]) === PUNCTUATION && continue
+            ispunctuation(signame[i]) && continue
             mark_binding!(signame[i])
         end
     end
@@ -172,11 +172,11 @@ end
 
 
 function markiterbinding!(iter::EXPR)
-    if typof(iter) === BinaryOpCall && kindof(iter[2]) in (CSTParser.Tokens.EQ, CSTParser.Tokens.IN, CSTParser.Tokens.ELEMENT_OF)
+    if is_binary_call(iter) && kindof(iter[2]) in (CSTParser.Tokens.EQ, CSTParser.Tokens.IN, CSTParser.Tokens.ELEMENT_OF)
         mark_binding!(iter[1], iter)
     elseif typof(iter) === CSTParser.Block
         for i = 1:length(iter)
-            typof(iter[i]) === PUNCTUATION && continue
+            ispunctuation(iter[i]) && continue
             markiterbinding!(iter[i])
         end
     end
@@ -184,38 +184,40 @@ function markiterbinding!(iter::EXPR)
 end
 
 function mark_sig_args!(x::EXPR)
-    if typof(x) === Call || typof(x) === CSTParser.TupleH
+    if is_call(x) || is_tuple(x)
         if typof(x[1]) === CSTParser.InvisBrackets && is_declaration(x[1][2])
             mark_binding!(x[1][2])
         end
         for i = 2:length(x) - 1
             a = x[i]
-            if typof(a) === Parameters
+            if is_parameters(a)
                 for j = 1:length(a)
                     aa = a[j]
-                    if !(typof(aa) === PUNCTUATION)
+                    if !ispunctuation(aa)
                         mark_binding!(aa)
                     end
                 end
-            elseif !(typof(a) === PUNCTUATION)
+            elseif !ispunctuation(a)
                 mark_binding!(a)
             end
         end
-    elseif typof(x) === WhereOpCall
+    elseif is_where(x)
         for i in 3:length(x)
-            if !(typof(x[i]) === PUNCTUATION)
+            if !ispunctuation(x[i])
                 mark_binding!(x[i])
             end
         end
         mark_sig_args!(x[1])
-    elseif typof(x) === BinaryOpCall
+    elseif is_invis_brackets(x)
+        mark_sig_args!(CSTParser.rem_invis(x))
+    elseif is_binary_call(x)
         if kindof(x[2]) == CSTParser.Tokens.DECLARATION
             mark_sig_args!(x[1])
         else
             mark_binding!(x[1])
             mark_binding!(x[3])
         end
-    elseif typof(x) == UnaryOpCall && typof(x[2]) == CSTParser.InvisBrackets
+    elseif is_unary_call(x) && typof(x[2]) == CSTParser.InvisBrackets
         mark_binding!(x[2][2])
     end
 end
@@ -226,7 +228,7 @@ function mark_typealias_bindings!(x::EXPR)
     for i = 2:length(x[1])
         if isidentifier(x[1][i])
             mark_binding!(x[1][i])
-        elseif typof(x[1][i]) === BinaryOpCall && kindof(x[1][i][2]) === CSTParser.Tokens.ISSUBTYPE && isidentifier(x[1][i][1])
+        elseif is_binary_call(x[1][i]) && kindof(x[1][i][2]) === CSTParser.Tokens.ISSUBTYPE && isidentifier(x[1][i][1])
             mark_binding!(x[1][i][1])
         end
     end
@@ -238,9 +240,9 @@ function _in_func_def(x::EXPR)
     # check 1st arg contains a call (or op call)
     ex = x[1]
     while true
-        if typof(ex) === WhereOpCall || is_declaration(ex)
+        if is_where(ex) || is_declaration(ex)
             ex = ex[1]
-        elseif typof(ex) === Call || (typof(ex) === BinaryOpCall && kindof(ex[2]) !== CSTParser.Tokens.DOT) || typof(ex) == CSTParser.UnaryOpCall
+        elseif is_call(ex) || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)
             break
         else
             return false
@@ -251,7 +253,7 @@ function _in_func_def(x::EXPR)
     while true
         if !(parentof(ex) isa EXPR)
             return false
-        elseif typof(parentof(ex)) === WhereOpCall || typof(parentof(ex)) === CSTParser.InvisBrackets
+        elseif is_where(parentof(ex)) || typof(parentof(ex)) === CSTParser.InvisBrackets
             ex = parentof(ex)
         elseif typof(parentof(ex)) === FunctionDef || CSTParser.is_assignment(parentof(ex))
             return true
@@ -266,13 +268,11 @@ function add_binding(x, state, scope = state.scope)
     if bindingof(x) isa Binding
         bindingof(x).prev = nothing
         bindingof(x).next = nothing
-        if typof(bindingof(x).name) === IDENTIFIER
-            name = valof(bindingof(x).name)
-        elseif typof(bindingof(x).name) === CSTParser.NONSTDIDENTIFIER
-            name = valof(bindingof(x).name[2])
-        elseif CSTParser.typof(bindingof(x).name) === CSTParser.MacroName
+        if isidentifier(bindingof(x).name)
+            name = valofid(bindingof(x).name)
+        elseif is_macroname(bindingof(x).name)
             name = string(Expr(bindingof(x).name))
-        elseif CSTParser.typof(bindingof(x).name) === CSTParser.OPERATOR
+        elseif isoperator(bindingof(x).name)
             name = string(Expr(bindingof(x).name))
         else
             return
@@ -282,7 +282,7 @@ function add_binding(x, state, scope = state.scope)
             scope = _get_global_scope(state.scope)
         end
 
-        if typof(x) === Macro
+        if CSTParser.defines_macro(x)
             scope.names[string("@", name)] = bindingof(x)
             mn = CSTParser.get_name(x)
             if isidentifier(mn)
@@ -295,12 +295,12 @@ function add_binding(x, state, scope = state.scope)
                 bindingof(x).prev.next = bindingof(x)
             else
                 # Checks for bindings which overwrite other module's bindings
-                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && typof(parentof(parentof(bindingof(x).name))) === BinaryOpCall && typof(parentof(parentof(bindingof(x).name))[1]) === IDENTIFIER # Only checks 1 level (e.g. M.name)
+                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && is_binary_call(parentof(parentof(bindingof(x).name))) && isidentifier(parentof(parentof(bindingof(x).name))[1]) # Only checks 1 level (e.g. M.name)
                     s1 = scope
                     while true
                         if s1.modules !== nothing
-                            if scopehasmodule(s1, Symbol(valof(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
-                                mod = getscopemodule(s1, Symbol(valof(parentof(parentof(bindingof(x).name))[1])))
+                            if scopehasmodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
+                                mod = getscopemodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1])))
                                 if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
                                     bindingof(x).prev = mod[Symbol(name)]
                                 end
@@ -315,7 +315,7 @@ function add_binding(x, state, scope = state.scope)
                     end
                 end
                 # hoist binding for inner constructor to parent scope
-                if (typof(scope.expr) === CSTParser.Struct || typof(scope.expr) === CSTParser.Mutable) && CSTParser.defines_function(x) && parentof(scope) isa Scope
+                if CSTParser.defines_struct(scope.expr) && CSTParser.defines_function(x) && parentof(scope) isa Scope
                     return add_binding(x, state, parentof(scope))
                 end
                 scope.names[name] = bindingof(x)
@@ -323,7 +323,7 @@ function add_binding(x, state, scope = state.scope)
         end
         infer_type(bindingof(x), scope, state)
     elseif bindingof(x) isa SymbolServer.SymStore
-        scope.names[valof(x)] = bindingof(x)
+        scope.names[valofid(x)] = bindingof(x)
     end
 end
 
@@ -333,11 +333,11 @@ isglobal(name::String, scope) = scopehasbinding(scope, "#globals") && name in sc
 function mark_globals(x::EXPR, state)
     if typof(x) === CSTParser.Global
         if !scopehasbinding(state.scope, "#globals")
-            state.scope.names["#globals"] = Binding(EXPR(IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
+            state.scope.names["#globals"] = Binding(EXPR(CSTParser.IDENTIFIER, EXPR[], 0, 0, "#globals", CSTParser.NoKind, false, nothing, nothing), nothing, nothing, [], nothing, nothing)
         end
         for i = 2:length(x)
-            if typof(x[i]) === IDENTIFIER && !scopehasbinding(state.scope, valof(x[i]))
-                push!(state.scope.names["#globals"].refs, valof(x[i]))
+            if isidentifier(x[i]) && !scopehasbinding(state.scope, valofid(x[i]))
+                push!(state.scope.names["#globals"].refs, valofid(x[i]))
             end
         end
         

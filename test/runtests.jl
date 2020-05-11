@@ -925,6 +925,21 @@ end
         @test bindingof(cst[1][3][1][3][1]) == refof(cst[1][3][3][2][3][3][3][1])
     end 
 end
-
+@testset "misc" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        import Base: Bool
+        function Bool(x) x end
+        ^(z::Complex, n::Bool) = n ? z : one(z)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    let cst = parse_and_pass("""
+        (rand(d::Vector{T})::T) where {T}  =  1
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+end
 end
 

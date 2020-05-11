@@ -1,5 +1,5 @@
 quoted(x) = typof(x) === Quote || typof(x) === Quotenode
-unquoted(x) = typof(x) === UnaryOpCall && typof(x[1]) === OPERATOR && kindof(x[1]) == CSTParser.Tokens.EX_OR
+unquoted(x) = is_unary_call(x) && isoperator(x[1]) && kindof(x[1]) == CSTParser.Tokens.EX_OR
 
 function get_ids(x, q = false, ids = [])
     if quoted(x)
@@ -60,7 +60,7 @@ function clear_scope(x::EXPR)
     if hasmeta(x) && scopeof(x) isa Scope
         setparent!(scopeof(x), nothing)
         empty!(scopeof(x).names)
-        if typof(x) === FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
+        if typof(x) === CSTParser.FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
             m1, m2 = getscopemodule(scopeof(x), :Base), getscopemodule(scopeof(x), :Core)
             empty!(scopeof(x).modules)
             addmoduletoscope!(scopeof(x), m1)
@@ -151,7 +151,7 @@ function find_return_statements(x::EXPR)
 end
 
 function find_return_statements(x::EXPR, last_stmt, rets)
-    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
+    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || iskw(x))
         push!(rets, x)
         return rets, false
     end 
@@ -172,10 +172,6 @@ end
 
 function _expr_assert(x::EXPR, typ, nargs)
     typof(x) == typ && length(x) == nargs
-end
-
-function _binary_assert(x, kind)
-    typof(x) === CSTParser.BinaryOpCall && length(x) == 3 && typof(x[2]) === CSTParser.OPERATOR && kindof(x[2]) === kind
 end
     
 # should only be called on Bindings to functions
@@ -218,7 +214,7 @@ function find_exported_names(x::EXPR)
         expr = x[3][i]
         if typof(expr) == CSTParser.Export && 
             for j = 2:length(expr)
-                if CSTParser.isidentifier(expr[j]) && hasref(expr[j])
+                if isidentifier(expr[j]) && hasref(expr[j])
                     push!(exported_vars, expr[j])
                 end
             end
@@ -275,7 +271,7 @@ isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
 function retrieve_toplevel_scope(x)
-    if scopeof(x) !== nothing && (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule || typof(x) === CSTParser.FileH)
+    if scopeof(x) !== nothing && (CSTParser.defines_module(x) || typof(x) === CSTParser.FileH)
         return scopeof(x)
     elseif parentof(x) isa EXPR
         return retrieve_toplevel_scope(parentof(x))
@@ -361,8 +357,21 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
 end
 
 # CST utils
-fcall_name(x::EXPR) = typof(x) === Call && length(x) > 0 && valof(x[1])
-is_binary_call(x::EXPR) = typof(x) === BinaryOpCall && length(x) == 3
+fcall_name(x::EXPR) = is_call(x) && length(x) > 0 && valof(x[1])
+is_call(x::EXPR) = typof(x) === CSTParser.Call
+is_unary_call(x::EXPR) = typof(x) === CSTParser.UnaryOpCall && length(x) == 2
+is_binary_call(x::EXPR) = typof(x) === CSTParser.BinaryOpCall && length(x) == 3
+is_binary_call(x::EXPR, opkind) = is_binary_call(x) && kindof(x[2]) === opkind
+is_macro_call(x::EXPR) = typof(x) === CSTParser.MacroCall
+is_macroname(x::EXPR) = typof(x) === CSTParser.MacroName && length(x) == 2
+is_id_or_macroname(x::EXPR) = isidentifier(x) || is_macroname(x)
 is_getfield(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT 
 is_getfield_w_quotenode(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 
 is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens.DECLARATION
+is_where(x::EXPR) = typof(x) === CSTParser.WhereOpCall
+isnonstdid(x::EXPR) = typof(x) === CSTParser.NONSTDIDENTIFIER
+is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
+is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
+is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
+is_curly(x::EXPR) = typof(x) === CSTParser.Curly
+is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
