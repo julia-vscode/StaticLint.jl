@@ -142,7 +142,7 @@ end
 function mark_binding!(x::EXPR, val = x)
     if is_kwarg(x) || (is_declaration(x) && is_tuple(x[1]))
         mark_binding!(x[1], x)
-    elseif is_tuple(x) || typof(x) === Parameters
+    elseif is_tuple(x) || is_parameters(x)
         for arg in x
             ispunctuation(arg) && continue
             mark_binding!(arg, val)
@@ -190,7 +190,7 @@ function mark_sig_args!(x::EXPR)
         end
         for i = 2:length(x) - 1
             a = x[i]
-            if typof(a) === Parameters
+            if is_parameters(a)
                 for j = 1:length(a)
                     aa = a[j]
                     if !ispunctuation(aa)
@@ -321,7 +321,7 @@ function add_binding(x, state, scope = state.scope)
         end
         infer_type(bindingof(x), scope, state)
     elseif bindingof(x) isa SymbolServer.SymStore
-        scope.names[valof(x)] = bindingof(x)
+        scope.names[valofid(x)] = bindingof(x)
     end
 end
 

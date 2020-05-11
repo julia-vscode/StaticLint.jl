@@ -60,7 +60,7 @@ function clear_scope(x::EXPR)
     if hasmeta(x) && scopeof(x) isa Scope
         setparent!(scopeof(x), nothing)
         empty!(scopeof(x).names)
-        if typof(x) === FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
+        if typof(x) === CSTParser.FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
             m1, m2 = getscopemodule(scopeof(x), :Base), getscopemodule(scopeof(x), :Core)
             empty!(scopeof(x).modules)
             addmoduletoscope!(scopeof(x), m1)
@@ -371,4 +371,5 @@ is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens
 is_where(x::EXPR) = typof(x) === CSTParser.WhereOpCall
 isnonstdid(x::EXPR) = typof(x) === CSTParser.NONSTDIDENTIFIER
 is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
+is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH

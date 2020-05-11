@@ -90,14 +90,14 @@ function func_nargs(x::EXPR)
     for i = 2:length(sig)
         arg = sig[i]
         if is_macro_call(arg) && length(arg) > 1 &&
-            is_macroname(arg[1]) && valof(arg[1][2]) == "nospecialize"
+            is_macroname(arg[1]) && valofid(arg[1][2]) == "nospecialize"
             if length(arg) == 2
                 arg = arg[2]
             end
         end
         if ispunctuation(arg)
             # skip
-        elseif typof(arg) === CSTParser.Parameters
+        elseif is_parameters(arg)
             for j = 1:length(arg)
                 arg1 = arg[j]
                 if is_kwarg(arg1)
@@ -154,7 +154,7 @@ function call_nargs(x::EXPR)
             arg = x[i]
             if ispunctuation(arg)
                 # skip
-            elseif typof(x[i]) === CSTParser.Parameters
+            elseif is_parameters(x[i])
                 for j = 1:length(x[i])
                     arg = x[i][j]
                     if is_kwarg(arg)

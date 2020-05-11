@@ -111,7 +111,7 @@ function scopes(x::EXPR, state)
         setscope!(x, Scope(x))
     end
     s0 = state.scope
-    if typof(x) === FileH
+    if typof(x) === CSTParser.FileH
         setscope!(x, state.scope)
     elseif scopeof(x) isa Scope
         scopeof(x) != s0 && setparent!(scopeof(x), s0)
