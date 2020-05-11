@@ -3,7 +3,7 @@ module StaticLint
 include("exception_types.jl")
 
 using SymbolServer, CSTParser
-using CSTParser: EXPR, IDENTIFIER, KEYWORD, isidentifier, Call, Import, Using, Export, TopLevel, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment, isoperator, ispunctuation
+using CSTParser: EXPR, IDENTIFIER, KEYWORD, isidentifier, Import, Using, Export, TopLevel, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment, isoperator, ispunctuation
 
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
 baremodule CoreTypes # Convenience
@@ -140,7 +140,7 @@ If this is successful it traverses the code associated with the loaded file.
 
 """
 function followinclude(x, state::State)
-    if typof(x) === Call && length(x) > 0 && typof(x[1]) === IDENTIFIER && valof(x[1]) == "include"
+    if is_call(x) && length(x) > 0 && typof(x[1]) === IDENTIFIER && valof(x[1]) == "include"
         path = get_path(x, state)
         if isempty(path)
         elseif hasfile(state.server, path)

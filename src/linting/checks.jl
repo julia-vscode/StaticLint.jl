@@ -194,7 +194,7 @@ function compare_f_call(m_counts::Tuple{Int,Int,Array{Symbol},Bool}, call_counts
 end
 
 function check_call(x, server)
-    if typof(x) === Call
+    if is_call(x)
         parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Do && return # TODO: add number of args specified in do block.
         length(x) == 0 && return
         if isidentifier(first(x)) && hasref(first(x))
@@ -271,7 +271,7 @@ function check_loop_iter(x::EXPR, server)
             rng = x[2][3]
             if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                 seterror!(x[2], IncorrectIterSpec)
-            elseif typof(rng) === CSTParser.Call && refof(rng[1]) === getsymbolserver(server)[:Base][:length]
+            elseif is_call(rng) && refof(rng[1]) === getsymbolserver(server)[:Base][:length]
                 seterror!(x[2], IncorrectIterSpec)
             end
         end
@@ -281,7 +281,7 @@ function check_loop_iter(x::EXPR, server)
                 rng = x[i][3]
                 if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                     seterror!(x[i], IncorrectIterSpec)
-                elseif typof(rng) === CSTParser.Call && valof(rng[1]) == "length" && refof(rng[1]) === getsymbolserver(server)[:Base][:length]
+                elseif is_call(rng) && valof(rng[1]) == "length" && refof(rng[1]) === getsymbolserver(server)[:Base][:length]
                     seterror!(x[i], IncorrectIterSpec)
                 end
             end
@@ -368,15 +368,6 @@ function check_lazy(x::EXPR)
     end
 end
 
-function check_is_callable(x::EXPR, server)
-    if typof(x) === CSTParser.Call
-        func = first(x)
-
-        if hasref(func)
-        end
-    end    
-end
-
 is_never_datatype(b, server) = false
 is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
 function is_never_datatype(b::SymbolServer.FunctionStore, server)
@@ -397,7 +388,7 @@ end
 
 function check_datatype_decl(x::EXPR, server)
     # Only call in function signatures?
-    if is_declaration(x) && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Call
+    if is_declaration(x) && parentof(x) isa EXPR && is_call(parentof(x))
         if (dt = refof_maybe_getfield(last(x))) !== nothing
             if is_never_datatype(dt, server)
                 seterror!(x, InvalidTypeDeclaration)
@@ -425,7 +416,7 @@ function check_farg_unused(x::EXPR)
             (typof(x[3]) === CSTParser.Block && length(x[3]) == 1 && CSTParser.isliteral(x[3][1]))
             return # Allow functions that return constants
         end
-        if typof(sig) === CSTParser.Call
+        if is_call(sig)
             for i = 2:length(sig)
                 if hasbinding(sig[i])
                     arg = sig[i]
@@ -471,7 +462,6 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.nothingcomp && check_nothing_equality(x, server)
     opts.constif && check_if_conds(x)
     opts.lazy && check_lazy(x)
-    # check_is_callable(x, server)
     opts.datadecl && check_datatype_decl(x, server)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
@@ -503,7 +493,7 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
     elseif !isquoted
         if missingrefs != :none && CSTParser.isidentifier(x) && !hasref(x) && 
             !(valof(x) == "var" && parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.NONSTDIDENTIFIER) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->typof(x) === CSTParser.Call && isidentifier(x[1]) && valof(x[1]) == "ccall"))
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
             # collect lint hints
@@ -592,7 +582,7 @@ end
 
 function is_type_of_call_to_getproperty(x::EXPR)
     function is_call_to_getproperty(x::EXPR) 
-        if typof(x) === CSTParser.Call 
+        if is_call(x)
             func_name = x[1]
             return (isidentifier(func_name) && valof(func_name) == "getproperty") || # getproperty()
             (is_getfield_w_quotenode(func_name) && isidentifier(func_name[3][1]) && valof(func_name[3][1]) == "getproperty") # Base.getproperty()
@@ -627,7 +617,7 @@ function check_for_pirates(x::EXPR)
         sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
         if fname_is_noteq(CSTParser.get_name(sig))
             seterror!(x, NotEqDef)
-        elseif typof(sig) == CSTParser.Call && hasbinding(x) && overwrites_imported_function(bindingof(x))
+        elseif is_call(sig) && hasbinding(x) && overwrites_imported_function(bindingof(x))
             for i = 2:length(sig)
                 if hasbinding(sig[i]) && bindingof(sig[i]).type isa Binding
                     return

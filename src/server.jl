@@ -95,7 +95,7 @@ Usually called on the argument to `include` calls, and attempts to determine
 the path of the file to be included. Has limited support for `joinpath` calls.
 """
 function get_path(x::EXPR, state)
-    if typof(x) === Call && length(x) == 4
+    if is_call(x) && length(x) == 4
         parg = x[3]
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
@@ -106,7 +106,7 @@ function get_path(x::EXPR, state)
             path = normpath(CSTParser.str_value(parg[2]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif typof(parg) === Call && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
+        elseif is_call(parg) && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
             path_elements = String[]
 
             for i = 2:length(parg)

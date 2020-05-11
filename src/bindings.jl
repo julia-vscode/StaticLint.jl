@@ -184,7 +184,7 @@ function markiterbinding!(iter::EXPR)
 end
 
 function mark_sig_args!(x::EXPR)
-    if typof(x) === Call || typof(x) === CSTParser.TupleH
+    if is_call(x) || typof(x) === CSTParser.TupleH
         if typof(x[1]) === CSTParser.InvisBrackets && is_declaration(x[1][2])
             mark_binding!(x[1][2])
         end
@@ -240,7 +240,7 @@ function _in_func_def(x::EXPR)
     while true
         if is_where(ex) || is_declaration(ex)
             ex = ex[1]
-        elseif typof(ex) === Call || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)
+        elseif is_call(ex) || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)
             break
         else
             return false
