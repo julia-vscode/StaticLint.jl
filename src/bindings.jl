@@ -89,7 +89,7 @@ function mark_bindings!(x::EXPR, state)
     elseif typof(x) === CSTParser.Do
         if is_tuple(x[3])
             for i in 1:length(x[3])
-                ispunctuation(x[3][i])ispunctuation && continue
+                ispunctuation(x[3][i]) && continue
                 mark_binding!(x[3][i])
             end
         end
