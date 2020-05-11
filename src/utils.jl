@@ -374,3 +374,4 @@ is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
 is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
+is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets

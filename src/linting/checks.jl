@@ -376,6 +376,8 @@ end
 function is_never_datatype(b::Binding, server)
     if b.val isa Binding
         return is_never_datatype(b.val, server)
+    elseif b.val isa SymbolServer.FunctionStore
+        return is_never_datatype(b.val, server)
     elseif b.type == CoreTypes.DataType
         return false
     elseif b.type == CoreTypes.Function && b.prev !== nothing

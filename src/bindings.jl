@@ -208,6 +208,8 @@ function mark_sig_args!(x::EXPR)
             end
         end
         mark_sig_args!(x[1])
+    elseif is_invis_brackets(x)
+        mark_sig_args!(CSTParser.rem_invis(x))
     elseif is_binary_call(x)
         if kindof(x[2]) == CSTParser.Tokens.DECLARATION
             mark_sig_args!(x[1])
