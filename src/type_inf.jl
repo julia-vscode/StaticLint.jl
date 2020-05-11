@@ -7,7 +7,7 @@ function infer_type(binding::Binding, scope, state)
             binding.type = CoreTypes.Function
         elseif binding.val isa EXPR && CSTParser.defines_datatype(binding.val)
             binding.type = CoreTypes.DataType
-        elseif binding.val isa EXPR && typof(binding.val) === BinaryOpCall
+        elseif binding.val isa EXPR && is_binary_call(binding.val)
             if kindof(binding.val[2]) === CSTParser.Tokens.EQ
                 if CSTParser.is_func_call(binding.val[1])
                     binding.type = CoreTypes.Function

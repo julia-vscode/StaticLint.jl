@@ -53,11 +53,11 @@ function handle_macro(x::EXPR, state)
                 end
             end
         elseif _points_to_arbitrary_macro(x[1], :Turing, :model, state) && length(x) == 2 && 
-            _binary_assert(x[2], CSTParser.Tokens.EQ) && 
+            is_binary_call(x[2], CSTParser.Tokens.EQ) && 
             _expr_assert(x[2][3], CSTParser.Begin, 3) && typof(x[2][3][2]) === CSTParser.Block
             for i = 1:length(x[2][3][2])
                 ex = x[2][3][2][i]
-                if typof(ex) == CSTParser.BinaryOpCall && kindof(ex[2]) === CSTParser.Tokens.APPROX
+                if is_binary_call(ex, CSTParser.Tokens.APPROX)
                     mark_binding!(ex)
                 end
             end
@@ -98,7 +98,7 @@ end
 function _mark_JuMP_binding(arg)
     if CSTParser.isidentifier(arg) || typof(arg) === CSTParser.Ref
         mark_binding!(_rem_ref(arg))
-    elseif _binary_assert(arg, CSTParser.Tokens.EQEQ) || _binary_assert(arg, CSTParser.Tokens.LESS_EQ)  || _binary_assert(arg, CSTParser.Tokens.GREATER_EQ)
+    elseif is_binary_call(arg, CSTParser.Tokens.EQEQ) || is_binary_call(arg, CSTParser.Tokens.LESS_EQ)  || is_binary_call(arg, CSTParser.Tokens.GREATER_EQ)
         if CSTParser.isidentifier(arg[1]) || typof(arg[1]) === CSTParser.Ref
             mark_binding!(_rem_ref(arg[1]))
         else

@@ -43,7 +43,7 @@ function mark_bindings!(x::EXPR, state)
     if !hasmeta(x)
         x.meta = Meta()
     end
-    if typof(x) === BinaryOpCall
+    if is_binary_call(x)
         if kindof(x[2]) === CSTParser.Tokens.EQ
             if CSTParser.is_func_call(x[1])
                 name = CSTParser.get_name(x)
@@ -172,7 +172,7 @@ end
 
 
 function markiterbinding!(iter::EXPR)
-    if typof(iter) === BinaryOpCall && kindof(iter[2]) in (CSTParser.Tokens.EQ, CSTParser.Tokens.IN, CSTParser.Tokens.ELEMENT_OF)
+    if is_binary_call(iter) && kindof(iter[2]) in (CSTParser.Tokens.EQ, CSTParser.Tokens.IN, CSTParser.Tokens.ELEMENT_OF)
         mark_binding!(iter[1], iter)
     elseif typof(iter) === CSTParser.Block
         for i = 1:length(iter)
@@ -208,7 +208,7 @@ function mark_sig_args!(x::EXPR)
             end
         end
         mark_sig_args!(x[1])
-    elseif typof(x) === BinaryOpCall
+    elseif is_binary_call(x)
         if kindof(x[2]) == CSTParser.Tokens.DECLARATION
             mark_sig_args!(x[1])
         else
@@ -226,7 +226,7 @@ function mark_typealias_bindings!(x::EXPR)
     for i = 2:length(x[1])
         if isidentifier(x[1][i])
             mark_binding!(x[1][i])
-        elseif typof(x[1][i]) === BinaryOpCall && kindof(x[1][i][2]) === CSTParser.Tokens.ISSUBTYPE && isidentifier(x[1][i][1])
+        elseif is_binary_call(x[1][i]) && kindof(x[1][i][2]) === CSTParser.Tokens.ISSUBTYPE && isidentifier(x[1][i][1])
             mark_binding!(x[1][i][1])
         end
     end
@@ -240,7 +240,7 @@ function _in_func_def(x::EXPR)
     while true
         if typof(ex) === WhereOpCall || is_declaration(ex)
             ex = ex[1]
-        elseif typof(ex) === Call || (typof(ex) === BinaryOpCall && kindof(ex[2]) !== CSTParser.Tokens.DOT) || typof(ex) == CSTParser.UnaryOpCall
+        elseif typof(ex) === Call || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || typof(ex) == CSTParser.UnaryOpCall
             break
         else
             return false
@@ -295,7 +295,7 @@ function add_binding(x, state, scope = state.scope)
                 bindingof(x).prev.next = bindingof(x)
             else
                 # Checks for bindings which overwrite other module's bindings
-                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && typof(parentof(parentof(bindingof(x).name))) === BinaryOpCall && typof(parentof(parentof(bindingof(x).name))[1]) === IDENTIFIER # Only checks 1 level (e.g. M.name)
+                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && is_binary_call(parentof(parentof(bindingof(x).name))) && typof(parentof(parentof(bindingof(x).name))[1]) === IDENTIFIER # Only checks 1 level (e.g. M.name)
                     s1 = scope
                     while true
                         if s1.modules !== nothing

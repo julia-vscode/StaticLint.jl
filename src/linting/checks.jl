@@ -102,7 +102,7 @@ function func_nargs(x::EXPR)
                 arg1 = arg[j]
                 if typof(arg1) === CSTParser.Kw
                     push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1[1]))))
-                elseif typof(arg1) === CSTParser.BinaryOpCall && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
+                elseif is_binary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
                     kwsplat = true
                 end
             end
@@ -199,7 +199,7 @@ function check_call(x, server)
         length(x) == 0 && return
         if isidentifier(first(x)) && hasref(first(x))
             func_ref = refof(first(x))
-        elseif _binary_assert(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
+        elseif is_binary_call(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
             func_ref = refof(first(last(first(x))))
         else
             return
@@ -267,7 +267,7 @@ end
 
 function check_loop_iter(x::EXPR, server)
     if typof(x) === CSTParser.For
-        if length(x) > 1 && typof(x[2]) === CSTParser.BinaryOpCall && refof(x[2]) === nothing
+        if length(x) > 1 && is_binary_call(x[2]) && refof(x[2]) === nothing
             rng = x[2][3]
             if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                 seterror!(x[2], IncorrectIterSpec)
@@ -277,7 +277,7 @@ function check_loop_iter(x::EXPR, server)
         end
     elseif typof(x) === CSTParser.Generator
         for i = 3:length(x)
-            if typof(x[i]) === CSTParser.BinaryOpCall && refof(x[i]) === nothing
+            if is_binary_call(x[i])&& refof(x[i]) === nothing
                 rng = x[i][3]
                 if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                     seterror!(x[i], IncorrectIterSpec)
@@ -290,7 +290,7 @@ function check_loop_iter(x::EXPR, server)
 end
 
 function check_nothing_equality(x::EXPR, server)
-    if typof(x) === CSTParser.BinaryOpCall
+    if is_binary_call(x)
         if kindof(x[2]) === CSTParser.Tokens.EQEQ && valof(x[3]) == "nothing" && refof(x[3]) === getsymbolserver(server)[:Core][:nothing]
             seterror!(x[2], NothingEquality)
         elseif kindof(x[2]) === CSTParser.Tokens.NOT_EQ && valof(x[3]) == "nothing" && refof(x[3]) === getsymbolserver(server)[:Core][:nothing]
@@ -348,14 +348,14 @@ function check_if_conds(x::EXPR)
         cond = typof(first(x)) == CSTParser.KEYWORD ? x[2] : x[1]
         if typof(cond) === CSTParser.LITERAL && (kindof(cond) === CSTParser.Tokens.TRUE || kindof(cond) === CSTParser.Tokens.FALSE)
             seterror!(cond, ConstIfCondition)
-        elseif _binary_assert(cond, CSTParser.Tokens.EQ)
+        elseif is_binary_call(cond, CSTParser.Tokens.EQ)
             seterror!(cond, EqInIfConditional)
         end
     end
 end
 
 function check_lazy(x::EXPR)
-    if typof(x) === CSTParser.BinaryOpCall
+    if is_binary_call(x)
         if kindof(x[2]) === CSTParser.Tokens.LAZY_OR
             if (typof(x[1]) === CSTParser.LITERAL && (kindof(x[1]) === CSTParser.Tokens.TRUE || kindof(x[1]) === CSTParser.Tokens.FALSE))
                 seterror!(x, PointlessOR)
