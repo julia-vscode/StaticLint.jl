@@ -8,7 +8,7 @@ function resolve_import(x, state::State)
         bindings = []
         while i <= n
             arg = x[i]
-            if isidentifier(arg) || typof(arg) === CSTParser.MacroName
+            if is_id_or_macroname(arg)
                 if refof(arg) !== nothing
                     par = refof(arg)
                 else
@@ -51,7 +51,7 @@ function resolve_import(x, state::State)
 end
 
 function _mark_import_arg(arg, par, state, u)
-    if par !== nothing && (typof(arg) === IDENTIFIER || typof(arg) === MacroName)
+    if par !== nothing && is_id_or_macroname(arg)
         if par isa Binding # mark reference to binding
             push!(par.refs, arg)
         end

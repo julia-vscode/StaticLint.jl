@@ -99,7 +99,7 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
                 return true
             end
         end
-    elseif typof(x1) === MacroName
+    elseif is_macroname(x1)
         x = x1[2]
         mn = Symbol("@", valof(x))
         if isexportedby(mn, m)
@@ -244,7 +244,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     return resolved
 end
 
-resolvable_macroname(x::EXPR) = typof(x) === MacroName && length(x) == 2 && isidentifier(x[2]) && refof(x[2]) === nothing
+resolvable_macroname(x::EXPR) = is_macroname(x) && length(x) == 2 && isidentifier(x[2]) && refof(x[2]) === nothing
 
 function _in_macro_def(x::EXPR)
     if typof(x) === CSTParser.Macro

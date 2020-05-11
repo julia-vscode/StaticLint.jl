@@ -362,6 +362,9 @@ is_call(x::EXPR) = typof(x) === CSTParser.Call
 is_unary_call(x::EXPR) = typof(x) === CSTParser.UnaryOpCall && length(x) == 2
 is_binary_call(x::EXPR) = typof(x) === CSTParser.BinaryOpCall && length(x) == 3
 is_binary_call(x::EXPR, opkind) = is_binary_call(x) && kindof(x[2]) === opkind
+is_macro_call(x::EXPR) = typof(x) === CSTParser.MacroCall
+is_macroname(x::EXPR) = typof(x) === CSTParser.MacroName && length(x) == 2
+is_id_or_macroname(x::EXPR) = isidentifier(x) || is_macroname(x)
 is_getfield(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT 
 is_getfield_w_quotenode(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 
 is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens.DECLARATION

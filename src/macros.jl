@@ -1,7 +1,7 @@
 function handle_macro(@nospecialize(x), state) end
 function handle_macro(x::EXPR, state)
-    typof(x) !== MacroCall && return
-    if typof(x[1]) === MacroName
+    !is_macro_call(x) && return
+    if is_macroname(x[1])
         state(x[1])
         if _points_to_Base_macro(x[1], :deprecate, state) && length(x) == 3
             if bindingof(x[2]) !== nothing

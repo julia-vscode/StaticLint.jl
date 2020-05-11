@@ -71,7 +71,7 @@ end
 # Call
 function struct_nargs(x::EXPR)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
-    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.MacroCall && return 0, typemax(Int), Symbol[], true 
+    parentof(x) isa EXPR && is_macro_call(parentof(x)) && return 0, typemax(Int), Symbol[], true 
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = typof(x) === CSTParser.Mutable ? x[4] : x[3]
     length(args) == 0 && return 0, typemax(Int), kws, kwsplat
@@ -89,8 +89,8 @@ function func_nargs(x::EXPR)
     sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
     for i = 2:length(sig)
         arg = sig[i]
-        if typof(arg) === CSTParser.MacroCall && length(arg) > 1 &&
-            _expr_assert(arg[1], MacroName, 2) && valof(arg[1][2]) == "nospecialize"
+        if is_macro_call(arg) && length(arg) > 1 &&
+            is_macroname(arg[1]) && valof(arg[1][2]) == "nospecialize"
             if length(arg) == 2
                 arg = arg[2]
             end

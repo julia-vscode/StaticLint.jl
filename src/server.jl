@@ -130,6 +130,6 @@ function get_path(x::EXPR, state)
     return ""
 end
 
-_is_macrocall_to_BaseDIR(arg) = typof(arg) === CSTParser.MacroCall && length(arg) == 1 &&
-    typof(arg[1]) === CSTParser.MacroName && length(arg[1]) == 2 &&
+_is_macrocall_to_BaseDIR(arg) = is_macro_call(arg) && length(arg) == 1 &&
+    is_macroname(arg[1]) &&
     valof(arg[1][2]) == "__DIR__"
