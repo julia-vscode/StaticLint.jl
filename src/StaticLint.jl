@@ -3,7 +3,7 @@ module StaticLint
 include("exception_types.jl")
 
 using SymbolServer, CSTParser
-using CSTParser: EXPR, PUNCTUATION, IDENTIFIER, KEYWORD, OPERATOR, isidentifier, Call, UnaryOpCall, BinaryOpCall, WhereOpCall, Import, Using, Export, TopLevel, ModuleH, BareModule, Quote, Quotenode, MacroName, MacroCall, Macro, x_Str, FileH, Parameters, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment
+using CSTParser: EXPR, isidentifier, Import, Using, Export, Quote, Quotenode, x_Str, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment, isoperator, ispunctuation, iskw, defines_function
 
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
 baremodule CoreTypes # Convenience
@@ -99,11 +99,11 @@ Iterates across the child nodes of an EXPR in execution order (rather than
 storage order) calling `state` on each node.
 """
 function traverse(x::EXPR, state)
-    if typof(x) === CSTParser.BinaryOpCall && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x[1]) || typof(x[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && typof(x[1]) === CSTParser.Curly)
+    if is_binary_call(x) && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x[1]) || typof(x[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && is_curly(x[1]))
         state(x[3])
         state(x[2])
         state(x[1])
-    elseif typof(x) === CSTParser.WhereOpCall
+    elseif is_where(x)
         @inbounds for i = 3:length(x)
             state(x[i])
         end
@@ -140,7 +140,7 @@ If this is successful it traverses the code associated with the loaded file.
 
 """
 function followinclude(x, state::State)
-    if typof(x) === Call && length(x) > 0 && typof(x[1]) === IDENTIFIER && valof(x[1]) == "include"
+    if is_call(x) && length(x) > 0 && isidentifier(x[1]) && valofid(x[1]) == "include"
         path = get_path(x, state)
         if isempty(path)
         elseif hasfile(state.server, path)

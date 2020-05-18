@@ -891,6 +891,23 @@ end
         @test !isempty(StaticLint.collect_hints(cst, server))
     end
 end
+@testset "using of self" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        function f(a::rand) a end
+        function f(a::Base.rand) a end
+        function f(a::Int) a end
+        Base.Int32(x) = 1
+        function f(a::Int32) a end
+        Base.fetch(x) = 1
+        function f(a::fetch) a end
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test errorof(cst[1][2][3]) === StaticLint.InvalidTypeDeclaration
+        @test errorof(cst[2][2][3]) === StaticLint.InvalidTypeDeclaration
+        @test errorof(cst[3][2][3]) === nothing
+        @test errorof(cst[5][2][3]) === nothing
+        @test errorof(cst[7][2][3]) === StaticLint.InvalidTypeDeclaration
+    end 
 
 @testset "interpret @eval" begin # e.g. `using StaticLint: StaticLint`
     let cst = parse_and_pass("""
@@ -963,5 +980,44 @@ end
         @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
     end
 end
+end
+
+@testset "check for " begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        module A
+        module B
+        struct T end
+        end
+        using .B
+        function T(t::B.T)
+        end
+        end
+        """)
+        @test bindingof(cst[1][3][3]) != refof(cst[1][3][3][2][3][3][3][1])
+        @test bindingof(cst[1][3][1][3][1]) == refof(cst[1][3][3][2][3][3][3][1])
+    end 
+end
+@testset "misc" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        import Base: Bool
+        function Bool(x) x end
+        ^(z::Complex, n::Bool) = n ? z : one(z)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    let cst = parse_and_pass("""
+        (rand(d::Vector{T})::T) where {T}  =  1
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+end
+@testset "Test self" begin
+    empty!(server.files)
+    f = StaticLint.loadfile(server, joinpath(@__DIR__, "..", "src", "StaticLint.jl"))
+    StaticLint.scopepass(f)
+end
+
 end
 
