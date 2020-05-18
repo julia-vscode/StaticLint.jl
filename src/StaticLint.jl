@@ -143,14 +143,23 @@ function followinclude(x, state::State)
     if is_call(x) && length(x) > 0 && isidentifier(x[1]) && valofid(x[1]) == "include"
         path = get_path(x, state)
         if isempty(path)
-        elseif hasfile(state.server, path)
-        elseif canloadfile(state.server, path)
-            loadfile(state.server, path)
-        elseif hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
-            path = joinpath(dirname(getpath(state.file)), path)
-        elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
-            path = joinpath(dirname(getpath(state.file)), path)
-            loadfile(state.server, path)
+        elseif isabspath(path)
+            if hasfile(state.server, path)
+            elseif canloadfile(state.server, path)
+                loadfile(state.server, path)
+            else
+                path = ""
+            end
+        elseif !isempty(getpath(state.file)) && isabspath(joinpath(dirname(getpath(state.file)), path))
+            # Relative path from current 
+            if hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
+                path = joinpath(dirname(getpath(state.file)), path)
+            elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
+                path = joinpath(dirname(getpath(state.file)), path)
+                loadfile(state.server, path)
+            else
+                path = ""
+            end
         elseif !isempty((basepath = _is_in_basedir(getpath(state.file)); basepath))
             # Special handling for include method used within Base
             path = joinpath(basepath, path)
