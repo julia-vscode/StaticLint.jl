@@ -18,7 +18,7 @@ end
 # refers to. If it remains unresolved and is in a delayed evaluation scope 
 # (i.e. a function) it gets pushed to list (.urefs) to be resolved after we've
 # run over the entire top-level scope.
-function _resolve_ref(x, state)
+function resolve_ref(x, state)
     if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
         resolved = resolve_ref(x, state.scope, state, [])
     end

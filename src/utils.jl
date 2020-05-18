@@ -1,36 +1,6 @@
 quoted(x) = typof(x) === Quote || typof(x) === Quotenode
 unquoted(x) = is_unary_call(x) && isoperator(x[1]) && kindof(x[1]) == CSTParser.Tokens.EX_OR
 
-function get_ids(x, q = false, ids = [])
-    if quoted(x)
-        q = true
-    end
-    if q && unquoted(x)
-        q = false
-    end
-    if isidentifier(x) 
-        !q && push!(ids, x)
-    elseif length(x) > 0
-        for i in 1:length(x)
-            get_ids(x[i], q, ids)
-        end
-    end
-    ids
-end
-
-function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
-    if bindingof(x) !== nothing
-        push!(bindings, x)
-    end
-    if StaticLint.hasref(x)
-        push!(refs, x)
-    end
-    for a in x
-        collect_bindings_refs(a, bindings, refs)
-    end
-    return bindings, refs
-end
-
 function remove_ref(x::EXPR)
     if hasref(x) && refof(x) isa Binding && refof(x).refs isa Vector
         for ia in enumerate(refof(x).refs)
@@ -169,10 +139,6 @@ function find_return_statements(x::EXPR, last_stmt, rets)
     return rets, false
 end
 
-
-function _expr_assert(x::EXPR, typ, nargs)
-    typof(x) == typ && length(x) == nargs
-end
     
 # should only be called on Bindings to functions
 function last_method(func::Binding)
@@ -221,24 +187,6 @@ function find_exported_names(x::EXPR)
         end
     end
     return exported_vars
-end
-
-"""
-    is_in_fexpr(x::EXPR, f)
-Check whether `x` isa the child of an expression for which `f(parent) == true`.
-"""
-is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(x), f))
-
-"""
-    get_in_fexpr(x::EXPR, f)
-Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
-"""
-function get_parent_fexpr(x::EXPR, f)
-    if f(x)
-        return x
-    elseif parentof(x) isa EXPR
-        return get_parent_fexpr(parentof(x), f)
-    end
 end
 
 hasreadperm(p::String) = (uperm(p) & 0x04) == 0x04
@@ -310,9 +258,6 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
     return false
 end
 
-
-
-
 function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, server, f)
     if b.name isa SymbolServer.VarRef
         bname = b.name
@@ -367,3 +312,15 @@ is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
 is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
+
+"""
+    is_in_fexpr(x::EXPR, f)
+Check whether `x` isa the child of an expression for which `f(parent) == true`.
+"""
+is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(x), f))
+
+"""
+    get_in_fexpr(x::EXPR, f)
+Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
+"""
+get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)
