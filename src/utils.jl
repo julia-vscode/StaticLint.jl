@@ -227,15 +227,7 @@ end
     is_in_fexpr(x::EXPR, f)
 Check whether `x` isa the child of an expression for which `f(parent) == true`.
 """
-function is_in_fexpr(x::EXPR, f)
-    if f(x)
-        return true
-    elseif parentof(x) isa EXPR
-        return is_in_fexpr(parentof(x), f)
-    else
-        return false
-    end
-end
+is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(x), f))
 
 """
     get_in_fexpr(x::EXPR, f)
@@ -254,7 +246,7 @@ hasreadperm(p::String) = (uperm(p) & 0x04) == 0x04
 # check whether a path is in (including subfolders) the julia base dir. Returns "" if not, and the path to the base dir if so.
 function _is_in_basedir(path::String)
     i = findfirst(r".*base", path)
-    i == nothing && return ""
+    i === nothing && return ""
     path1 = path[i]::String
     !hasreadperm(path1) && return ""
     !isdir(path1) && return ""
