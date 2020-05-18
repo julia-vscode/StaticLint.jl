@@ -20,7 +20,7 @@ end
 # run over the entire top-level scope.
 function resolve_ref(x, state)
     if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
-        resolved = resolve_ref(x, state.scope, state, [])
+        resolved = resolve_ref(x, state.scope, state)
     end
 end
 
@@ -37,11 +37,9 @@ end
 # The return value is a boolean that is false if x should point to something but 
 # can't be resolved. 
  
-function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
+function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
-
     resolved = false
-    module_safety_trip(scope::Scope,  visited_scopes) && return
 
     if is_getfield(x)
         return resolve_getfield(x, scope, state)
@@ -71,7 +69,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
         end
     end
     if !resolved && !scope.ismodule && parentof(scope) isa Scope
-        return resolve_ref(x, parentof(scope), state, visited_scopes)
+        return resolve_ref(x, parentof(scope), state)
     end
     return resolved
 end
@@ -148,7 +146,7 @@ function scope_exports(scope::Scope, name::String)
 end
 
 # Fallback method
-function resolve_ref(x::EXPR, m, state::State, visited_scopes)::Bool
+function resolve_ref(x::EXPR, m, state::State)::Bool
     return hasref(x)::Bool
 end
 
@@ -165,12 +163,12 @@ function resolve_getfield(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if isidentifier(x[1])
-        resolved = resolve_ref(x[1], scope, state, [])
+        resolved = resolve_ref(x[1], scope, state)
         if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
             resolved = resolve_getfield(x[3][1], refof(x[1]), state)
         end
     elseif is_getfield_w_quotenode(x[1])
-        resolved = resolve_ref(x[1], scope, state, [])
+        resolved = resolve_ref(x[1], scope, state)
         if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
             resolved = resolve_getfield(x[3][1], refof(x[1][3][1]), state)
         end
@@ -184,7 +182,7 @@ function resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool
     resolved = false
     if isidentifier(x)
         if CSTParser.defines_module(parent_type) && scopeof(parent_type) isa Scope
-            resolved = resolve_ref(x, scopeof(parent_type), state, [])
+            resolved = resolve_ref(x, scopeof(parent_type), state)
         elseif CSTParser.defines_struct(parent_type)
             if scopehasbinding(scopeof(parent_type), valof(x)) 
                 setref!(x, scopeof(parent_type).names[valof(x)])
