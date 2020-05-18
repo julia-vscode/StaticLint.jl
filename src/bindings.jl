@@ -54,7 +54,7 @@ function mark_bindings!(x::EXPR, state)
                 end
             elseif is_curly(x[1])
                 mark_typealias_bindings!(x)
-            else
+            elseif !is_getfield(x[1])
                 mark_binding!(x[1], x)
             end
         elseif kindof(x[2]) === CSTParser.Tokens.ANON_FUNC

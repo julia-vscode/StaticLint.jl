@@ -18,7 +18,7 @@ end
 # refers to. If it remains unresolved and is in a delayed evaluation scope 
 # (i.e. a function) it gets pushed to list (.urefs) to be resolved after we've
 # run over the entire top-level scope.
-function _resolve_ref(x, state)
+function resolve_ref(x, state)
     if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
         resolved = resolve_ref(x, state.scope, state)
     end
@@ -51,7 +51,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
             setref!(x[1][1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true
-    elseif isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && _in_macro_def(x)
+    elseif is_special_macro_term(x) || new_within_struct(x)
         setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
         return true
     end
@@ -244,16 +244,6 @@ end
 
 resolvable_macroname(x::EXPR) = is_macroname(x) && isidentifier(x[2]) && refof(x[2]) === nothing
 
-function _in_macro_def(x::EXPR)
-    if CSTParser.defines_macro(x)
-        return true
-    elseif parentof(x) isa EXPR
-        return _in_macro_def(parentof(x))
-    else
-        return false
-    end
-end
-
 """
     module_safety_trip(scope::Scope,  visited_scopes)
 
@@ -296,3 +286,11 @@ Returns the string value of an expression for which `isidentifier` is true,
 i.e. handles NONSTDIDENTIFIERs.
 """
 valofid(x::EXPR) = typof(x) === CSTParser.IDENTIFIER ? valof(x) : valof(x[2])
+
+"""
+new_within_struct(x::EXPR)
+
+Checks whether x is a reference to `new` within a datatype constructor. 
+"""
+new_within_struct(x::EXPR) = isidentifier(x) && valofid(x) == "new" && is_in_fexpr(x, CSTParser.defines_struct)
+is_special_macro_term(x::EXPR) = isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && is_in_fexpr(x, CSTParser.defines_macro)
