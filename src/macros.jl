@@ -156,8 +156,9 @@ isquoted(x::EXPR) = typof(x) === CSTParser.Quotenode && length(x) == 2 && kindof
 maybeget_quotedsymbol(x::EXPR) = isquoted(x) ? maybe_eventually_get_id(x[2]) : nothing
 is_loop_iterator(x::EXPR) = is_binary_call(x) && (kindof(x[2]) === CSTParser.Tokens.EQ || kindof(x[2]) === CSTParser.Tokens.IN || kindof(x[2]) === CSTParser.Tokens.ELEMENT_OF)
 
+function maybeget_listofnames(b) end
 function maybeget_listofnames(b::Binding)
-    if is_assignment(b.val) || is_loop_iterator(b.val)
+    if (is_assignment(b.val) || (is_loop_iterator(b.val) && b.val isa EXPR && parentof(b.val) isa EXPR && typof(b.val) === CSTParser.For))
         rhs = b.val[3]
         if (rhsval = maybeget_quotedsymbol(rhs)) !== nothing
             return [rhsval]
