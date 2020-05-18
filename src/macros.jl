@@ -54,7 +54,7 @@ function handle_macro(x::EXPR, state)
             end
         elseif _points_to_arbitrary_macro(x[1], :Turing, :model, state) && length(x) == 2 && 
             is_binary_call(x[2], CSTParser.Tokens.EQ) && 
-            _expr_assert(x[2][3], CSTParser.Begin, 3) && typof(x[2][3][2]) === CSTParser.Block
+            typof(x[2][3]) === CSTParser.Begin && length(x[2][3]) == 3 && typof(x[2][3][2]) === CSTParser.Block
             for i = 1:length(x[2][3][2])
                 ex = x[2][3][2][i]
                 if is_binary_call(ex, CSTParser.Tokens.APPROX)

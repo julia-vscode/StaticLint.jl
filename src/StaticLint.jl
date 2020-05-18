@@ -60,7 +60,7 @@ function (state::Toplevel)(x::EXPR)
     mark_globals(x, state)
     handle_macro(x, state)
     s0 = scopes(x, state)
-    _resolve_ref(x, state)
+    resolve_ref(x, state)
     followinclude(x, state)
 
     if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || typof(x) === CSTParser.Export
@@ -84,7 +84,7 @@ function (state::Delayed)(x::EXPR)
     mark_globals(x, state)
     handle_macro(x, state)
     s0 = scopes(x, state)
-    _resolve_ref(x, state)
+    resolve_ref(x, state)
 
     traverse(x, state)
     
