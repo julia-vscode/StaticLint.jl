@@ -229,6 +229,10 @@ end
 
 iterate_over_ss_methods(b, tls, server, f) = false
 function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
+    for m in b.methods
+        ret = f(m)
+        ret && return true
+    end
     if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
         # above should be modified, 
         rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
@@ -249,11 +253,6 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
                 end
             end
         end
-    else
-        for m in b.methods
-            ret = f(m)
-            ret && return true
-        end
     end
     return false
 end
@@ -264,9 +263,13 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
     elseif b.name isa SymbolServer.FakeTypeName
         bname = b.name.name
     end
+    for m in b.methods
+        ret = f(m)
+        ret && return true
+    end
     if (bname in keys(getsymbolextendeds(server))) && tls.modules !== nothing
         # above should be modified, 
-        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server), true) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
             rootfunc = rootmod[bname.name]
             # find extensoions
@@ -283,11 +286,6 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
                     end
                 end
             end
-        end
-    else
-        for m in b.methods
-            ret = f(m)
-            ret && return true
         end
     end
     return false

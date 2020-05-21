@@ -302,7 +302,7 @@ function add_binding(x, state, scope = state.scope)
                             if scopehasmodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
                                 mod = getscopemodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1])))
                                 if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
-                                    bindingof(x).prev = mod[Symbol(name)]
+                                    bindingof(x).prev = maybe_lookup(mod[Symbol(name)], state.server)
                                 end
                             end
                             break # We've reached a scope that loads modules, no need to keep searching upwards

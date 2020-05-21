@@ -128,7 +128,7 @@ end
 
 function func_nargs(m::SymbolServer.MethodStore)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
-    
+
     for arg in m.sig
         if CoreTypes.isva(last(arg))
             maxargs = typemax(Int)
