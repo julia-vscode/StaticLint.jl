@@ -128,7 +128,7 @@ end
 
 function func_nargs(m::SymbolServer.MethodStore)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
-    
+
     for arg in m.sig
         if CoreTypes.isva(last(arg))
             maxargs = typemax(Int)
@@ -551,13 +551,13 @@ function has_getproperty_method(b::SymbolServer.DataTypeStore, server)
         for ext in getsymbolextendeds(server)[getprop_vr]
             for m in SymbolServer._lookup(ext, getsymbolserver(server))[:getproperty].methods
                 t = unwrap_fakeunionall(m.sig[1][2])
-                t.name == b.name.name && return true
+                !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
             end
         end
     else
         for m in getsymbolserver(server)[:Base][:getproperty].methods
             t = unwrap_fakeunionall(m.sig[1][2])
-            t.name == b.name.name && return true
+            !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
         end
     end
     return false

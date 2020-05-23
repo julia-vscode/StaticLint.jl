@@ -83,32 +83,21 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, m)
             return true
         elseif isexportedby(x, m)
-            val = m[Symbol(valof(x))]
-            if val isa SymbolServer.VarRef
-                val1 = SymbolServer._lookup(val, getsymbolserver(state.server))
-                if val1 !== nothing
-                    setref!(x, val1)
-                    return true
-                else
-                    return false
-                end
-            else
-                setref!(x, val)
-                return true
-            end
+            setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
+            return true 
         end
     elseif is_macroname(x1)
         x = x1[2]
         mn = Symbol("@", valof(x))
         if isexportedby(mn, m)
-            setref!(x, m[mn])
+            setref!(x, maybe_lookup(m[mn], state.server))
             return true
         end
     elseif typof(x1) === x_Str
         mac = x1
         mn = Symbol("@", valof(mac[1]), "_str")
         if isexportedby(mn, m)
-            setref!(mac[1], m[mn])
+            setref!(mac[1], maybe_lookup(m[mn], state.server))
             return true
         end
     end
@@ -217,11 +206,7 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if isidentifier(x) && (val = SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server))) !== nothing
-        if val isa SymbolServer.VarRef
-            val = SymbolServer._lookup(val, getsymbolserver(state.server))
-            !(val isa SymbolServer.SymStore) && return false
-        end
+    if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         setref!(x, val)
         resolved = true
     end
@@ -234,7 +219,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     if isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
         fi = findfirst(f->Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
-        val = SymbolServer._lookup(ft, getsymbolserver(state.server))
+        val = SymbolServer._lookup(ft, getsymbolserver(state.server), true)
         # TODO: Need to handle the case where we get back a FakeUnion, etc.
         setref!(x, Binding(noname, nothing, val, [], nothing, nothing))
         resolved = true

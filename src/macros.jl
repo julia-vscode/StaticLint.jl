@@ -110,9 +110,11 @@ function _mark_JuMP_binding(arg)
 end
 
 function _points_to_Base_macro(x::EXPR, name, state)
-    length(x) == 2 && isidentifier(x[2]) && Symbol(valofid(x[2])) == name && refof(x[2]) == getsymbolserver(state.server)[:Base][Symbol("@", name)]
+    length(x) == 2 && isidentifier(x[2]) && Symbol(valofid(x[2])) == name && refof(x[2]) == maybe_lookup(getsymbolserver(state.server)[:Base][Symbol("@", name)], state.server)
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
-    length(x) == 2 && isidentifier(x[2]) && valof(x[2]) == name && haskey(getsymbolserver(state.server), Symbol(module_name)) && haskey(getsymbolserver(state.server)[Symbol(module_name)], Symbol("@", name)) && refof(x[2]) == getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)]
+    length(x) == 2 && isidentifier(x[2]) && valof(x[2]) == name && haskey(getsymbolserver(state.server), Symbol(module_name)) && haskey(getsymbolserver(state.server)[Symbol(module_name)], Symbol("@", name)) && refof(x[2]) == maybe_lookup(getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)], state.server)
 end
+
+maybe_lookup(x, server) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, getsymbolserver(server), true) : x
