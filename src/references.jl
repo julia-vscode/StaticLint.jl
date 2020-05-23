@@ -18,9 +18,9 @@ end
 # refers to. If it remains unresolved and is in a delayed evaluation scope 
 # (i.e. a function) it gets pushed to list (.urefs) to be resolved after we've
 # run over the entire top-level scope.
-function _resolve_ref(x, state)
+function resolve_ref(x, state)
     if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
-        resolved = resolve_ref(x, state.scope, state, [])
+        resolved = resolve_ref(x, state.scope, state)
     end
 end
 
@@ -37,11 +37,9 @@ end
 # The return value is a boolean that is false if x should point to something but 
 # can't be resolved. 
  
-function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
+function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
-
     resolved = false
-    module_safety_trip(scope::Scope,  visited_scopes) && return
 
     if is_getfield(x)
         return resolve_getfield(x, scope, state)
@@ -53,7 +51,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
             setref!(x[1][1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true
-    elseif isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && _in_macro_def(x)
+    elseif is_special_macro_term(x) || new_within_struct(x)
         setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
         return true
     end
@@ -71,7 +69,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State, visited_scopes)::Bool
         end
     end
     if !resolved && !scope.ismodule && parentof(scope) isa Scope
-        return resolve_ref(x, parentof(scope), state, visited_scopes)
+        return resolve_ref(x, parentof(scope), state)
     end
     return resolved
 end
@@ -85,32 +83,21 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, m)
             return true
         elseif isexportedby(x, m)
-            val = m[Symbol(valof(x))]
-            if val isa SymbolServer.VarRef
-                val1 = SymbolServer._lookup(val, getsymbolserver(state.server))
-                if val1 !== nothing
-                    setref!(x, val1)
-                    return true
-                else
-                    return false
-                end
-            else
-                setref!(x, val)
-                return true
-            end
+            setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
+            return true 
         end
     elseif is_macroname(x1)
         x = x1[2]
         mn = Symbol("@", valof(x))
         if isexportedby(mn, m)
-            setref!(x, m[mn])
+            setref!(x, maybe_lookup(m[mn], state.server))
             return true
         end
     elseif typof(x1) === x_Str
         mac = x1
         mn = Symbol("@", valof(mac[1]), "_str")
         if isexportedby(mn, m)
-            setref!(mac[1], m[mn])
+            setref!(mac[1], maybe_lookup(m[mn], state.server))
             return true
         end
     end
@@ -148,7 +135,7 @@ function scope_exports(scope::Scope, name::String)
 end
 
 # Fallback method
-function resolve_ref(x::EXPR, m, state::State, visited_scopes)::Bool
+function resolve_ref(x::EXPR, m, state::State)::Bool
     return hasref(x)::Bool
 end
 
@@ -165,12 +152,12 @@ function resolve_getfield(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if isidentifier(x[1])
-        resolved = resolve_ref(x[1], scope, state, [])
+        resolved = resolve_ref(x[1], scope, state)
         if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
             resolved = resolve_getfield(x[3][1], refof(x[1]), state)
         end
     elseif is_getfield_w_quotenode(x[1])
-        resolved = resolve_ref(x[1], scope, state, [])
+        resolved = resolve_ref(x[1], scope, state)
         if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
             resolved = resolve_getfield(x[3][1], refof(x[1][3][1]), state)
         end
@@ -184,7 +171,7 @@ function resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool
     resolved = false
     if isidentifier(x)
         if CSTParser.defines_module(parent_type) && scopeof(parent_type) isa Scope
-            resolved = resolve_ref(x, scopeof(parent_type), state, [])
+            resolved = resolve_ref(x, scopeof(parent_type), state)
         elseif CSTParser.defines_struct(parent_type)
             if scopehasbinding(scopeof(parent_type), valof(x)) 
                 setref!(x, scopeof(parent_type).names[valof(x)])
@@ -219,11 +206,7 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if isidentifier(x) && (val = SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server))) !== nothing
-        if val isa SymbolServer.VarRef
-            val = SymbolServer._lookup(val, getsymbolserver(state.server))
-            !(val isa SymbolServer.SymStore) && return false
-        end
+    if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         setref!(x, val)
         resolved = true
     end
@@ -236,7 +219,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     if isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
         fi = findfirst(f->Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
-        val = SymbolServer._lookup(ft, getsymbolserver(state.server))
+        val = SymbolServer._lookup(ft, getsymbolserver(state.server), true)
         # TODO: Need to handle the case where we get back a FakeUnion, etc.
         setref!(x, Binding(noname, nothing, val, [], nothing, nothing))
         resolved = true
@@ -245,16 +228,6 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
 end
 
 resolvable_macroname(x::EXPR) = is_macroname(x) && isidentifier(x[2]) && refof(x[2]) === nothing
-
-function _in_macro_def(x::EXPR)
-    if CSTParser.defines_macro(x)
-        return true
-    elseif parentof(x) isa EXPR
-        return _in_macro_def(parentof(x))
-    else
-        return false
-    end
-end
 
 """
     module_safety_trip(scope::Scope,  visited_scopes)
@@ -298,3 +271,11 @@ Returns the string value of an expression for which `isidentifier` is true,
 i.e. handles NONSTDIDENTIFIERs.
 """
 valofid(x::EXPR) = typof(x) === CSTParser.IDENTIFIER ? valof(x) : valof(x[2])
+
+"""
+new_within_struct(x::EXPR)
+
+Checks whether x is a reference to `new` within a datatype constructor. 
+"""
+new_within_struct(x::EXPR) = isidentifier(x) && valofid(x) == "new" && is_in_fexpr(x, CSTParser.defines_struct)
+is_special_macro_term(x::EXPR) = isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && is_in_fexpr(x, CSTParser.defines_macro)

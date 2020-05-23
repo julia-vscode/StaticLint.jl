@@ -1,36 +1,6 @@
 quoted(x) = typof(x) === Quote || typof(x) === Quotenode
 unquoted(x) = is_unary_call(x) && isoperator(x[1]) && kindof(x[1]) == CSTParser.Tokens.EX_OR
 
-function get_ids(x, q = false, ids = [])
-    if quoted(x)
-        q = true
-    end
-    if q && unquoted(x)
-        q = false
-    end
-    if isidentifier(x) 
-        !q && push!(ids, x)
-    elseif length(x) > 0
-        for i in 1:length(x)
-            get_ids(x[i], q, ids)
-        end
-    end
-    ids
-end
-
-function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
-    if bindingof(x) !== nothing
-        push!(bindings, x)
-    end
-    if StaticLint.hasref(x)
-        push!(refs, x)
-    end
-    for a in x
-        collect_bindings_refs(a, bindings, refs)
-    end
-    return bindings, refs
-end
-
 function remove_ref(x::EXPR)
     if hasref(x) && refof(x) isa Binding && refof(x).refs isa Vector
         for ia in enumerate(refof(x).refs)
@@ -169,10 +139,6 @@ function find_return_statements(x::EXPR, last_stmt, rets)
     return rets, false
 end
 
-
-function _expr_assert(x::EXPR, typ, nargs)
-    typof(x) == typ && length(x) == nargs
-end
     
 # should only be called on Bindings to functions
 function last_method(func::Binding)
@@ -223,38 +189,12 @@ function find_exported_names(x::EXPR)
     return exported_vars
 end
 
-"""
-    is_in_fexpr(x::EXPR, f)
-Check whether `x` isa the child of an expression for which `f(parent) == true`.
-"""
-function is_in_fexpr(x::EXPR, f)
-    if f(x)
-        return true
-    elseif parentof(x) isa EXPR
-        return is_in_fexpr(parentof(x), f)
-    else
-        return false
-    end
-end
-
-"""
-    get_in_fexpr(x::EXPR, f)
-Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
-"""
-function get_parent_fexpr(x::EXPR, f)
-    if f(x)
-        return x
-    elseif parentof(x) isa EXPR
-        return get_parent_fexpr(parentof(x), f)
-    end
-end
-
 hasreadperm(p::String) = (uperm(p) & 0x04) == 0x04
 
 # check whether a path is in (including subfolders) the julia base dir. Returns "" if not, and the path to the base dir if so.
 function _is_in_basedir(path::String)
     i = findfirst(r".*base", path)
-    i == nothing && return ""
+    i === nothing && return ""
     path1 = path[i]::String
     !hasreadperm(path1) && return ""
     !isdir(path1) && return ""
@@ -289,6 +229,10 @@ end
 
 iterate_over_ss_methods(b, tls, server, f) = false
 function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
+    for m in b.methods
+        ret = f(m)
+        ret && return true
+    end
     if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
         # above should be modified, 
         rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
@@ -309,17 +253,9 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
                 end
             end
         end
-    else
-        for m in b.methods
-            ret = f(m)
-            ret && return true
-        end
     end
     return false
 end
-
-
-
 
 function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, server, f)
     if b.name isa SymbolServer.VarRef
@@ -327,9 +263,13 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
     elseif b.name isa SymbolServer.FakeTypeName
         bname = b.name.name
     end
+    for m in b.methods
+        ret = f(m)
+        ret && return true
+    end
     if (bname in keys(getsymbolextendeds(server))) && tls.modules !== nothing
         # above should be modified, 
-        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server), true) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
             rootfunc = rootmod[bname.name]
             # find extensoions
@@ -346,11 +286,6 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
                     end
                 end
             end
-        end
-    else
-        for m in b.methods
-            ret = f(m)
-            ret && return true
         end
     end
     return false
@@ -375,3 +310,15 @@ is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
 is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
+
+"""
+    is_in_fexpr(x::EXPR, f)
+Check whether `x` isa the child of an expression for which `f(parent) == true`.
+"""
+is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(x), f))
+
+"""
+    get_in_fexpr(x::EXPR, f)
+Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
+"""
+get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)

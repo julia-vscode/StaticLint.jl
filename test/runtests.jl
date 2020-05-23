@@ -819,7 +819,7 @@ end
         T() = 1
         """)
         StaticLint.check_const_redef(cst[2])
-        @test cst[2].meta.error == nothing
+        @test cst[2].meta.error === nothing
     end
 end
 
