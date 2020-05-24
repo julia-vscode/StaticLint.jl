@@ -153,12 +153,12 @@ function resolve_getfield(x::EXPR, scope::Scope, state::State)::Bool
     resolved = false
     if isidentifier(x[1])
         resolved = resolve_ref(x[1], scope, state)
-        if resolved && typof(x[3]) === Quotenode && isidentifier(x[3][1])
+        if resolved && typof(x[3]) === Quotenode && is_id_or_macroname(x[3][1])
             resolved = resolve_getfield(x[3][1], refof(x[1]), state)
         end
     elseif is_getfield_w_quotenode(x[1])
         resolved = resolve_ref(x[1], scope, state)
-        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && isidentifier(x[3][1])
+        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && is_id_or_macroname(x[3][1])
             resolved = resolve_getfield(x[3][1], refof(x[1][3][1]), state)
         end
     end
@@ -208,6 +208,9 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     resolved = false
     if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         setref!(x, val)
+        resolved = true
+    elseif is_macroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol("@", CSTParser.str_value(x[2])), m, getsymbolserver(state.server)), state.server)) !== nothing
+        setref!(x[2], val)
         resolved = true
     end
     return resolved

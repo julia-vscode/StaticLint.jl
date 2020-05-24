@@ -29,6 +29,8 @@ function handle_macro(x::EXPR, state)
             state.scope = scopeof(x)
             interpret_eval(x[2], state)
             state.scope = s0
+        elseif _points_to_Base_macro(x[1], :irrational, state) && length(x) == 4
+            mark_binding!(x[2], x)
         elseif _points_to_Base_macro(x[1], :enum, state)
             for i = 2:length(x)
                 if !ispunctuation(x[i])
@@ -119,11 +121,15 @@ function _mark_JuMP_binding(arg)
 end
 
 function _points_to_Base_macro(x::EXPR, name, state)
-    length(x) == 2 && isidentifier(x[2]) && Symbol(valofid(x[2])) == name && refof(x[2]) == maybe_lookup(getsymbolserver(state.server)[:Base][Symbol("@", name)], state.server)
+    is_getfield_w_quotenode(x) && return _points_to_Base_macro(x[3][1], name, state)
+    targetmacro =  maybe_lookup(getsymbolserver(state.server)[:Base][Symbol("@", name)], state.server)
+    length(x) == 2 && isidentifier(x[2]) && Symbol(valofid(x[2])) == name && (ref = refof(x[2])) !== nothing &&
+    (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
-    length(x) == 2 && isidentifier(x[2]) && valof(x[2]) == name && haskey(getsymbolserver(state.server), Symbol(module_name)) && haskey(getsymbolserver(state.server)[Symbol(module_name)], Symbol("@", name)) && refof(x[2]) == maybe_lookup(getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)], state.server)
+    length(x) == 2 && isidentifier(x[2]) && valof(x[2]) == name && haskey(getsymbolserver(state.server), Symbol(module_name)) && haskey(getsymbolserver(state.server)[Symbol(module_name)], Symbol("@", name)) && (refof(x[2]) == maybe_lookup(getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)], state.server) ||
+    (refof(x[2]) isa Binding && refof(x[2]).val == maybe_lookup(getsymbolserver(state.server)[Symbol(module_name)][Symbol("@", name)], state.server)))
 end
 
 maybe_lookup(x, server) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, getsymbolserver(server), true) : x

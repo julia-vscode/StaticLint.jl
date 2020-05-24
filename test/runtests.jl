@@ -1042,5 +1042,14 @@ end
     StaticLint.scopepass(f)
 end
 
+let cst = parse_and_pass("""
+    using Base.@irrational
+    @irrational ase 0.45343 π
+    ase
+    """)
+    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
+
 end
 
