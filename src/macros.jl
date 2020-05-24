@@ -20,33 +20,15 @@ function handle_macro(x::EXPR, state)
             elseif isidentifier(x[2])
                 mark_binding!(x[2], x)
             end
-        elseif _points_to_Base_macro(x[1], :eval, state) && length(x) == 2 && state isa Toplevel # Only do this in top-level pass?
-            setscope!(x[2], Scope(x[2])) # add a special scope here?
-            setparent!(scopeof(x[2]), state.scope)
-            state(x[2]) # make sure we have bindings etc
-            if hasbinding(x[2]) || (is_assignment(x[2]) && hasbinding(x[2][1])) # does expr create a binding
-                tls = retrieve_toplevel_scope(x[2])
-                expr = hasbinding(x[2]) ? x[2] : x[2][1]
-                if isidentifier(bindingof(expr).name)
-                    add_binding(expr, state, tls)
-                elseif CSTParser.is_exor(bindingof(expr).name)
-                    variable_name = parentof(bindingof(expr).name)[2]
-                    resolve_ref(variable_name, state.scope, state, [])
-                    if hasref(variable_name) && (nameslist = maybeget_listofnames(refof(variable_name))) !== nothing
-                        for name in nameslist
-                            # Adds Bindings that aren't attached to an expression
-                            b = Binding(name, bindingof(expr).val, bindingof(expr).type, [], nothing, nothing)
-                            if scopehasbinding(tls, valofid(b.name))
-                                b.prev = tls.names[valofid(b.name)]
-                                tls.names[valofid(b.name)] = b
-                                b.prev.next = b
-                            else
-                                tls.names[valofid(b.name)] = b
-                            end
-                        end
-                    end
-                end
-            end
+        elseif _points_to_Base_macro(x[1], :eval, state) && length(x) == 2 && state isa Toplevel
+            # Create scope around eval'ed expression. This ensures anybindings are
+            # correctly hoisted to the top-level scope.
+            setscope!(x, Scope(x))
+            setparent!(scopeof(x), state.scope)
+            s0 = state.scope
+            state.scope = scopeof(x)
+            interpret_eval(x[2], state)
+            state.scope = s0
         elseif _points_to_Base_macro(x[1], :enum, state)
             for i = 2:length(x)
                 if !ispunctuation(x[i])
@@ -149,33 +131,101 @@ maybe_lookup(x, server) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, ge
 function maybe_eventually_get_id(x::EXPR)
     if isidentifier(x) 
         return x
-    elseif typof(x) === CSTParser.InvisBrackets && length(x) == 3
+    elseif is_invis_brackets(x)
         return maybe_eventually_get_id(x[2])
     end
     return nothing
 end
+
+is_eventually_interpolated(x::EXPR) = is_invis_brackets(x) ? is_eventually_interpolated(x[2]) : CSTParser.isunarycall(x) && CSTParser.is_exor(x[1])
 isquoted(x::EXPR) = typof(x) === CSTParser.Quotenode && length(x) == 2 && kindof(x[1]) === CSTParser.Tokens.COLON
 maybeget_quotedsymbol(x::EXPR) = isquoted(x) ? maybe_eventually_get_id(x[2]) : nothing
-is_loop_iterator(x::EXPR) = is_binary_call(x) && (kindof(x[2]) === CSTParser.Tokens.EQ || kindof(x[2]) === CSTParser.Tokens.IN || kindof(x[2]) === CSTParser.Tokens.ELEMENT_OF)
 
-function maybeget_listofnames(b) end
-function maybeget_listofnames(b::Binding)
-    if (is_assignment(b.val) || (is_loop_iterator(b.val) && b.val isa EXPR && parentof(b.val) isa EXPR && typof(b.val) === CSTParser.For))
-        rhs = b.val[3]
-        if (rhsval = maybeget_quotedsymbol(rhs)) !== nothing
-            return [rhsval]
-        elseif typof(rhs) === CSTParser.Vect || typof(rhs) === CSTParser.TupleH
-            names = EXPR[]
-            for i = 1:length(rhs)
-                CSTParser.ispunctuation(rhs[i]) && continue
-                name = maybeget_quotedsymbol(rhs[i])
-                if name !== nothing
-                    push!(names, name)
-                else
-                    return nothing
+function is_loop_iterator(x::EXPR) 
+    CSTParser.is_range(x) && 
+    ((parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.For) ||
+    (parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && typof(parentof(parentof(x))) === CSTParser.For))
+end
+
+"""
+    maybe_quoted_list(x::EXPR)
+
+Try and get a list of quoted symbols from x. Return nothing if not possible.
+"""
+function maybe_quoted_list(x::EXPR)
+    names = EXPR[]
+    if typof(x) === CSTParser.Vect || typof(x) === CSTParser.TupleH
+        for i = 1:length(x)
+            CSTParser.ispunctuation(x[i]) && continue
+            name = maybeget_quotedsymbol(x[i])
+            if name !== nothing
+                push!(names, name)
+            else
+                return nothing
+            end
+        end
+        return names
+    end
+end
+
+"""
+interpret_eval(x::EXPR, state)
+
+Naive attempt to interpret `x` as though it has been eval'ed. Lifts
+any bindings made within the scope of `x` to the toplevel and replaces 
+(some) interpolated binding names with the value where possible.
+"""
+function interpret_eval(x::EXPR, state)
+    # make sure we have bindings etc
+    state(x)
+    tls = retrieve_toplevel_scope(x)
+    for ex in collect_expr_with_bindings(x)
+        b = bindingof(ex)
+        if isidentifier(b.name)
+            # The name of the binding is fixed
+            add_binding(ex, state, tls)
+        elseif CSTParser.is_exor(b.name)
+            # The name of the binding is variable, we need to work out what the
+            # interpolated symbol points to.
+            variable_name = parentof(b.name)[2]
+            resolve_ref(variable_name, state.scope, state)
+            if (ref = refof(variable_name)) isa Binding
+                if is_assignment(ref.val) && (rhs = maybeget_quotedsymbol(ref.val[3])) !== nothing
+                    # `name = :something`
+                    toplevel_binding = Binding(rhs, b.val, b.type, [], nothing, nothing)
+                    if scopehasbinding(tls, valofid(toplevel_binding.name))
+                        toplevel_binding.prev = tls.names[valofid(toplevel_binding.name)]
+                        tls.names[valofid(toplevel_binding.name)] = toplevel_binding
+                        toplevel_binding.prev.next = toplevel_binding
+                    else
+                        tls.names[valofid(toplevel_binding.name)] = toplevel_binding
+                    end
+                elseif is_loop_iterator(ref.val) && (names = maybe_quoted_list(ref.val[3])) !== nothing
+                    # name is of a collection of quoted symbols 
+                    for name in names
+                        toplevel_binding = Binding(name, b.val, b.type, [], nothing, nothing)
+                        if scopehasbinding(tls, valofid(toplevel_binding.name))
+                            toplevel_binding.prev = tls.names[valofid(toplevel_binding.name)]
+                            tls.names[valofid(toplevel_binding.name)] = toplevel_binding
+                            toplevel_binding.prev.next = toplevel_binding
+                        else
+                            tls.names[valofid(toplevel_binding.name)] = toplevel_binding
+                        end
+                    end
                 end
             end
-            return names
         end
     end
+end
+
+function collect_expr_with_bindings(x, bound_exprs = EXPR[])
+    if hasbinding(x)
+        push!(bound_exprs, x)
+        # Assuming here that if an expression has a binding we don't want anything bound to chlid nodes.
+    elseif !((CSTParser.defines_function(x) && !(is_eventually_interpolated(x[1]))) || CSTParser.defines_macro(x) || typof(x) === CSTParser.Export)
+        for a in x
+            collect_expr_with_bindings(a, bound_exprs)
+        end
+    end
+    return bound_exprs
 end

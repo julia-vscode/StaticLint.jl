@@ -919,17 +919,32 @@ end
         @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
     end
     let cst = parse_and_pass("""
-        names = :adf
-        names_vect = [:adf, :asdf]
-        names_tuple = (:adf, :asdf)
-        for for_names_tuple in (:adf, :asdf)
+        let 
+            @eval a,d,f = 1,2,3
         end
         """)
-        @test StaticLint.maybeget_listofnames(scopeof(cst).names["names"]) == [cst[1][3][2]]
-        @test StaticLint.maybeget_listofnames(scopeof(cst).names["names_vect"]) == [cst[2][3][2][2], cst[2][3][4][2]]
-        @test StaticLint.maybeget_listofnames(scopeof(cst).names["names_tuple"]) == [cst[3][3][2][2], cst[3][3][4][2]]
-        @test !isempty(StaticLint.maybeget_listofnames(scopeof(cst[4]).names["for_names_tuple"]))
+        @test StaticLint.scopehasbinding(scopeof(cst), "a")
+        @test StaticLint.scopehasbinding(scopeof(cst), "d")
+        @test StaticLint.scopehasbinding(scopeof(cst), "f")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "a")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "d")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "f")
     end
+    let cst = parse_and_pass("""
+        let 
+            @eval a = 1
+            @eval d = 2
+            @eval f = 3
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "a")
+        @test StaticLint.scopehasbinding(scopeof(cst), "d")
+        @test StaticLint.scopehasbinding(scopeof(cst), "f")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "a")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "d")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "f")
+    end
+    
     let cst = parse_and_pass("""
         let name = :adf
             @eval \$name = 1
@@ -938,9 +953,17 @@ end
         @test StaticLint.scopehasbinding(scopeof(cst), "adf")
         @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
     end
+    let cst = parse_and_pass("""
+        let name = [:adf]
+            @eval \$name = 1
+        end
+        """)
+        @test !StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+    end
 
     let cst = parse_and_pass("""
-        let name = [:adf, :asdf, :asdfs]
+        for name = [:adf, :asdf, :asdfs]
             @eval \$name = 1
         end
         """)
@@ -949,7 +972,7 @@ end
         @test StaticLint.scopehasbinding(scopeof(cst), "asdfs")
     end
     let cst = parse_and_pass("""
-        let name = (:adf, :asdf, :asdfs)
+        for name = (:adf, :asdf, :asdfs)
             @eval \$name = 1
         end
         """)
