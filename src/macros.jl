@@ -143,7 +143,7 @@ function maybe_eventually_get_id(x::EXPR)
     return nothing
 end
 
-is_eventually_interpolated(x::EXPR) = is_invis_brackets(x) ? is_eventually_interpolated(x[2]) : CSTParser.isunarycall(x) && CSTParser.is_exor(x[1])
+is_eventually_interpolated(x::EXPR) = is_invis_brackets(x) ? is_eventually_interpolated(x[2]) : is_unary_call(x) && CSTParser.is_exor(x[1])
 isquoted(x::EXPR) = typof(x) === CSTParser.Quotenode && length(x) == 2 && kindof(x[1]) === CSTParser.Tokens.COLON
 maybeget_quotedsymbol(x::EXPR) = isquoted(x) ? maybe_eventually_get_id(x[2]) : nothing
 
