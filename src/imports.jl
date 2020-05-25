@@ -87,11 +87,23 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
         modules = Dict(name => val)
     end
 end
-
+no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)
+function get_named_toplevel_module(s::Scope, name::String) 
+    if s.ismodule && valofid(CSTParser.get_name(s.expr)) == name && no_modules_above(s)
+        return s.expr
+    elseif s.parent isa Scope
+        return get_named_toplevel_module(s.parent, name)
+    end
+    return nothing
+end
 function _get_field(par, arg, state)
     arg_str_rep = CSTParser.str_value(arg)
-    if par isa SymbolServer.EnvStore && haskey(par, Symbol(arg_str_rep))
-        return par[Symbol(arg_str_rep)]
+    if par isa SymbolServer.EnvStore 
+        if (tlm = get_named_toplevel_module(retrieve_scope(arg), arg_str_rep)) !== nothing && hasbinding(tlm)
+            return bindingof(tlm)
+        elseif haskey(par, Symbol(arg_str_rep))
+            return par[Symbol(arg_str_rep)]
+        end
     elseif par isa SymbolServer.ModuleStore # imported module
         if Symbol(arg_str_rep) === par.name.name
             return par
