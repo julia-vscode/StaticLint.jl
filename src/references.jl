@@ -139,6 +139,8 @@ function resolve_ref(x::EXPR, m, state::State)::Bool
     return hasref(x)::Bool
 end
 
+rhs_of_getfield(x::EXPR) = is_getfield_w_quotenode(x) ? isquoted(x[3]) ? x[3][2] : x[3][1] : x
+lhs_of_getfield(x::EXPR) = rhs_of_getfield(x[1])
 
 """
     resolve_getfield(x::EXPR, parent::Union{EXPR,Scope,ModuleStore,Binding}, state::State)::Bool
@@ -150,17 +152,16 @@ a field matching `x`.
 """
 function resolve_getfield(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
-    resolved = false
+    resolved = resolve_ref(x[1], scope, state)
     if isidentifier(x[1])
-        resolved = resolve_ref(x[1], scope, state)
-        if resolved && typof(x[3]) === Quotenode && is_id_or_macroname(x[3][1])
-            resolved = resolve_getfield(x[3][1], refof(x[1]), state)
-        end
+        lhs = x[1]
     elseif is_getfield_w_quotenode(x[1])
-        resolved = resolve_ref(x[1], scope, state)
-        if resolved && typof(x[3]) === Quotenode && length(x[3]) > 0 && is_id_or_macroname(x[3][1])
-            resolved = resolve_getfield(x[3][1], refof(x[1][3][1]), state)
-        end
+        lhs = lhs_of_getfield(x)
+    else
+        return resolved
+    end
+    if resolved && (rhs = rhs_of_getfield(x)) !== nothing
+        resolved = resolve_getfield(rhs, refof(lhs), state)
     end
     return resolved
 end

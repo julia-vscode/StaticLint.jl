@@ -208,8 +208,9 @@ function check_call(x, server)
         # find the function we're dealing with
         if isidentifier(first(x)) && hasref(first(x))
             func_ref = refof(first(x))
-        elseif is_binary_call(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
-            func_ref = refof(first(last(first(x))))
+            # elseif is_binary_call(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
+        elseif is_getfield_w_quotenode(x[1]) && (rhs = rhs_of_getfield(x[1])) !== nothing && hasref(rhs)
+            func_ref = refof(rhs)
         else
             return
         end

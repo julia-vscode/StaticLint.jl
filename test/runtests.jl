@@ -1073,5 +1073,22 @@ let cst = parse_and_pass("""
     @test isempty(StaticLint.collect_hints(cst, server))
 end
 
+@testset "quoted getfield" begin
+let cst = parse_and_pass("""
+    Base.:sin
+    """)
+    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+    @test isempty(StaticLint.collect_hints(cst[1], server))
+end
+
+let cst = parse_and_pass("""
+    sin(1,1)
+    Base.sin(1,1)
+    Base.:sin(1,1)
+    """)
+    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+    @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+end
+end
 end
 
