@@ -618,6 +618,28 @@ end
         StaticLint.check_call(cst[2], server)
         @test StaticLint.errorof(cst[2]) === nothing
     end
+    let cst = parse_and_pass("""
+        import Base: sin
+        \"\"\"
+        docs
+        \"\"\"
+        sin
+        sin(a,b) = 1
+        sin(1)
+        """)
+        # Checks that documented symbols are skipped
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    let cst = parse_and_pass("""
+        import Base: sin
+        sin(a,b) = 1
+        sin(1)
+        """)
+        # Checks that documented symbols are skipped
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
 end
 
 @testset "check_modulename" begin
