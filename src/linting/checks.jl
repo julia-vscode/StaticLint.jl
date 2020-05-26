@@ -193,77 +193,78 @@ function compare_f_call(m_counts::Tuple{Int,Int,Array{Symbol},Bool}, call_counts
     return true
 end
 
+function is_something_with_methods(x::Binding)
+    (x.type == CoreTypes.Function && x.val isa EXPR) ||
+    (x.type == CoreTypes.DataType && x.val isa EXPR && CSTParser.defines_struct(x.val)) ||
+    (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
+end
+is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
+is_something_with_methods(x) = false
+
 function check_call(x, server)
     if is_call(x)
         parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Do && return # TODO: add number of args specified in do block.
         length(x) == 0 && return
+        # find the function we're dealing with
         if isidentifier(first(x)) && hasref(first(x))
             func_ref = refof(first(x))
-        elseif is_binary_call(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
-            func_ref = refof(first(last(first(x))))
+            # elseif is_binary_call(x[1], CSTParser.Tokens.DOT) && typof(x[1]) === CSTParser.Quotenode && length(x[1][3]) > 0 && isidentifier(x[1][3][1]) && hasref(first(x)[3][1])
+        elseif is_getfield_w_quotenode(x[1]) && (rhs = rhs_of_getfield(x[1])) !== nothing && hasref(rhs)
+            func_ref = refof(rhs)
         else
             return
         end
-        if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
-            call_counts = call_nargs(x)
-            function ff(m)
-                m_counts = func_nargs(m)
-                return compare_f_call(m_counts, call_counts)
-            end
-            tls = retrieve_toplevel_scope(x)
-            tls === nothing && return
-            iterate_over_ss_methods(func_ref, tls, server, ff) && return # returns if ff(m) == true for any methods
-            seterror!(x, IncorrectCallArgs)
-        elseif func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
-            call_counts = call_nargs(x)
-            function ff1(m)
-                m_counts = func_nargs(m)
-                return compare_f_call(m_counts, call_counts)
-            end
-            b = func_ref
-            seen = Binding[]
-            while b.next isa Binding && b.next.type == CoreTypes.Function && !(b in seen)
-                push!(seen, b)
-                b = b.next
-            end
-            seen = Binding[]
-            while true
-                b in seen && break
-                if !(b isa Binding) # Needs to be cleaned up
-                    if b isa SymbolServer.FunctionStore || b isa SymbolServer.DataTypeStore
-                        tls = retrieve_toplevel_scope(x)
-                        tls === nothing && return 
-                        iterate_over_ss_methods(b, tls, server, ff1) && return
-                        break
-                    else
-                        return
-                    end
-                elseif b.type == CoreTypes.Function && b.val isa EXPR
-                    m_counts = func_nargs(b.val)
-                elseif b.type == CoreTypes.DataType && b.val isa EXPR && CSTParser.defines_struct(b.val)
-                    m_counts = struct_nargs(b.val)
-                elseif b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore
-                    tls = retrieve_toplevel_scope(x)
-                    tls === nothing && return 
-                    iterate_over_ss_methods(b.val, tls, server, ff1) && return
-                    break
-                else
-                    break
-                end
-                if compare_f_call(m_counts, call_counts)
-                    return
-                elseif CSTParser.rem_where_decl(CSTParser.get_sig(b.val)) == x
-                    return
-                end
-                b.prev === nothing && break
-                b in seen && break
-                push!(seen, b)
-                b = b.prev
-            end
-            seterror!(x, IncorrectCallArgs)
+
+        if func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
+            func_ref = last_method(func_ref)
+        elseif func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+            # intentionally empty
+        else
+            return
         end
+        call_counts = call_nargs(x)
+        tls = retrieve_toplevel_scope(x)
+        tls === nothing && return # General check, this means something serious has gone wrong.
+        !sig_match_any(func_ref, x, call_counts, tls, server) && seterror!(x, IncorrectCallArgs)
+
     end
 end
+
+function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
+    if func_ref in visited
+        return true
+    else
+        push!(visited, func_ref)
+    end
+    if func_ref isa Binding && (func_ref.val isa SymbolServer.FunctionStore || func_ref.val isa SymbolServer.DataTypeStore)
+        func_ref = func_ref.val
+    end
+    if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        return iterate_over_ss_methods(func_ref, tls, server, m->compare_f_call(func_nargs(m), call_counts))
+    elseif func_ref isa Binding
+        if func_ref.type == CoreTypes.Function && func_ref.val isa EXPR
+            m_counts = func_nargs(func_ref.val)
+        elseif func_ref.type == CoreTypes.DataType && func_ref.val isa EXPR && CSTParser.defines_struct(func_ref.val)
+            m_counts = struct_nargs(func_ref.val)
+        else 
+            # We shouldn't get here
+            return true
+        end
+        if compare_f_call(m_counts, call_counts) || (CSTParser.rem_where_decl(CSTParser.get_sig(func_ref.val)) == x)
+            return true
+        end
+        if is_something_with_methods(func_ref.prev)
+            return sig_match_any(func_ref.prev, x, call_counts, tls, server, visited)
+        elseif func_ref.prev isa Binding && func_ref.prev.type === nothing && func_ref.prev.val isa EXPR && isidentifier(func_ref.prev.val) &&
+            isdocumented(func_ref.prev.val) #&& is_something_with_methods(func_ref.prev.prev)
+            # Skip over documented symbols
+            return sig_match_any(func_ref.prev.prev, x, call_counts, tls, server, visited)
+        end
+    end
+    return false
+end
+
+isdocumented(x::EXPR) = parentof(x) isa EXPR && is_macro_call(parentof(x)) && typof(parentof(x)[1]) === CSTParser.GlobalRefDoc
 
 function check_loop_iter(x::EXPR, server)
     if typof(x) === CSTParser.For
@@ -307,22 +308,6 @@ function _get_top_binding(x::EXPR, name::String)
     else
         return nothing
     end
-end
-# Given the name of a function binding lookup the last declared method (i.e. the one 
-# stored in the scope)
-_get_last_method(x, b::Binding, server) = b
-
-function _get_last_method(x::EXPR, b::Binding, server)
-    if scopeof(x) isa Scope
-        if scopehasbinding(scopeof(x), b.name)
-            if scopeof(x).names[b.name] isa Binding && scopeof(x).names[b.name].type == b.type
-                return scopeof(x).names[b.name]
-            end
-        end
-    elseif parentof(x) isa EXPR
-        return _get_last_method(parentof(x), b.name, server)
-    end
-    return b
 end
 
 function _get_top_binding(s::Scope, name::String)

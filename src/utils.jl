@@ -139,40 +139,7 @@ function find_return_statements(x::EXPR, last_stmt, rets)
     return rets, false
 end
 
-    
-# should only be called on Bindings to functions
-function last_method(func::Binding)
-    if func.next isa Binding && (func.next.type === CoreTypes.Function || (func.next.type === CoreTypes.DataType && func.type === CoreTypes.Function))
-        return func.next
-    else
-        return func
-    end
-end
-
-function prev_method(func::Binding)
-    if func.prev isa Binding
-        if func.prev.type === CoreTypes.Function
-            return func.prev
-        elseif func.prev.type === CoreTypes.DataType && func.prev.val isa EXPR && CSTParser.defines_struct(func.prev.val)
-            return func.prev
-        elseif (func.prev.val isa SymbolServer.FunctionStore || func.prev.val isa SymbolServer.DataTypeStore) && length(func.prev.val.methods) > 0
-            return func.prev.val, 1
-        end
-    elseif (func.prev isa SymbolServer.FunctionStore || func.prev isa SymbolServer.DataTypeStore) && length(func.prev.methods) > 0
-        return func.prev, 1
-    end
-    return nothing
-end
-
-function prev_method(func_iter::Tuple{T,Int}) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}
-    func = func_iter[1]
-    iter = func_iter[2]
-    if iter < length(func.methods) 
-        return func, iter + 1
-    else
-        return nothing
-    end
-end
+last_method(b::Binding, visited = Binding[]) = b.next isa Binding && b.next.type === CoreTypes.Function && !(b in visited) ? (push!(visited, b);last_method(b.next, visited)) : b
 
 function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
@@ -298,7 +265,7 @@ is_unary_call(x::EXPR) = typof(x) === CSTParser.UnaryOpCall && length(x) == 2
 is_binary_call(x::EXPR) = typof(x) === CSTParser.BinaryOpCall && length(x) == 3
 is_binary_call(x::EXPR, opkind) = is_binary_call(x) && kindof(x[2]) === opkind
 is_macro_call(x::EXPR) = typof(x) === CSTParser.MacroCall
-is_macroname(x::EXPR) = typof(x) === CSTParser.MacroName && length(x) == 2
+is_macroname(x::EXPR) = (typof(x) === CSTParser.MacroName && length(x) == 2) || (is_getfield_w_quotenode(x) && is_macroname(x[3][1]))
 is_id_or_macroname(x::EXPR) = isidentifier(x) || is_macroname(x)
 is_getfield(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT 
 is_getfield_w_quotenode(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 

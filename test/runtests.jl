@@ -618,6 +618,28 @@ end
         StaticLint.check_call(cst[2], server)
         @test StaticLint.errorof(cst[2]) === nothing
     end
+    let cst = parse_and_pass("""
+        import Base: sin
+        \"\"\"
+        docs
+        \"\"\"
+        sin
+        sin(a,b) = 1
+        sin(1)
+        """)
+        # Checks that documented symbols are skipped
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    let cst = parse_and_pass("""
+        import Base: sin
+        sin(a,b) = 1
+        sin(1)
+        """)
+        # Checks that documented symbols are skipped
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
 end
 
 @testset "check_modulename" begin
@@ -908,6 +930,101 @@ end
         @test errorof(cst[5][2][3]) === nothing
         @test errorof(cst[7][2][3]) === StaticLint.InvalidTypeDeclaration
     end 
+
+@testset "interpret @eval" begin # e.g. `using StaticLint: StaticLint`
+    let cst = parse_and_pass("""
+        let 
+            @eval adf = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+    end
+    let cst = parse_and_pass("""
+        let 
+            @eval a,d,f = 1,2,3
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "a")
+        @test StaticLint.scopehasbinding(scopeof(cst), "d")
+        @test StaticLint.scopehasbinding(scopeof(cst), "f")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "a")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "d")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "f")
+    end
+    let cst = parse_and_pass("""
+        let 
+            @eval a = 1
+            @eval d = 2
+            @eval f = 3
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "a")
+        @test StaticLint.scopehasbinding(scopeof(cst), "d")
+        @test StaticLint.scopehasbinding(scopeof(cst), "f")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "a")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "d")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "f")
+    end
+    
+    let cst = parse_and_pass("""
+        let name = :adf
+            @eval \$name = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+    end
+    let cst = parse_and_pass("""
+        let name = [:adf]
+            @eval \$name = 1
+        end
+        """)
+        @test !StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+    end
+
+    let cst = parse_and_pass("""
+        for name = [:adf, :asdf, :asdfs]
+            @eval \$name = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdfs")
+    end
+    let cst = parse_and_pass("""
+        for name = (:adf, :asdf, :asdfs)
+            @eval \$name = 1
+        end
+        """)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdf")
+        @test StaticLint.scopehasbinding(scopeof(cst), "asdfs")
+    end
+    let cst = parse_and_pass("""
+        let name = :adf
+            @eval \$name(x) = 1
+        end
+        adf(1,2)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test StaticLint.scopehasbinding(scopeof(cst), "adf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+        @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
+    end
+    let cst = parse_and_pass("""
+        for name in (:sdf, :asdf)
+            @eval \$name(x) = 1
+        end
+        sdf(1,2)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(), server)
+        @test StaticLint.scopehasbinding(scopeof(cst), "sdf")
+        @test !StaticLint.scopehasbinding(scopeof(cst[1]), "asdf")
+        @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
+    end
+end
 end
 
 @testset "check for " begin # e.g. `using StaticLint: StaticLint`
@@ -947,5 +1064,31 @@ end
     StaticLint.scopepass(f)
 end
 
+let cst = parse_and_pass("""
+    using Base.@irrational
+    @irrational ase 0.45343 π
+    ase
+    """)
+    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
+
+@testset "quoted getfield" begin
+let cst = parse_and_pass("""
+    Base.:sin
+    """)
+    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+    @test isempty(StaticLint.collect_hints(cst[1], server))
+end
+
+let cst = parse_and_pass("""
+    sin(1,1)
+    Base.sin(1,1)
+    Base.:sin(1,1)
+    """)
+    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+    @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+end
+end
 end
 
