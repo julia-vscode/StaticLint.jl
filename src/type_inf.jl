@@ -43,7 +43,7 @@ function infer_type(binding::Binding, scope, state)
                 if is_getfield_w_quotenode(t)
                     resolve_getfield(t, scope, state)
                     t = t[3][1]
-                    
+
                 end
 
                 if refof(t) isa Binding

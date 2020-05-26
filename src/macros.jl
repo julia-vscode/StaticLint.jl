@@ -63,8 +63,8 @@ function handle_macro(x::EXPR, state)
                     mark_binding!(x[i], x)
                 end
             end
-        elseif _points_to_arbitrary_macro(x[1], :Turing, :model, state) && length(x) == 2 && 
-            is_binary_call(x[2], CSTParser.Tokens.EQ) && 
+        elseif _points_to_arbitrary_macro(x[1], :Turing, :model, state) && length(x) == 2 &&
+            is_binary_call(x[2], CSTParser.Tokens.EQ) &&
             typof(x[2][3]) === CSTParser.Begin && length(x[2][3]) == 3 && typof(x[2][3][2]) === CSTParser.Block
             for i = 1:length(x[2][3][2])
                 ex = x[2][3][2][i]
@@ -80,7 +80,7 @@ function handle_macro(x::EXPR, state)
             else
                 _mark_JuMP_binding(x[3])
             end
-        elseif (_points_to_arbitrary_macro(x[1], :JuMP, :expression, state) || 
+        elseif (_points_to_arbitrary_macro(x[1], :JuMP, :expression, state) ||
             _points_to_arbitrary_macro(x[1], :JuMP, :NLexpression, state) ||
             _points_to_arbitrary_macro(x[1], :JuMP, :constraint, state) || _points_to_arbitrary_macro(x[1], :JuMP, :NLconstraint, state)) && length(x) > 1
             if ispunctuation(x[2])
@@ -117,7 +117,7 @@ function _mark_JuMP_binding(arg)
         end
     elseif typof(arg) === CSTParser.Comparison && length(arg) == 5
         mark_binding!(_rem_ref(arg[3]))
-    end 
+    end
 end
 
 function _points_to_Base_macro(x::EXPR, name, state)
@@ -135,7 +135,7 @@ end
 maybe_lookup(x, server) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, getsymbolserver(server), true) : x
 
 function maybe_eventually_get_id(x::EXPR)
-    if isidentifier(x) 
+    if isidentifier(x)
         return x
     elseif is_invis_brackets(x)
         return maybe_eventually_get_id(x[2])
@@ -147,8 +147,8 @@ is_eventually_interpolated(x::EXPR) = is_invis_brackets(x) ? is_eventually_inter
 isquoted(x::EXPR) = typof(x) === CSTParser.Quotenode && length(x) == 2 && kindof(x[1]) === CSTParser.Tokens.COLON
 maybeget_quotedsymbol(x::EXPR) = isquoted(x) ? maybe_eventually_get_id(x[2]) : nothing
 
-function is_loop_iterator(x::EXPR) 
-    CSTParser.is_range(x) && 
+function is_loop_iterator(x::EXPR)
+    CSTParser.is_range(x) &&
     ((parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.For) ||
     (parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && typof(parentof(parentof(x))) === CSTParser.For))
 end
@@ -207,7 +207,7 @@ function interpret_eval(x::EXPR, state)
                         tls.names[valofid(toplevel_binding.name)] = toplevel_binding
                     end
                 elseif is_loop_iterator(ref.val) && (names = maybe_quoted_list(ref.val[3])) !== nothing
-                    # name is of a collection of quoted symbols 
+                    # name is of a collection of quoted symbols
                     for name in names
                         toplevel_binding = Binding(name, b.val, b.type, [], nothing, nothing)
                         if scopehasbinding(tls, valofid(toplevel_binding.name))

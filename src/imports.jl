@@ -3,7 +3,7 @@ function resolve_import(x, state::State)
         u = typof(x) === Using
         i = 2
         n = length(x)
-        
+
         root = par = getsymbolserver(state.server)
         bindings = []
         while i <= n
@@ -42,7 +42,7 @@ function resolve_import(x, state::State)
             else
                 return
             end
-            if i == n 
+            if i == n
                 _mark_import_arg(x[i], par, state, u)
             end
             i += 1
@@ -66,7 +66,7 @@ function _mark_import_arg(arg, par, state, usinged)
             arg.meta.binding = Binding(arg, par, _typeof(par, state), [], nothing, nothing)
         end
 
-        if usinged 
+        if usinged
             if par isa SymbolServer.ModuleStore
                 add_to_imported_modules(state.scope, Symbol(valofid(arg)), par)
             elseif par isa Binding && par.val isa SymbolServer.ModuleStore
@@ -88,7 +88,7 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
     end
 end
 no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)
-function get_named_toplevel_module(s::Scope, name::String) 
+function get_named_toplevel_module(s::Scope, name::String)
     if s.ismodule && valofid(CSTParser.get_name(s.expr)) == name && no_modules_above(s)
         return s.expr
     elseif s.parent isa Scope
@@ -98,7 +98,7 @@ function get_named_toplevel_module(s::Scope, name::String)
 end
 function _get_field(par, arg, state)
     arg_str_rep = CSTParser.str_value(arg)
-    if par isa SymbolServer.EnvStore 
+    if par isa SymbolServer.EnvStore
         if (tlm = get_named_toplevel_module(retrieve_scope(arg), arg_str_rep)) !== nothing && hasbinding(tlm)
             return bindingof(tlm)
         elseif haskey(par, Symbol(arg_str_rep))
@@ -116,10 +116,10 @@ function _get_field(par, arg, state)
         end
     elseif par isa Scope && scopehasbinding(par, arg_str_rep)
         return par.names[arg_str_rep]
-    elseif par isa Binding 
+    elseif par isa Binding
         if par.val isa Binding
             return _get_field(par.val, arg, state)
-        elseif par.val isa EXPR && CSTParser.defines_module(par.val) && scopeof(par.val) isa Scope 
+        elseif par.val isa EXPR && CSTParser.defines_module(par.val) && scopeof(par.val) isa Scope
             return _get_field(scopeof(par.val), arg, state)
         elseif par.val isa SymbolServer.ModuleStore
             return _get_field(par.val, arg, state)

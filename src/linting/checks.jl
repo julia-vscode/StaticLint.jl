@@ -71,7 +71,7 @@ end
 # Call
 function struct_nargs(x::EXPR)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
-    parentof(x) isa EXPR && is_macro_call(parentof(x)) && return 0, typemax(Int), Symbol[], true 
+    parentof(x) isa EXPR && is_macro_call(parentof(x)) && return 0, typemax(Int), Symbol[], true
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = typof(x) === CSTParser.Mutable ? x[4] : x[3]
     length(args) == 0 && return 0, typemax(Int), kws, kwsplat
@@ -122,7 +122,7 @@ function func_nargs(x::EXPR)
             maxargs !== typemax(Int) && (maxargs += 1)
         end
     end
-    
+
     return minargs, maxargs, kws, kwsplat
 end
 
@@ -246,7 +246,7 @@ function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
             m_counts = func_nargs(func_ref.val)
         elseif func_ref.type == CoreTypes.DataType && func_ref.val isa EXPR && CSTParser.defines_struct(func_ref.val)
             m_counts = struct_nargs(func_ref.val)
-        else 
+        else
             # We shouldn't get here
             return true
         end
@@ -256,7 +256,7 @@ function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
         if is_something_with_methods(func_ref.prev)
             return sig_match_any(func_ref.prev, x, call_counts, tls, server, visited)
         elseif func_ref.prev isa Binding && func_ref.prev.type === nothing && func_ref.prev.val isa EXPR && isidentifier(func_ref.prev.val) &&
-            isdocumented(func_ref.prev.val) #&& is_something_with_methods(func_ref.prev.prev)
+            isdocumented(func_ref.prev.val) # && is_something_with_methods(func_ref.prev.prev)
             # Skip over documented symbols
             return sig_match_any(func_ref.prev.prev, x, call_counts, tls, server, visited)
         end
@@ -278,7 +278,7 @@ function check_loop_iter(x::EXPR, server)
         end
     elseif typof(x) === CSTParser.Generator
         for i = 3:length(x)
-            if is_binary_call(x[i])&& refof(x[i]) === nothing
+            if is_binary_call(x[i]) && refof(x[i]) === nothing
                 rng = x[i][3]
                 if typof(rng) === CSTParser.LITERAL && kindof(rng) == CSTParser.Tokens.FLOAT || kindof(rng) == CSTParser.Tokens.INTEGER
                     seterror!(x[i], IncorrectIterSpec)
@@ -329,7 +329,7 @@ function _get_global_scope(s::Scope)
 end
 
 function check_if_conds(x::EXPR)
-    if typof(x) === CSTParser.If && length(x) > 2 
+    if typof(x) === CSTParser.If && length(x) > 2
         cond = iskw(first(x)) ? x[2] : x[1]
         if typof(cond) === CSTParser.LITERAL && (kindof(cond) === CSTParser.Tokens.TRUE || kindof(cond) === CSTParser.Tokens.FALSE)
             seterror!(cond, ConstIfCondition)
@@ -383,7 +383,7 @@ function check_datatype_decl(x::EXPR, server)
         elseif typof(last(x)) === CSTParser.LITERAL
             seterror!(x, InvalidTypeDeclaration)
         end
-    end    
+    end
 end
 
 function check_modulename(x::EXPR)
@@ -474,11 +474,11 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
     elseif isquoted && unquoted(x)
         isquoted = false
     end
-    if typof(x) === CSTParser.ErrorToken 
+    if typof(x) === CSTParser.ErrorToken
         # collect parse errors
         push!(errs, (pos, x))
     elseif !isquoted
-        if missingrefs != :none && isidentifier(x) && !hasref(x) && 
+        if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
             !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
@@ -487,19 +487,19 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
             push!(errs, (pos, x))
         end
     elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, server)
-            push!(errs, (pos, x))
+        push!(errs, (pos, x))
     end
 
     for i in 1:length(x)
         collect_hints(x[i], server, missingrefs, isquoted, errs, pos)
         pos += x[i].fullspan
     end
-    
+
     errs
 end
 
 function refof_maybe_getfield(x::EXPR)
-    if isidentifier(x) 
+    if isidentifier(x)
         return refof(x)
     elseif is_getfield_w_quotenode(x)
         return refof(x[3][1])
@@ -508,10 +508,10 @@ end
 
 function should_mark_missing_getfield_ref(x, server)
     if isidentifier(x) && !hasref(x) && # x has no ref
-    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode && parentof(parentof(x)) isa EXPR && 
+    parentof(x) isa EXPR && typof(parentof(x)) === CSTParser.Quotenode && parentof(parentof(x)) isa EXPR &&
         is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x))[1])
-        if lhsref isa SymbolServer.ModuleStore || (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore) 
+        if lhsref isa SymbolServer.ModuleStore || (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore)
             # a module, we should know this.
             return true
         elseif lhsref isa Binding
@@ -553,7 +553,7 @@ function has_getproperty_method(b::Binding)
         return has_getproperty_method(b.val)
     elseif b.val isa SymbolServer.DataTypeStore
         return has_getproperty_method(b.val)
-    elseif  b isa Binding && b.type === CoreTypes.DataType
+    elseif b isa Binding && b.type === CoreTypes.DataType
         while b !== nothing
             for ref in b.refs
                 if is_type_of_call_to_getproperty(ref)
@@ -562,13 +562,13 @@ function has_getproperty_method(b::Binding)
             end
             b = b.next isa Binding && b.next.type === CoreTypes.Function ? b.next : nothing
         end
-        
+
     end
     return false
 end
 
 function is_type_of_call_to_getproperty(x::EXPR)
-    function is_call_to_getproperty(x::EXPR) 
+    function is_call_to_getproperty(x::EXPR)
         if is_call(x)
             func_name = x[1]
             return (isidentifier(func_name) && valof(func_name) == "getproperty") || # getproperty()
@@ -577,8 +577,8 @@ function is_type_of_call_to_getproperty(x::EXPR)
         return false
     end
 
-    return parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && 
-        ((is_declaration(parentof(x)) && x === parentof(x)[3] && is_call_to_getproperty(parentof(parentof(x)))) || 
+    return parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR &&
+        ((is_declaration(parentof(x)) && x === parentof(x)[3] && is_call_to_getproperty(parentof(parentof(x)))) ||
         (is_curly(parentof(x)) && x === parentof(x)[1] && is_declaration(parentof(parentof(x))) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
 end
 
@@ -588,7 +588,7 @@ function check_typeparams(x::EXPR)
     if is_where(x)
         for i = 3:length(x)
             if hasbinding(x[i])
-                if !(bindingof(x[i]).refs isa Vector) 
+                if !(bindingof(x[i]).refs isa Vector)
                     seterror!(x[i], UnusedTypeParameter)
                 elseif length(bindingof(x[i]).refs) == 1
                     # there should (will?) always be at least one reference in the where declaration
@@ -663,7 +663,7 @@ function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
             # explicitly imported, e.g. import ModuleName: somefunction
             return true
         end
-    elseif b.prev isa SymbolServer.FunctionStore && 
+    elseif b.prev isa SymbolServer.FunctionStore &&
         parentof(b.name) isa EXPR && typof(parentof(b.name)) === CSTParser.Quotenode && is_getfield(parentof(parentof(b.name)))
         fullname = parentof(parentof(b.name))
         # overwrites imported function by declaring full name, e.g. ModuleName.FunctionName
