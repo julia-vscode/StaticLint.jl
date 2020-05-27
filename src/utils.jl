@@ -278,7 +278,8 @@ is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
 is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
-rem_wheres(x::EXPR) = CSTParser.iswherecall(x) ? rem_wheres(x[1]) : x
+iswherecall(x::EXPR) = typof(x) === CSTParser.WhereOpCall
+rem_wheres(x::EXPR) = iswherecall(x) ? rem_wheres(x[1]) : x
 hasparent(x::EXPR) = parentof(x) isa EXPR
 
 
