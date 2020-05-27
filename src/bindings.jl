@@ -266,14 +266,15 @@ end
 
 function add_binding(x, state, scope = state.scope)
     if bindingof(x) isa Binding
-        bindingof(x).prev = nothing
-        bindingof(x).next = nothing
-        if isidentifier(bindingof(x).name)
-            name = valofid(bindingof(x).name)
-        elseif is_macroname(bindingof(x).name)
-            name = string(Expr(bindingof(x).name))
-        elseif isoperator(bindingof(x).name)
-            name = string(Expr(bindingof(x).name))
+        b = bindingof(x)
+        b.prev = nothing
+        b.next = nothing
+        if isidentifier(b.name)
+            name = valofid(b.name)
+        elseif is_macroname(b.name)
+            name = string(Expr(b.name))
+        elseif isoperator(b.name)
+            name = string(Expr(b.name))
         else
             return
         end
@@ -283,48 +284,48 @@ function add_binding(x, state, scope = state.scope)
         end
 
         if CSTParser.defines_macro(x)
-            scope.names[string("@", name)] = bindingof(x)
+            scope.names[string("@", name)] = b
             mn = CSTParser.get_name(x)
             if isidentifier(mn)
-                setref!(mn, bindingof(x))
+                setref!(mn, b)
             end
         else
-            if scopehasbinding(scope, name)
-                bindingof(x).prev = scope.names[name]
-                scope.names[name] = bindingof(x)
-                bindingof(x).prev.next = bindingof(x)
+            if false #&& name_extends_imported_method(bindingof(x))
+
+            elseif scopehasbinding(scope, name)
+                b.prev = scope.names[name]
+                scope.names[name] = b
+                b.prev.next = b
             else
                 # Checks for bindings which overwrite other module's bindings
-                if typof(parentof(bindingof(x).name)) === CSTParser.Quotenode && is_binary_call(parentof(parentof(bindingof(x).name))) && isidentifier(parentof(parentof(bindingof(x).name))[1]) # Only checks 1 level (e.g. M.name)
-                    s1 = scope
-                    while true
-                        if s1.modules !== nothing
-                            if scopehasmodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1]))) # this scope (s1) has a module with matching name
-                                mod = getscopemodule(s1, Symbol(valofid(parentof(parentof(bindingof(x).name))[1])))
-                                if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
-                                    bindingof(x).prev = maybe_lookup(mod[Symbol(name)], state.server)
-                                end
-                            end
-                            break # We've reached a scope that loads modules, no need to keep searching upwards
-                        end
-                        if parentof(s1) === nothing
-                            break
-                        else
-                            s1 = parentof(s1)
-                        end
-                    end
+                if is_getfield_w_quotenode(parentof(parentof(b.name))) && isidentifier(parentof(parentof(b.name))[1]) # Only checks 1 level (e.g. M.name)
+                    hoist_prev_binding(b, name, scope, state)
                 end
                 # hoist binding for inner constructor to parent scope
                 if CSTParser.defines_struct(scope.expr) && CSTParser.defines_function(x) && parentof(scope) isa Scope
                     return add_binding(x, state, parentof(scope))
                 end
-                scope.names[name] = bindingof(x)
+                scope.names[name] = b
             end
         end
-        infer_type(bindingof(x), scope, state)
+        infer_type(b, scope, state)
     elseif bindingof(x) isa SymbolServer.SymStore
         scope.names[valofid(x)] = bindingof(x)
     end
+end
+
+function hoist_prev_binding(b, name, scope, state)
+    scope === nothing && return
+    if scope.modules !== nothing
+        if scopehasmodule(scope, Symbol(valofid(parentof(parentof(b.name))[1]))) # this scope (s1) has a module with matching name
+            mod = getscopemodule(scope, Symbol(valofid(parentof(parentof(b.name))[1])))
+            if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
+                b.prev = maybe_lookup(mod[Symbol(name)], state.server)
+            end
+        end
+        return # We've reached a scope that loads modules, no need to keep searching upwards
+    end
+    return hoist_prev_binding(b, name, parentof(scope), state)
 end
 
 isglobal(name, scope) = false
@@ -341,5 +342,13 @@ function mark_globals(x::EXPR, state)
             end
         end
         
+    end
+end
+
+function name_extends_imported_method(b::Binding)
+    if b.type == CoreTypes.Function && hasparent(b.name) && is_getfield(parentof(b.name))
+        if refof_maybe_getfield(parentof(b.name)[1]) !== nothing
+            
+        end
     end
 end

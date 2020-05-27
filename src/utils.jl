@@ -177,7 +177,7 @@ isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
-function retrieve_toplevel_scope(x)
+function retrieve_toplevel_scope(x::EXPR)
     if scopeof(x) !== nothing && (CSTParser.defines_module(x) || typof(x) === CSTParser.FileH)
         return scopeof(x)
     elseif parentof(x) isa EXPR
@@ -187,6 +187,7 @@ function retrieve_toplevel_scope(x)
         return nothing
     end
 end
+retrieve_toplevel_scope(s::Scope) = (CSTParser.defines_module(s.expr) || typof(s.expr) === CSTParser.FileH || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
 
 
 # b::SymbolServer.FunctionStore or DataTypeStore
@@ -278,6 +279,7 @@ is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
 is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
 rem_wheres(x::EXPR) = CSTParser.iswherecall(x) ? rem_wheres(x[1]) : x
+hasparent(x::EXPR) = parentof(x) isa EXPR
 
 
 """
