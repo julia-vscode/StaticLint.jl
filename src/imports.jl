@@ -39,7 +39,7 @@ function resolve_import(x, state::State)
                 else
                     return
                 end
-            else
+            elseif !isoperator(arg)
                 return
             end
             if i == n 

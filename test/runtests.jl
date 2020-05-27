@@ -482,6 +482,16 @@ end
         @test errorof(cst[6]) === StaticLint.TypePiracy
     end
     let cst = parse_and_pass("""
+        abstract type At end
+        struct Ty end
+        Base.eltype(::Type{Ty{T}} where {T}) = 1
+        Base.length(s::Ty{T} where T <: At) = 1
+        """)
+        @test StaticLint.check_for_pirates(cst[3]) === nothing
+        @test StaticLint.check_for_pirates(cst[4]) === nothing
+    end
+
+    let cst = parse_and_pass("""
         !=(a,b) = true
         Base.:!=(a,b) = true
         !=(a::T,b::T) = true

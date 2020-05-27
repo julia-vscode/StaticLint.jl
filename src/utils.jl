@@ -177,7 +177,7 @@ isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
-function retrieve_toplevel_scope(x)
+function retrieve_toplevel_scope(x::EXPR)
     if scopeof(x) !== nothing && (CSTParser.defines_module(x) || typof(x) === CSTParser.FileH)
         return scopeof(x)
     elseif parentof(x) isa EXPR
@@ -187,6 +187,7 @@ function retrieve_toplevel_scope(x)
         return nothing
     end
 end
+retrieve_toplevel_scope(s::Scope) = (CSTParser.defines_module(s.expr) || typof(s.expr) === CSTParser.FileH || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
 
 
 # b::SymbolServer.FunctionStore or DataTypeStore
@@ -277,6 +278,10 @@ is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
 is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
+iswherecall(x::EXPR) = typof(x) === CSTParser.WhereOpCall
+rem_wheres(x::EXPR) = iswherecall(x) ? rem_wheres(x[1]) : x
+hasparent(x::EXPR) = parentof(x) isa EXPR
+
 
 """
     is_in_fexpr(x::EXPR, f)
@@ -289,3 +294,15 @@ is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(
 Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
 """
 get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)
+
+issigoffuncdecl(x::EXPR) = parentof(x) isa EXPR ? issigoffuncdecl(x, parentof(x)) : false
+function issigoffuncdecl(x::EXPR, p::EXPR) 
+    if CSTParser.is_where(p) || CSTParser.isdeclaration(p)
+        return issigoffuncdecl(parentof(p))
+    elseif CSTParser.defines_function(p)
+        return true
+    else
+        return false
+    end
+end 
+issigoffuncdecl(x::EXPR, p) = false
