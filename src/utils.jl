@@ -277,6 +277,8 @@ is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
 is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
+rem_wheres(x::EXPR) = CSTParser.iswherecall(x) ? rem_wheres(x[1]) : x
+
 
 """
     is_in_fexpr(x::EXPR, f)
@@ -289,3 +291,15 @@ is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(
 Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
 """
 get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)
+
+issigoffuncdecl(x::EXPR) = parentof(x) isa EXPR ? issigoffuncdecl(x, parentof(x)) : false
+function issigoffuncdecl(x::EXPR, p::EXPR) 
+    if CSTParser.is_where(p) || CSTParser.isdeclaration(p)
+        return issigoffuncdecl(parentof(p))
+    elseif CSTParser.defines_function(p)
+        return true
+    else
+        return false
+    end
+end 
+issigoffuncdecl(x::EXPR, p) = false
