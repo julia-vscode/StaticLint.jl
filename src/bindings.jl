@@ -354,7 +354,7 @@ eventually_overloads(b::Binding, ss::SymbolServer.SymStore, server) = (b.val == 
 
 eventually_overloads(b::Binding, ss::SymbolServer.VarRef, server) = eventually_overloads(b, maybe_lookup(ss, server), server)
 
-eventually_overloads(b::Binding, ss, server) = false
+eventually_overloads(b, ss, server) = false
 
 
 
