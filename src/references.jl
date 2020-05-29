@@ -35,7 +35,7 @@ end
 # 4. If 3. is unsuccessful, check whether the scope imports any modules then check them.
 # 5. If no match is found within this scope check the parent scope.
 # The return value is a boolean that is false if x should point to something but
-# can't be resolved. 
+# can't be resolved.
 
 function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
