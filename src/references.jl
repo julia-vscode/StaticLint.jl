@@ -111,7 +111,7 @@ function resolve_ref_from_module(x::EXPR, scope::Scope, state::State)::Bool
     x1, mn = nameof_expr_to_resolve(x)
     mn == true && return true
 
-    if scope_exports(scope, mn)
+    if scope_exports(scope, mn, state)
         setref!(x1, scope.names[mn])
         resolved = true
     end
@@ -123,8 +123,9 @@ end
 
 Does the scope export a variable called `name`?
 """
-function scope_exports(scope::Scope, name::String)
+function scope_exports(scope::Scope, name::String, state)
     if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
+        initial_pass_on_exports(scope.expr, state.server)
         for ref in b.refs
             if ref isa EXPR && parentof(ref) isa EXPR && typof(parentof(ref)) === CSTParser.Export
                 return true
@@ -132,6 +133,21 @@ function scope_exports(scope::Scope, name::String)
         end
     end
     return false
+end
+
+"""
+    initial_pass_on_exports(x::EXPR, server)
+
+Export statements need to be (pseudo) evaluated each time we consider 
+whether a variable is made available by an import statement.
+"""
+function initial_pass_on_exports(x::EXPR, server)
+    # @assert CSTParser.defines_module(x)
+    for a in x[3] # module block expressions
+        if typof(a) === CSTParser.Export
+            traverse(a, Delayed(retrieve_scope(a), server))
+        end
+    end
 end
 
 # Fallback method

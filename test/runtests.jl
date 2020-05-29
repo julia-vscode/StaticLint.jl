@@ -1084,21 +1084,21 @@ let cst = parse_and_pass("""
 end
 
 @testset "quoted getfield" begin
-let cst = parse_and_pass("""
-    Base.:sin
-    """)
-    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-    @test isempty(StaticLint.collect_hints(cst[1], server))
-end
+    let cst = parse_and_pass("""
+        Base.:sin
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test isempty(StaticLint.collect_hints(cst[1], server))
+    end
 
-let cst = parse_and_pass("""
-    sin(1,1)
-    Base.sin(1,1)
-    Base.:sin(1,1)
-    """)
-    StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-    @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
-end
+    let cst = parse_and_pass("""
+        sin(1,1)
+        Base.sin(1,1)
+        Base.:sin(1,1)
+        """)
+        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+    end
 end
 @testset "overloading" begin
     # overloading of a function that happens to be exported into the current scope.
@@ -1161,5 +1161,21 @@ end
         @test isempty(StaticLint.collect_hints(cst, server))
         
     end
+end
+
+@testset "on demand resolving of export statements" begin
+    let cst = parse_and_pass("""
+            module TopModule
+            abstract type T end
+            export T
+            module SubModule
+            using ..TopModule
+            T
+            end
+            end""")
+        @test refof(cst[1][3][3][3][2]) !== nothing
+        
+    end
+
 end
 end

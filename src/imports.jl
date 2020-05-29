@@ -5,7 +5,6 @@ function resolve_import(x, state::State)
         n = length(x)
         
         root = par = getsymbolserver(state.server)
-        bindings = []
         while i <= n
             arg = x[i]
             if is_id_or_macroname(arg)
