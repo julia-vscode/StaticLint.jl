@@ -3,14 +3,25 @@ mutable struct Scope
     expr::EXPR
     names::Dict{String,Binding}
     modules::Union{Nothing,Dict{Symbol,Any}}
-    ismodule::Bool
+    overloaded::Union{Dict,Nothing}
 end
-Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, CSTParser.defines_module(expr))
+Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, nothing)
 function Base.show(io::IO, s::Scope)
     printstyled(io, typof(s.expr))
     printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
     s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color = :blue)
     println(io)
+end
+
+function overload_method(scope::Scope, b::Binding, vr::SymbolServer.VarRef)
+    if scope.overloaded === nothing 
+        scope.overloaded = Dict()
+    end
+    if haskey(scope.overloaded, vr)
+        b.prev = scope.overloaded[vr]
+        b.prev.next = b
+    end
+    scope.overloaded[vr] = b
 end
 
 """

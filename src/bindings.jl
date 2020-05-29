@@ -290,22 +290,50 @@ function add_binding(x, state, scope = state.scope)
                 setref!(mn, b)
             end
         else
-            if false #&& name_extends_imported_method(bindingof(x))
+            if name_is_getfield(b.name)# && b.type == CoreTypes.Function
+                # Question: should `b.name` include the getfield itself?
+                # Binding name is part of a getfield : `A.name` so is either
+                # 1. Overloading of a function 
+                # 2. Setting of a field or property
+                # We only care about 1.
+                resolve_ref(parentof(parentof(b.name))[1], scope, state)
+                lhs_ref = refof_maybe_getfield(parentof(parentof(b.name))[1])
+                if lhs_ref === nothing
+                    # We don't know what we're assigning to, do nothing
+                else
+                    if lhs_ref isa SymbolServer.ModuleStore && haskey(lhs_ref.vals, Symbol(name))
+                        # Overloading 
+                        tls = retrieve_toplevel_scope(b.val)
+                        if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state.server)
+                            # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.
+                            overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
+                            b.prev = tls.names[name]
+                            b.prev.next = b
+                            tls.names[name] = b
+                        elseif isexportedby(name, lhs_ref)
+                            tls.names[name] = b
+                            b.prev = maybe_lookup(lhs_ref[Symbol(name)], state.server)
+                        else
+                            overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
+                        end
+                    elseif lhs_ref isa Binding && lhs_ref.type == CoreTypes.Module
+                        if haskey(scopeof(lhs_ref.val).names, name)
+                            b.prev = scopeof(lhs_ref.val).names[name]
+                            scopeof(lhs_ref.val).names[name] = b
+                        end
+                    end
+                end
 
             elseif scopehasbinding(scope, name)
                 b.prev = scope.names[name]
                 scope.names[name] = b
                 b.prev.next = b
             else
-                # Checks for bindings which overwrite other module's bindings
-                if is_getfield_w_quotenode(parentof(parentof(b.name))) && isidentifier(parentof(parentof(b.name))[1]) # Only checks 1 level (e.g. M.name)
-                    hoist_prev_binding(b, name, scope, state)
-                end
-                # hoist binding for inner constructor to parent scope
-                if CSTParser.defines_struct(scope.expr) && CSTParser.defines_function(x) && parentof(scope) isa Scope
-                    return add_binding(x, state, parentof(scope))
-                end
                 scope.names[name] = b
+            end
+            # hoist binding for inner constructor to parent scope
+            if CSTParser.defines_struct(scope.expr) && CSTParser.defines_function(x) && parentof(scope) isa Scope
+                return add_binding(x, state, parentof(scope))
             end
         end
         infer_type(b, scope, state)
@@ -313,6 +341,22 @@ function add_binding(x, state, scope = state.scope)
         scope.names[valofid(x)] = bindingof(x)
     end
 end
+
+name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && is_getfield_w_quotenode(parentof(parentof(x)))
+
+
+"""
+eventually_overloads(b, x, server)
+
+
+"""
+eventually_overloads(b::Binding, ss::SymbolServer.SymStore, server) = (b.val == ss || b.prev == ss) || (b.prev !== nothing && eventually_overloads(b.prev, ss, server))
+
+eventually_overloads(b::Binding, ss::SymbolServer.VarRef, server) = eventually_overloads(b, maybe_lookup(ss, server), server)
+
+eventually_overloads(b::Binding, ss, server) = false
+
+
 
 function hoist_prev_binding(b, name, scope, state)
     scope === nothing && return

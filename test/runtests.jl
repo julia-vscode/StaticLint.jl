@@ -1100,5 +1100,66 @@ let cst = parse_and_pass("""
     @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
 end
 end
-end
+@testset "overloading" begin
+    # overloading of a function that happens to be exported into the current scope.
+    let cst = parse_and_pass("""
+        Base.sin() = nothing
+        sin()
+        """)
+        @test haskey(cst.meta.scope.names, "sin") # 
+        @test cst.meta.scope.names["sin"].prev == server.symbolserver[:Base][:sin]
+        StaticLint.check_call(cst[2], server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    # As above but for user defined function
+    let cst = parse_and_pass("""
+        module M
+        f(x) = nothing
+        end
+        M.f(a,b) = nothing
+        M.f(1,2)
+        """)
+        @test !haskey(cst.meta.scope.names, "f")
+        StaticLint.check_call(cst[3], server)
+        @test errorof(cst[3]) === nothing
+    end
 
+    # Non exported function is overloaded
+    let cst = parse_and_pass("""
+        Base.argtail() = nothing
+        Base.argtail()
+        """)
+        @test !haskey(cst.meta.scope.names, "argtail") # 
+        StaticLint.check_call(cst[2], server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+    # As above but for user defined function
+    let cst = parse_and_pass("""
+        module M
+        ff(x) = nothing
+        end
+        M.ff() = nothing
+        M.ff()
+        """)
+        @test !haskey(cst.meta.scope.names, "ff") # 
+        StaticLint.check_call(cst[3], server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
+
+    let cst = parse_and_pass("""
+        import Base:argtail
+        Base.argtail() = nothing
+        Base.argtail()
+        argtail()
+        """)
+
+        @test cst.meta.scope.names["argtail"] === bindingof(cst[2])
+        @test bindingof(cst[2]).prev == bindingof(cst[1][4])
+        @test refof(cst[3][1][3][1]) === bindingof(cst[2])
+        StaticLint.check_call(cst[3], server)
+        StaticLint.check_call(cst[4], server)
+        @test isempty(StaticLint.collect_hints(cst, server))
+        
+    end
+end
+end

@@ -320,7 +320,7 @@ function _get_top_binding(s::Scope, name::String)
 end
 
 function _get_global_scope(s::Scope)
-    if !s.ismodule && parentof(s) isa Scope && parentof(s) != s
+    if !CSTParser.defines_module(s.expr) && parentof(s) isa Scope && parentof(s) != s
         return _get_global_scope(parentof(s))
     else
         return s

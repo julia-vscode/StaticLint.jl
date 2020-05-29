@@ -12,7 +12,7 @@ function handle_macro(x::EXPR, state)
                 mark_binding!(x[2], x)
                 mark_sig_args!(x[2])
                 s0 = state.scope # store previous scope
-                state.scope = Scope(s0, x, Dict(), nothing, false)
+                state.scope = Scope(s0, x, Dict(), nothing, nothing)
                 setscope!(x, state.scope) # tag new scope to generating expression
                 state(x[2])
                 state(x[3])

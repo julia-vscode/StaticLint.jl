@@ -89,7 +89,7 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
 end
 no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)
 function get_named_toplevel_module(s::Scope, name::String) 
-    if s.ismodule && valofid(CSTParser.get_name(s.expr)) == name && no_modules_above(s)
+    if CSTParser.defines_module(s.expr) && valofid(CSTParser.get_name(s.expr)) == name && no_modules_above(s)
         return s.expr
     elseif s.parent isa Scope
         return get_named_toplevel_module(s.parent, name)
