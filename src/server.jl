@@ -13,7 +13,7 @@ mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
     symbolserver::SymbolServer.EnvStore
-    symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
+    symbol_extends::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
 end
 FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
 
@@ -46,7 +46,7 @@ function scopepass(file, target = nothing)
     for x in state.delayed
         if hasscope(x)
             traverse(x, Delayed(scopeof(x), server))
-        else 
+        else
             ds = retrieve_delayed_scope(x)
             traverse(x, Delayed(ds, server))
         end

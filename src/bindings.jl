@@ -9,8 +9,8 @@ end
 Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothing)
 
 function Base.show(io::IO, b::Binding)
-    printstyled(io, "Binding(", Expr(b.name), 
-        b.type === nothing ? "" : ":: ", 
+    printstyled(io, "Binding(", Expr(b.name),
+        b.type === nothing ? "" : ":: ",
         b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color = :blue)
 end
 
@@ -29,12 +29,12 @@ function gotoobjectofref(x::EXPR)
     if r isa SymbolServer.SymStore
         return r
     elseif r isa Binding
-        
+
     end
 end
 
 
-# Note to self, check consistency of marking self-reference of bindings (i.e. 
+# Note to self, check consistency of marking self-reference of bindings (i.e.
 # for, `function f end` we resolve `f` to itself at this stage.)
 function mark_bindings!(x::EXPR, state)
     if hasbinding(x)
@@ -134,7 +134,7 @@ function mark_bindings!(x::EXPR, state)
                 end
             end
         end
-        
+
     end
 end
 
@@ -385,14 +385,14 @@ function mark_globals(x::EXPR, state)
                 push!(state.scope.names["#globals"].refs, valofid(x[i]))
             end
         end
-        
+
     end
 end
 
 function name_extends_imported_method(b::Binding)
     if b.type == CoreTypes.Function && hasparent(b.name) && is_getfield(parentof(b.name))
         if refof_maybe_getfield(parentof(b.name)[1]) !== nothing
-            
+
         end
     end
 end
