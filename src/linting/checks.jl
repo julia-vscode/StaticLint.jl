@@ -90,7 +90,7 @@ function func_nargs(x::EXPR)
     for i = 2:length(sig)
         arg = sig[i]
         if is_macro_call(arg) && length(arg) > 1 &&
-            is_macroname(arg[1]) && valofid(arg[1][2]) == "nospecialize"
+            is_macroname(arg[1]) && length(arg[1]) == 2 && isidentifier(arg[1][2]) && valofid(arg[1][2]) == "nospecialize"
             if length(arg) == 2
                 arg = arg[2]
             end
