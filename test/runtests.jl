@@ -869,11 +869,27 @@ f(arg) = arg
         end
     end
 
-    @testset "using of self" begin # e.g. `using StaticLint: StaticLint`
+    @testset "using statements" begin # e.g. `using StaticLint: StaticLint`
         let cst = parse_and_pass("""
         using Base.Filesystem: Filesystem
         """)
             @test StaticLint.hasref(cst[1][6])
+        end
+        let cst = parse_and_pass("""
+            using Base: Ordering
+            """)
+            @test StaticLint.hasbinding(cst[1][4])
+        end
+        let cst = parse_and_pass("""
+            module Outer
+            module Inner
+            export x
+            x = 1
+            end
+            end
+            using Outer: x
+            """)
+            @test StaticLint.hasbinding(cst[2][4])
         end
     end
 
@@ -1190,8 +1206,6 @@ end
             end
             end""")
         @test refof(cst[1][3][3][3][2]) !== nothing
-        
     end
-
 end
 end

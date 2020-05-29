@@ -113,6 +113,11 @@ function _get_field(par, arg, state)
             end
             return par
         end
+        for used_module in par.used_modules
+            if isexportedby(arg_str_rep, used_module)
+                return used_module[Symbol(arg_str_rep)]
+            end
+        end
     elseif par isa Scope && scopehasbinding(par, arg_str_rep)
         return par.names[arg_str_rep]
     elseif par isa Binding
