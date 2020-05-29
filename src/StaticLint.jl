@@ -87,7 +87,7 @@ function (state::Delayed)(x::EXPR)
     resolve_ref(x, state)
 
     traverse(x, state)
-    
+
     state.scope != s0 && (state.scope = s0)
     return state.scope
 end
@@ -151,7 +151,7 @@ function followinclude(x, state::State)
                 path = ""
             end
         elseif !isempty(getpath(state.file)) && isabspath(joinpath(dirname(getpath(state.file)), path))
-            # Relative path from current 
+            # Relative path from current
             if hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
                 path = joinpath(dirname(getpath(state.file)), path)
             elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
