@@ -237,7 +237,7 @@ f(arg) = arg
                 @test refof(cst[3][3][1][1][3][1]) == bindingof(cst[2][3][1])
                 @test refof(cst[3][3][1][3][1]) == bindingof(cst[1][3][1])
             end
-   
+
 
             let cst = parse_and_pass("""
         raw"whatever"
@@ -498,7 +498,7 @@ f(arg) = arg
         !=(a::T,b::T) where T= true
         """)
             StaticLint.check_for_pirates.(cst)
-        
+
 
             @test errorof(cst[1]) === StaticLint.NotEqDef
             @test errorof(cst[2]) === StaticLint.NotEqDef
