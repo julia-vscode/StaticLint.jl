@@ -12,7 +12,7 @@ function handle_macro(x::EXPR, state)
                 mark_binding!(x[2], x)
                 mark_sig_args!(x[2])
                 s0 = state.scope # store previous scope
-                state.scope = Scope(s0, x, Dict(), nothing, false)
+                state.scope = Scope(s0, x, Dict(), nothing, nothing)
                 setscope!(x, state.scope) # tag new scope to generating expression
                 state(x[2])
                 state(x[3])
@@ -20,6 +20,8 @@ function handle_macro(x::EXPR, state)
             elseif isidentifier(x[2])
                 mark_binding!(x[2], x)
             end
+        elseif _points_to_Base_macro(x[1], :deprecate_binding, state) && length(x) == 3 && isidentifier(x[2]) && isidentifier(x[3])
+            setref!(x[2], refof(x[3]))
         elseif _points_to_Base_macro(x[1], :eval, state) && length(x) == 2 && state isa Toplevel
             # Create scope around eval'ed expression. This ensures anybindings are
             # correctly hoisted to the top-level scope.

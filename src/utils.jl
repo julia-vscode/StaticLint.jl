@@ -38,6 +38,9 @@ function clear_scope(x::EXPR)
         else
             scopeof(x).modules = nothing
         end
+        if scopeof(x).overloaded !== nothing
+            empty!(scopeof(x).overloaded)
+        end
     end
 end
 

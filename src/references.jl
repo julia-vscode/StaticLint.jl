@@ -68,7 +68,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
             resolved && return true
         end
     end
-    if !resolved && !scope.ismodule && parentof(scope) isa Scope
+    if !resolved && !CSTParser.defines_module(scope.expr) && parentof(scope) isa Scope
         return resolve_ref(x, parentof(scope), state)
     end
     return resolved
@@ -111,7 +111,7 @@ function resolve_ref_from_module(x::EXPR, scope::Scope, state::State)::Bool
     x1, mn = nameof_expr_to_resolve(x)
     mn == true && return true
 
-    if scope_exports(scope, mn)
+    if scope_exports(scope, mn, state)
         setref!(x1, scope.names[mn])
         resolved = true
     end
@@ -123,8 +123,9 @@ end
 
 Does the scope export a variable called `name`?
 """
-function scope_exports(scope::Scope, name::String)
+function scope_exports(scope::Scope, name::String, state)
     if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
+        initial_pass_on_exports(scope.expr, state.server)
         for ref in b.refs
             if ref isa EXPR && parentof(ref) isa EXPR && typof(parentof(ref)) === CSTParser.Export
                 return true
@@ -132,6 +133,21 @@ function scope_exports(scope::Scope, name::String)
         end
     end
     return false
+end
+
+"""
+    initial_pass_on_exports(x::EXPR, server)
+
+Export statements need to be (pseudo) evaluated each time we consider 
+whether a variable is made available by an import statement.
+"""
+function initial_pass_on_exports(x::EXPR, server)
+    # @assert CSTParser.defines_module(x)
+    for a in x[3] # module block expressions
+        if typof(a) === CSTParser.Export
+            traverse(a, Delayed(retrieve_scope(a), server))
+        end
+    end
 end
 
 # Fallback method
@@ -204,10 +220,21 @@ function resolve_getfield(x::EXPR, parent_type, state::State)::Bool
     return false
 end
 
+function is_overloaded(val::SymbolServer.SymStore, scope::Scope)
+    (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name)
+    haskey(scope.overloaded, vr)
+end
+
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
     if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
+        # Check whether variable is overloaded in top-level scope
+        tls = retrieve_toplevel_scope(state.scope)
+        if tls.overloaded !==nothing  && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
+            setref!(x, tls.overloaded[vr])
+            return true
+        end
         setref!(x, val)
         resolved = true
     elseif is_macroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol("@", CSTParser.str_value(x[2])), m, getsymbolserver(state.server)), state.server)) !== nothing

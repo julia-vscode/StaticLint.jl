@@ -5,7 +5,6 @@ function resolve_import(x, state::State)
         n = length(x)
 
         root = par = getsymbolserver(state.server)
-        bindings = []
         while i <= n
             arg = x[i]
             if is_id_or_macroname(arg)
@@ -88,8 +87,8 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
     end
 end
 no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)
-function get_named_toplevel_module(s::Scope, name::String)
-    if s.ismodule && valofid(CSTParser.get_name(s.expr)) == name && no_modules_above(s)
+function get_named_toplevel_module(s::Scope, name::String) 
+    if CSTParser.defines_module(s.expr) && valofid(CSTParser.get_name(s.expr)) == name && no_modules_above(s)
         return s.expr
     elseif s.parent isa Scope
         return get_named_toplevel_module(s.parent, name)
@@ -114,8 +113,24 @@ function _get_field(par, arg, state)
             end
             return par
         end
-    elseif par isa Scope && scopehasbinding(par, arg_str_rep)
-        return par.names[arg_str_rep]
+        for used_module_name in par.used_modules
+            used_module = maybe_lookup(par[used_module_name], state.server)
+            if isexportedby(Symbol(arg_str_rep), used_module)
+                return used_module[Symbol(arg_str_rep)]
+            end
+        end
+    elseif par isa Scope
+        if scopehasbinding(par, arg_str_rep)
+            return par.names[arg_str_rep]
+        elseif par.modules !== nothing
+            for used_module in values(par.modules)
+                if used_module isa SymbolServer.ModuleStore && isexportedby(Symbol(arg_str_rep), used_module)
+                    return maybe_lookup(used_module[Symbol(arg_str_rep)], state.server)
+                elseif used_module isa Scope && scope_exports(used_module, arg_str_rep, state)
+                    return used_module.names[arg_str_rep]
+                end
+            end
+        end
     elseif par isa Binding
         if par.val isa Binding
             return _get_field(par.val, arg, state)
