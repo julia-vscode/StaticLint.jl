@@ -113,8 +113,9 @@ function _get_field(par, arg, state)
             end
             return par
         end
-        for used_module in par.used_modules
-            if isexportedby(arg_str_rep, used_module)
+        for used_module_name in par.used_modules
+            used_module = maybe_lookup(par[used_module_name], getsymbolserver(state.server))
+            if isexportedby(Symbol(arg_str_rep), used_module)
                 return used_module[Symbol(arg_str_rep)]
             end
         end
