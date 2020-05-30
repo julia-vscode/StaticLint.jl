@@ -231,7 +231,7 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
-        if tls.overloaded !==nothing  && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
+        if tls.overloaded !== nothing  && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
             setref!(x, tls.overloaded[vr])
             return true
         end
