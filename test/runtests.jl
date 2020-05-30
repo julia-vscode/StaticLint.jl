@@ -883,13 +883,15 @@ f(arg) = arg
         let cst = parse_and_pass("""
             module Outer
             module Inner
-            export x
             x = 1
+            export x
             end
+            using .Inner
             end
-            using Outer: x
+            using .Outer: x, rand
             """)
-            @test StaticLint.hasbinding(cst[2][4])
+            @test StaticLint.hasbinding(cst[2][5])
+            @test StaticLint.hasbinding(cst[2][7])
         end
     end
 

@@ -114,13 +114,23 @@ function _get_field(par, arg, state)
             return par
         end
         for used_module_name in par.used_modules
-            used_module = maybe_lookup(par[used_module_name], getsymbolserver(state.server))
+            used_module = maybe_lookup(par[used_module_name], state.server)
             if isexportedby(Symbol(arg_str_rep), used_module)
                 return used_module[Symbol(arg_str_rep)]
             end
         end
-    elseif par isa Scope && scopehasbinding(par, arg_str_rep)
-        return par.names[arg_str_rep]
+    elseif par isa Scope
+        if scopehasbinding(par, arg_str_rep)
+            return par.names[arg_str_rep]
+        elseif par.modules !== nothing
+            for used_module in values(par.modules)
+                if used_module isa SymbolServer.ModuleStore && isexportedby(Symbol(arg_str_rep), used_module)
+                    return maybe_lookup(used_module[Symbol(arg_str_rep)], state.server)
+                elseif used_module isa Scope && scope_exports(used_module, arg_str_rep, state)
+                    return used_module.names[arg_str_rep]
+                end
+            end
+        end
     elseif par isa Binding
         if par.val isa Binding
             return _get_field(par.val, arg, state)
