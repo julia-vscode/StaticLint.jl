@@ -293,7 +293,7 @@ function add_binding(x, state, scope = state.scope)
             if name_is_getfield(b.name)# && b.type == CoreTypes.Function
                 # Question: should `b.name` include the getfield itself?
                 # Binding name is part of a getfield : `A.name` so is either
-                # 1. Overloading of a function 
+                # 1. Overloading of a function
                 # 2. Setting of a field or property
                 # We only care about 1.
                 resolve_ref(parentof(parentof(b.name))[1], scope, state)
@@ -302,7 +302,7 @@ function add_binding(x, state, scope = state.scope)
                     # We don't know what we're assigning to, do nothing
                 else
                     if lhs_ref isa SymbolServer.ModuleStore && haskey(lhs_ref.vals, Symbol(name))
-                        # Overloading 
+                        # Overloading
                         tls = retrieve_toplevel_scope(b.val)
                         if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state.server)
                             # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.

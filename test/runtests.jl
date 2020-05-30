@@ -1108,97 +1108,97 @@ f(arg) = arg
             StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
             @test isempty(StaticLint.collect_hints(cst[1], server))
         end
-@testset "quoted getfield" begin
-    let cst = parse_and_pass("""
+        @testset "quoted getfield" begin
+            let cst = parse_and_pass("""
         Base.:sin
         """)
-        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-        @test isempty(StaticLint.collect_hints(cst[1], server))
-    end
+                StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+                @test isempty(StaticLint.collect_hints(cst[1], server))
+            end
 
-    let cst = parse_and_pass("""
+            let cst = parse_and_pass("""
         sin(1,1)
         Base.sin(1,1)
         Base.:sin(1,1)
         """)
-        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-        @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
-    end
-end
-@testset "overloading" begin
+                StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+                @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+            end
+        end
+        @testset "overloading" begin
     # overloading of a function that happens to be exported into the current scope.
-    let cst = parse_and_pass("""
+            let cst = parse_and_pass("""
         Base.sin() = nothing
         sin()
         """)
-        @test haskey(cst.meta.scope.names, "sin") # 
-        @test cst.meta.scope.names["sin"].prev == server.symbolserver[:Base][:sin]
-        StaticLint.check_call(cst[2], server)
-        @test isempty(StaticLint.collect_hints(cst, server))
-    end
+                @test haskey(cst.meta.scope.names, "sin") #
+                @test cst.meta.scope.names["sin"].prev == server.symbolserver[:Base][:sin]
+                StaticLint.check_call(cst[2], server)
+                @test isempty(StaticLint.collect_hints(cst, server))
+            end
     # As above but for user defined function
-    let cst = parse_and_pass("""
+            let cst = parse_and_pass("""
         module M
         f(x) = nothing
         end
         M.f(a,b) = nothing
         M.f(1,2)
         """)
-        @test !haskey(cst.meta.scope.names, "f")
-        StaticLint.check_call(cst[3], server)
-        @test errorof(cst[3]) === nothing
-    end
+                @test !haskey(cst.meta.scope.names, "f")
+                StaticLint.check_call(cst[3], server)
+                @test errorof(cst[3]) === nothing
+            end
 
-        let cst = parse_and_pass("""
+            let cst = parse_and_pass("""
     sin(1,1)
     Base.sin(1,1)
     Base.:sin(1,1)
     """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-            @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+                StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+                @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+            end
         end
-    end
     # Non exported function is overloaded
-    let cst = parse_and_pass("""
+        let cst = parse_and_pass("""
         Base.argtail() = nothing
         Base.argtail()
         """)
-        @test !haskey(cst.meta.scope.names, "argtail") # 
-        StaticLint.check_call(cst[2], server)
-        @test isempty(StaticLint.collect_hints(cst, server))
-    end
+            @test !haskey(cst.meta.scope.names, "argtail") #
+            StaticLint.check_call(cst[2], server)
+            @test isempty(StaticLint.collect_hints(cst, server))
+        end
     # As above but for user defined function
-    let cst = parse_and_pass("""
+        let cst = parse_and_pass("""
         module M
         ff(x) = nothing
         end
         M.ff() = nothing
         M.ff()
         """)
-        @test !haskey(cst.meta.scope.names, "ff") # 
-        StaticLint.check_call(cst[3], server)
-        @test isempty(StaticLint.collect_hints(cst, server))
-    end
+            @test !haskey(cst.meta.scope.names, "ff") #
+            StaticLint.check_call(cst[3], server)
+            @test isempty(StaticLint.collect_hints(cst, server))
+        end
 
-    let cst = parse_and_pass("""
+        let cst = parse_and_pass("""
         import Base:argtail
         Base.argtail() = nothing
         Base.argtail()
         argtail()
         """)
 
-        @test cst.meta.scope.names["argtail"] === bindingof(cst[2])
-        @test bindingof(cst[2]).prev == bindingof(cst[1][4])
-        @test refof(cst[3][1][3][1]) === bindingof(cst[2])
-        StaticLint.check_call(cst[3], server)
-        StaticLint.check_call(cst[4], server)
-        @test isempty(StaticLint.collect_hints(cst, server))
-        
-    end
-end
+            @test cst.meta.scope.names["argtail"] === bindingof(cst[2])
+            @test bindingof(cst[2]).prev == bindingof(cst[1][4])
+            @test refof(cst[3][1][3][1]) === bindingof(cst[2])
+            StaticLint.check_call(cst[3], server)
+            StaticLint.check_call(cst[4], server)
+            @test isempty(StaticLint.collect_hints(cst, server))
 
-@testset "on demand resolving of export statements" begin
-    let cst = parse_and_pass("""
+        end
+    end
+
+    @testset "on demand resolving of export statements" begin
+        let cst = parse_and_pass("""
             module TopModule
             abstract type T end
             export T
@@ -1207,7 +1207,7 @@ end
             T
             end
             end""")
-        @test refof(cst[1][3][3][3][2]) !== nothing
+            @test refof(cst[1][3][3][3][2]) !== nothing
+        end
     end
-end
 end

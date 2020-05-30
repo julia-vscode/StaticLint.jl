@@ -14,7 +14,7 @@ function Base.show(io::IO, s::Scope)
 end
 
 function overload_method(scope::Scope, b::Binding, vr::SymbolServer.VarRef)
-    if scope.overloaded === nothing 
+    if scope.overloaded === nothing
         scope.overloaded = Dict()
     end
     if haskey(scope.overloaded, vr)
