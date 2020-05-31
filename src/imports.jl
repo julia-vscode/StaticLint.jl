@@ -98,7 +98,7 @@ end
 function _get_field(par, arg, state)
     arg_str_rep = CSTParser.str_value(arg)
     if par isa SymbolServer.EnvStore
-        if (tlm = get_named_toplevel_module(retrieve_scope(arg), arg_str_rep)) !== nothing && hasbinding(tlm)
+        if (arg_scope = retrieve_scope(arg)) !== nothing && (tlm = get_named_toplevel_module(arg_scope, arg_str_rep)) !== nothing && hasbinding(tlm)
             return bindingof(tlm)
         elseif haskey(par, Symbol(arg_str_rep))
             return par[Symbol(arg_str_rep)]
@@ -115,7 +115,7 @@ function _get_field(par, arg, state)
         end
         for used_module_name in par.used_modules
             used_module = maybe_lookup(par[used_module_name], state.server)
-            if isexportedby(Symbol(arg_str_rep), used_module)
+            if used_module !== nothing && isexportedby(Symbol(arg_str_rep), used_module)
                 return used_module[Symbol(arg_str_rep)]
             end
         end
