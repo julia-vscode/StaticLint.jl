@@ -86,7 +86,7 @@ end
 
 function func_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
-    sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+    sig = rem_wheres_decls(CSTParser.get_sig(x))
     for i = 2:length(sig)
         arg = sig[i]
         if is_macro_call(arg) && length(arg) > 1 &&
