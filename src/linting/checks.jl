@@ -553,7 +553,12 @@ function has_getproperty_method(b::Binding)
     elseif b.val isa SymbolServer.DataTypeStore
         return has_getproperty_method(b.val)
     elseif b isa Binding && b.type === CoreTypes.DataType
+        safety_trip = 0
         while b !== nothing
+            safety_trip += 1
+            if safety_trip > 1000 
+                error("Infinite loop.")
+            end
             for ref in b.refs
                 if is_type_of_call_to_getproperty(ref)
                     return true

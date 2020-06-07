@@ -235,33 +235,29 @@ function mark_typealias_bindings!(x::EXPR)
     return x
 end
 
+rem_wheres_decls(x) = (is_where(x) || is_declaration(x)) ? x[1] : x
+
+function is_in_funcdef(x)
+    if !(parentof(x) isa EXPR)
+        return false
+    elseif is_where(parentof(x)) || typof(parentof(x)) === CSTParser.InvisBrackets
+        return is_in_funcdef(parentof(x))
+    elseif typof(parentof(x)) === FunctionDef || CSTParser.is_assignment(parentof(x))
+        return true
+    else
+        return false
+    end
+end
+
 function _in_func_def(x::EXPR)
     # only called in WhereOpCall
     # check 1st arg contains a call (or op call)
-    ex = x[1]
-    while true
-        if is_where(ex) || is_declaration(ex)
-            ex = ex[1]
-        elseif is_call(ex) || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)
-            break
-        else
-            return false
-        end
-    end
+    ex = rem_wheres_decls(x[1])
+
+    !(is_call(ex) || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)) && return false
+    
     # check parent is func def
-    ex = x
-    while true
-        if !(parentof(ex) isa EXPR)
-            return false
-        elseif is_where(parentof(ex)) || typof(parentof(ex)) === CSTParser.InvisBrackets
-            ex = parentof(ex)
-        elseif typof(parentof(ex)) === FunctionDef || CSTParser.is_assignment(parentof(ex))
-            return true
-        else
-            return false
-        end
-    end
-    return false
+    return is_in_funcdef(x)
 end
 
 function add_binding(x, state, scope = state.scope)
