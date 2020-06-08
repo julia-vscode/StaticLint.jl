@@ -651,7 +651,7 @@ f(arg) = arg
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("""
-            function f(a)::Bool where {F} end
+            function f(a::F)::Bool where {F} end
             """)
             # ensure we strip all type decl code from around signature
             StaticLint.check_all(cst, StaticLint.LintOptions(), server)
