@@ -255,7 +255,7 @@ function _in_func_def(x::EXPR)
     ex = rem_wheres_decls(x[1])
 
     !(is_call(ex) || (is_binary_call(ex) && kindof(ex[2]) !== CSTParser.Tokens.DOT) || is_unary_call(ex)) && return false
-    
+
     # check parent is func def
     return is_in_funcdef(x)
 end
