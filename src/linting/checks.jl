@@ -556,7 +556,7 @@ function has_getproperty_method(b::Binding)
         safety_trip = 0
         while b !== nothing
             safety_trip += 1
-            if safety_trip > 1000 
+            if safety_trip > 1000
                 error("Infinite loop.")
             end
             for ref in b.refs
