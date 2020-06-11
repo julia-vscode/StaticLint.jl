@@ -300,6 +300,7 @@ function add_binding(x, state, scope = state.scope)
                     if lhs_ref isa SymbolServer.ModuleStore && haskey(lhs_ref.vals, Symbol(name))
                         # Overloading
                         tls = retrieve_toplevel_scope(b.val)
+                        tls === nothing && return # Shouldn't happen
                         if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state.server)
                             # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.
                             overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
@@ -313,7 +314,7 @@ function add_binding(x, state, scope = state.scope)
                             overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
                         end
                     elseif lhs_ref isa Binding && lhs_ref.type == CoreTypes.Module
-                        if haskey(scopeof(lhs_ref.val).names, name)
+                        if hasscope(lhs_ref.val) && haskey(scopeof(lhs_ref.val).names, name)
                             b.prev = scopeof(lhs_ref.val).names[name]
                             scopeof(lhs_ref.val).names[name] = b
                         end
