@@ -18,7 +18,8 @@ TypePiracy,
 UnusedFunctionArgument,
 CannotDeclareConst,
 InvalidRedefofConst,
-NotEqDef)
+NotEqDef,
+InappropriateUseOfLiteral)
 
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
@@ -39,7 +40,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnusedFunctionArgument => "An argument is included in a function signature but not used within its body.",
     CannotDeclareConst => "Cannot declare constant; it already has a value.",
     InvalidRedefofConst => "Invalid redefinition of constant.",
-    NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.")
+    NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.",
+    InappropriateUseOfLiteral => "You really shouldn't be using a literal value here."
+    )
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)
@@ -455,6 +458,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.useoffuncargs && check_farg_unused(x)
     check_const_decl(x)
     check_const_redef(x)
+    check_use_of_literal(x)
     for i in 1:length(x)
         check_all(x[i], opts, server)
     end
@@ -692,3 +696,29 @@ function check_const_redef(x::EXPR)
         seterror!(x, InvalidRedefofConst)
     end
 end
+
+function check_use_of_literal(x::EXPR)
+    if CSTParser.defines_module(x) && length(x.args) > 1 && isbadliteral(x.args[2])
+        seterror!(x.args[2], InappropriateUseOfLiteral)
+    elseif CSTParser.defines_abstract(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif CSTParser.defines_primitive(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif CSTParser.defines_struct(x)
+        if CSTParser.defines_mutable(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+            seterror!(x.args[3], InappropriateUseOfLiteral)
+        elseif length(x.args) > 1 && isbadliteral(x.args[2])
+            seterror!(x.args[2], InappropriateUseOfLiteral)
+        end
+    elseif CSTParser.defines_primitive(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif (is_assignment(x) || is_kwarg(x)) && isbadliteral(x.args[1])
+        seterror!(x.args[1], InappropriateUseOfLiteral)
+    elseif is_declaration(x) && length(x.args) == 3 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif is_binary_call(x, CSTParser.Tokens.ISA) && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    end
+end
+
+isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)

@@ -1217,4 +1217,29 @@ f(arg) = arg
             @test refof(cst[1][3][3][3][2]) !== nothing
         end
     end
+
+    @testset "check_use_of_literal" begin
+        let cst = parse_and_pass("""
+            module \"a\" end
+            abstract type \"\"\"123\"\"\" end
+            primitive type 1 8 end
+            struct 1.0 end
+            mutable struct 'a' end
+            1 = 1
+            f(true = 1)
+            123::123
+            123 isa false
+            """)
+            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+            @test errorof(cst[1][2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[2][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[3][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[4][2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[5][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[6][1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[7][3][1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[8][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[9][3]) === StaticLint.InappropriateUseOfLiteral
+        end
+    end
 end
