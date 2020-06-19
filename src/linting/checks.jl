@@ -712,22 +712,55 @@ end
     check_kw_default(x::EXPR, server)
 
 Check that the default value matches the type for keyword arguments. Currently limited to
-the following types `Union{String, Symbol, Int, Float64}`.
+the following types 
+`Union{String, Symbol, Int, Char, Bool, Float32, Float64, UInt8, UInt16, UInt32, UInt64}`.
 """
 function check_kw_default(x::EXPR, server)
-    if typof(x) == CSTParser.Kw && is_declaration(x[1])
-        if refof(x[1][3]) == getsymbolserver(server)[:Core][:String] && typof(x[3]) === CSTParser.LITERAL && !(kindof(x[3]) === CSTParser.Tokens.STRING || kindof(x[3]) === CSTParser.Tokens.TRIPLE_STRING)
+    if typof(x) == CSTParser.Kw && is_declaration(x[1]) && typof(x[3]) === CSTParser.LITERAL
+        rhskind = kindof(x[3])
+        rhsval = x[3].val
+        if refof(x[1][3]) == getsymbolserver(server)[:Core][:String] && !(rhskind === CSTParser.Tokens.STRING || rhskind === CSTParser.Tokens.TRIPLE_STRING)
             seterror!(x[3], KwDefaultMismatch)
-        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Symbol] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.IDENTIFIER
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Symbol] && rhskind !== CSTParser.Tokens.IDENTIFIER
             seterror!(x[3], KwDefaultMismatch)
-        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Int] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.INTEGER
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Int] && rhskind !== CSTParser.Tokens.INTEGER
             seterror!(x[3], KwDefaultMismatch)
-        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Float64] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.FLOAT
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Bool] && !(rhskind === CSTParser.Tokens.TRUE || rhskind === CSTParser.Tokens.FALSE)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Char] && rhskind !== CSTParser.Tokens.CHAR
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Float64] && rhskind !== CSTParser.Tokens.FLOAT
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Float32] && !(rhskind === CSTParser.Tokens.FLOAT && occursin("f", rhsval))
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:UInt8] && !is_uint(UInt8, rhskind, rhsval)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:UInt16] && !is_uint(UInt16, rhskind, rhsval)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:UInt32] && !is_uint(UInt32, rhskind, rhsval)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:UInt64] && !is_uint(UInt64, rhskind, rhsval)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:UInt128] && !is_uint(UInt128, rhskind, rhsval)
             seterror!(x[3], KwDefaultMismatch)
         end
     end
 end
 
+# true if a `literal_value` would create a value of type `T` given the `kind`
+function is_uint(T, kind, literal_value)
+    if T in (UInt8, UInt16, UInt32, UInt64, UInt128)
+        # count only digits without prefix (=0x, 0o, 0b)
+        n = count(x -> x != '_', literal_value) - 2
+        # upper and lower byte count for `T`
+        ub = sizeof(T)
+        lb = ub ÷ 2
+        kind == CSTParser.Tokens.BIN_INT && return 8lb < n <= 8ub
+        kind == CSTParser.Tokens.OCT_INT && return 3lb < n <= 3ub
+        kind == CSTParser.Tokens.HEX_INT && return 2lb < n <= 2ub
+    end
+    return true
+end
 
 function check_use_of_literal(x::EXPR)
     if CSTParser.defines_module(x) && length(x.args) > 1 && isbadliteral(x.args[2])

@@ -1219,54 +1219,74 @@ f(arg) = arg
     end
 
 
-    @testset "on demand resolving of export statements" begin
-        cst = parse_and_pass("f(x::Float64 = 0.1)")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
+    @testset "check kw default definition" begin
+        function kw_default_ok(s)
+            cst = parse_and_pass(s)
+            StaticLint.check_kw_default(cst[1][3], server)
+            @test errorof(cst[1][3][3]) === nothing
+        end
+        function kw_default_incorrect(s)
+            cst = parse_and_pass(s)
+            StaticLint.check_kw_default(cst[1][3], server)
+            @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+        end
 
-        cst = parse_and_pass("f(x::Float64 = f())")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
+        kw_default_ok("f(x::Float64 = 0.1)")
+        kw_default_ok("f(x::Float64 = f())")
+        kw_default_ok("f(x::Float32 = f())")
+        kw_default_ok("f(x::Float32 = 3f0")
+        kw_default_ok("f(x::Float32 = 3_0f0")
+        kw_default_ok("f(x::Float32 = 0f00")
+        kw_default_ok("f(x::Float32 = -0f02")
+        kw_default_ok("f(x::Float32 = Inf32")
+        kw_default_ok("f(x::Float32 = 30f3")
+        kw_default_ok("f(x::Int = 1)")
+        kw_default_ok("f(x::Int = f())")
+        kw_default_ok("f(x::String = \"1\")")
+        kw_default_ok("f(x::String = f())")
+        kw_default_ok("f(x::Symbol = :x")
+        kw_default_ok("f(x::Symbol = f()")
+        kw_default_ok("f(x::Char = 'a'")
+        kw_default_ok("f(x::Bool = true")
+        kw_default_ok("f(x::Bool = false")
+        kw_default_ok("f(x::UInt8 = 0b0100_0010")
+        kw_default_ok("f(x::UInt16 = 0b0000_0000_0000")
+        kw_default_ok("f(x::UInt32 = 0b00000000000000000000000000000000")
+        kw_default_ok("f(x::UInt8 = 0o000")
+        kw_default_ok("f(x::UInt16 = 0o0_0_0_0_0_0")
+        kw_default_ok("f(x::UInt32 = 0o000000000")
+        kw_default_ok("f(x::UInt64 = 0o000_000_000_000_0")
+        kw_default_ok("f(x::UInt8 = 0x0")
+        kw_default_ok("f(x::UInt16 = 0x0000")
+        kw_default_ok("f(x::UInt32 = 0x00000")
+        kw_default_ok("f(x::UInt32 = -0x00000")
+        kw_default_ok("f(x::UInt64 = 0x0000_0000_0")
+        kw_default_ok("f(x::UInt128 = 0x00000000_00000000_00000000_00000000")
 
-        cst = parse_and_pass("f(x::Float64 = 1)")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
-
-        cst = parse_and_pass("f(x::Int = 1)")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
-
-        cst = parse_and_pass("f(x::Int = f())")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
-
-        cst = parse_and_pass("f(x::Int = 0.1)")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
-
-        cst = parse_and_pass("f(x::String = \"1\")")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
-
-        cst = parse_and_pass("f(x::String = f())")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
-
-        cst = parse_and_pass("f(x::String = 0.1)")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
-
-        cst = parse_and_pass("f(x::Symbol = :x)")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
-
-        cst = parse_and_pass("f(x::Symbol = f())")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) === nothing
-
-        cst = parse_and_pass("f(x::Symbol = \"a\")")
-        StaticLint.check_kw_default(cst[1][3], server)
-        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+        kw_default_incorrect("f(x::Float64 = 1)")
+        kw_default_incorrect("f(x::Float32 = 3.4")
+        kw_default_incorrect("f(x::Float32 = -23.")
+        kw_default_incorrect("f(x::Int = 0.1)")
+        kw_default_incorrect("f(x::String = 0.1)")
+        kw_default_incorrect("f(x::Symbol = \"a\"")
+        kw_default_incorrect("f(x::Char = \"a\"")
+        kw_default_incorrect("f(x::Bool = 1")
+        kw_default_incorrect("f(x::Bool = 0x01")
+        kw_default_incorrect("f(x::UInt8 = 0b000000000")
+        kw_default_incorrect("f(x::UInt16 = 0b0000_0000_0000_0000_0")
+        kw_default_incorrect("f(x::UInt32 = 0b0")
+        kw_default_incorrect("f(x::UInt64 = 0b0_0")
+        kw_default_incorrect("f(x::UInt128 = 0b0")
+        kw_default_incorrect("f(x::UInt8 = 0o0000")
+        kw_default_incorrect("f(x::UInt16 = 0o0")
+        kw_default_incorrect("f(x::UInt32 = 0o00000000000000")
+        kw_default_incorrect("f(x::UInt64 = 0o0_0")
+        kw_default_incorrect("f(x::UInt128 = 0o00")
+        kw_default_incorrect("f(x::UInt8 = 0x000")
+        kw_default_incorrect("f(x::UInt16 = 0x00000")
+        kw_default_incorrect("f(x::UInt32 = 0x0000_00_000")
+        kw_default_incorrect("f(x::UInt64 = 0x000_0_0")
+        kw_default_incorrect("f(x::UInt128 = 0x000000")
     end
 
     @testset "check_use_of_literal" begin
