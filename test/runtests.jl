@@ -1218,6 +1218,57 @@ f(arg) = arg
         end
     end
 
+
+    @testset "on demand resolving of export statements" begin
+        cst = parse_and_pass("f(x::Float64 = 0.1)")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::Float64 = f())")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+
+        cst = parse_and_pass("f(x::Float64 = 1)")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+
+        cst = parse_and_pass("f(x::Int = 1)")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::Int = f())")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::Int = 0.1)")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+
+        cst = parse_and_pass("f(x::String = \"1\")")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::String = f())")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::String = 0.1)")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+
+        cst = parse_and_pass("f(x::Symbol = :x)")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::Symbol = f())")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) === nothing
+        
+        cst = parse_and_pass("f(x::Symbol = \"a\")")
+        StaticLint.check_kw_default(cst[1][3], server)
+        @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+    end
+
     @testset "check_use_of_literal" begin
         let cst = parse_and_pass("""
             module \"a\" end
@@ -1241,5 +1292,6 @@ f(arg) = arg
             @test errorof(cst[8][3]) === StaticLint.InappropriateUseOfLiteral
             @test errorof(cst[9][3]) === StaticLint.InappropriateUseOfLiteral
         end
+
     end
 end

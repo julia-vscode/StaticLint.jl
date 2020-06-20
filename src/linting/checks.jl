@@ -19,7 +19,9 @@ UnusedFunctionArgument,
 CannotDeclareConst,
 InvalidRedefofConst,
 NotEqDef,
+KwDefaultMismatch,
 InappropriateUseOfLiteral)
+
 
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
@@ -41,6 +43,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     CannotDeclareConst => "Cannot declare constant; it already has a value.",
     InvalidRedefofConst => "Invalid redefinition of constant.",
     NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.",
+    KwDefaultMismatch => "The default value provided does not match the specified argument type.",
     InappropriateUseOfLiteral => "You really shouldn't be using a literal value here."
     )
 
@@ -458,7 +461,9 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.useoffuncargs && check_farg_unused(x)
     check_const_decl(x)
     check_const_redef(x)
+    check_kw_default(x, server)
     check_use_of_literal(x)
+
     for i in 1:length(x)
         check_all(x[i], opts, server)
     end
@@ -697,6 +702,28 @@ function check_const_redef(x::EXPR)
     end
 end
 
+
+"""
+    check_kw_default(x::EXPR, server)
+
+Check that the default value matches the type for keyword arguments. Currently limited to
+the following types `Union{String, Symbol, Int, Float64}`.
+"""
+function check_kw_default(x::EXPR, server)
+    if typof(x) == CSTParser.Kw && is_declaration(x[1])
+        if refof(x[1][3]) == getsymbolserver(server)[:Core][:String] && typof(x[3]) === CSTParser.LITERAL && !(kindof(x[3]) === CSTParser.Tokens.STRING || kindof(x[3]) === CSTParser.Tokens.TRIPLE_STRING)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Symbol] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.IDENTIFIER
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Int] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.INTEGER
+            seterror!(x[3], KwDefaultMismatch)
+        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Float64] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.FLOAT
+            seterror!(x[3], KwDefaultMismatch)
+        end 
+    end
+end
+
+
 function check_use_of_literal(x::EXPR)
     if CSTParser.defines_module(x) && length(x.args) > 1 && isbadliteral(x.args[2])
         seterror!(x.args[2], InappropriateUseOfLiteral)
@@ -722,3 +749,4 @@ function check_use_of_literal(x::EXPR)
 end
 
 isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)
+
