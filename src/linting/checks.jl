@@ -719,7 +719,7 @@ function check_kw_default(x::EXPR, server)
             seterror!(x[3], KwDefaultMismatch)
         elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Float64] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.FLOAT
             seterror!(x[3], KwDefaultMismatch)
-        end 
+        end
     end
 end
 

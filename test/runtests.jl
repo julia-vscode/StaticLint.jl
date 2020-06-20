@@ -1223,7 +1223,7 @@ f(arg) = arg
         cst = parse_and_pass("f(x::Float64 = 0.1)")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::Float64 = f())")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
@@ -1235,11 +1235,11 @@ f(arg) = arg
         cst = parse_and_pass("f(x::Int = 1)")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::Int = f())")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::Int = 0.1)")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
@@ -1247,11 +1247,11 @@ f(arg) = arg
         cst = parse_and_pass("f(x::String = \"1\")")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::String = f())")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::String = 0.1)")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
@@ -1259,11 +1259,11 @@ f(arg) = arg
         cst = parse_and_pass("f(x::Symbol = :x)")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::Symbol = f())")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) === nothing
-        
+
         cst = parse_and_pass("f(x::Symbol = \"a\")")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
