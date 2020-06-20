@@ -1267,6 +1267,7 @@ f(arg) = arg
         cst = parse_and_pass("f(x::Symbol = \"a\")")
         StaticLint.check_kw_default(cst[1][3], server)
         @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+    end
 
     @testset "check_use_of_literal" begin
         let cst = parse_and_pass("""
