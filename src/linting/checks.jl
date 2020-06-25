@@ -756,7 +756,7 @@ end
 isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)
 
 function check_break_continue(x::EXPR)
-    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x -> typof(x) in (CSTParser.For, CSTParser.While))
+    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x->typof(x) in (CSTParser.For, CSTParser.While))
         seterror!(x, ShouldBeInALoop)
     end
 end
