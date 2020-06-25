@@ -20,7 +20,8 @@ CannotDeclareConst,
 InvalidRedefofConst,
 NotEqDef,
 KwDefaultMismatch,
-InappropriateUseOfLiteral)
+InappropriateUseOfLiteral,
+ShouldBeInALoop)
 
 
 
@@ -44,7 +45,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     InvalidRedefofConst => "Invalid redefinition of constant.",
     NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.",
     KwDefaultMismatch => "The default value provided does not match the specified argument type.",
-    InappropriateUseOfLiteral => "You really shouldn't be using a literal value here."
+    InappropriateUseOfLiteral => "You really shouldn't be using a literal value here.",
+    ShouldBeInALoop => "`break` or `continue` used outside loop."
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -55,6 +57,49 @@ function seterror!(x::EXPR, e)
         x.meta = Meta()
     end
     x.meta.error = e
+end
+
+const default_options = (true, true, true, true, true, true, true, true, true, true)
+
+struct LintOptions
+    call::Bool
+    iter::Bool
+    nothingcomp::Bool
+    constif::Bool
+    lazy::Bool
+    datadecl::Bool
+    typeparam::Bool
+    modname::Bool
+    pirates::Bool
+    useoffuncargs::Bool
+end
+LintOptions() = LintOptions(default_options...)
+LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
+
+LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
+    LintOptions(something.(options, default_options)...)
+
+function check_all(x::EXPR, opts::LintOptions, server)
+    # Do checks
+    opts.call && check_call(x, server)
+    opts.iter && check_loop_iter(x, server)
+    opts.nothingcomp && check_nothing_equality(x, server)
+    opts.constif && check_if_conds(x)
+    opts.lazy && check_lazy(x)
+    opts.datadecl && check_datatype_decl(x, server)
+    opts.typeparam && check_typeparams(x)
+    opts.modname && check_modulename(x)
+    opts.pirates && check_for_pirates(x)
+    opts.useoffuncargs && check_farg_unused(x)
+    check_const_decl(x)
+    check_const_redef(x)
+    check_kw_default(x, server)
+    check_use_of_literal(x)
+    check_break_continue(x)
+
+    for i in 1:length(x)
+        check_all(x[i], opts, server)
+    end
 end
 
 
@@ -427,47 +472,7 @@ function check_farg_unused(x::EXPR)
     end
 end
 
-const default_options = (true, true, true, true, true, true, true, true, true, true)
 
-struct LintOptions
-    call::Bool
-    iter::Bool
-    nothingcomp::Bool
-    constif::Bool
-    lazy::Bool
-    datadecl::Bool
-    typeparam::Bool
-    modname::Bool
-    pirates::Bool
-    useoffuncargs::Bool
-end
-LintOptions() = LintOptions(default_options...)
-LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
-
-LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
-    LintOptions(something.(options, default_options)...)
-
-function check_all(x::EXPR, opts::LintOptions, server)
-    # Do checks
-    opts.call && check_call(x, server)
-    opts.iter && check_loop_iter(x, server)
-    opts.nothingcomp && check_nothing_equality(x, server)
-    opts.constif && check_if_conds(x)
-    opts.lazy && check_lazy(x)
-    opts.datadecl && check_datatype_decl(x, server)
-    opts.typeparam && check_typeparams(x)
-    opts.modname && check_modulename(x)
-    opts.pirates && check_for_pirates(x)
-    opts.useoffuncargs && check_farg_unused(x)
-    check_const_decl(x)
-    check_const_redef(x)
-    check_kw_default(x, server)
-    check_use_of_literal(x)
-
-    for i in 1:length(x)
-        check_all(x[i], opts, server)
-    end
-end
 
 
 """
@@ -749,4 +754,12 @@ function check_use_of_literal(x::EXPR)
 end
 
 isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)
+
+function check_break_continue(x::EXPR)
+    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x -> typof(x) in (CSTParser.For, CSTParser.While))
+        seterror!(x, ShouldBeInALoop)
+    end
+end
+
+
 
