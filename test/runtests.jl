@@ -1292,6 +1292,18 @@ f(arg) = arg
             @test errorof(cst[8][3]) === StaticLint.InappropriateUseOfLiteral
             @test errorof(cst[9][3]) === StaticLint.InappropriateUseOfLiteral
         end
+    end
 
+    @testset "check_break_continue" begin
+        let cst = parse_and_pass("""
+            for i = 1:10
+                continue
+            end
+            break
+            """)
+            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+            @test errorof(cst[1][3][1]) === nothing
+            @test errorof(cst[2]) === StaticLint.ShouldBeInALoop
+        end
     end
 end
