@@ -759,7 +759,7 @@ function is_uint(T, kind, literal_value)
         kind == CSTParser.Tokens.OCT_INT && return 3lb < n <= 3ub
         kind == CSTParser.Tokens.HEX_INT && return 2lb < n <= 2ub
     end
-    return true
+    return false
 end
 
 function check_use_of_literal(x::EXPR)
