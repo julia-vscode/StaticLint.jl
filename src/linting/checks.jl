@@ -711,23 +711,61 @@ end
 """
     check_kw_default(x::EXPR, server)
 
-Check that the default value matches the type for keyword arguments. Currently limited to
-the following types `Union{String, Symbol, Int, Float64}`.
+Check that the default value matches the type for keyword arguments. Following types are
+checked: `String, Symbol, Int, Char, Bool, Float32, Float64, UInt8, UInt16, UInt32,
+UInt64, UInt128`.
 """
 function check_kw_default(x::EXPR, server)
-    if typof(x) == CSTParser.Kw && is_declaration(x[1])
-        if refof(x[1][3]) == getsymbolserver(server)[:Core][:String] && typof(x[3]) === CSTParser.LITERAL && !(kindof(x[3]) === CSTParser.Tokens.STRING || kindof(x[3]) === CSTParser.Tokens.TRIPLE_STRING)
+    if typof(x) == CSTParser.Kw && is_declaration(x[1]) && typof(x[3]) === CSTParser.LITERAL && hasref(x[1][3])
+        decl_T = refof(x[1][3])
+        rhskind = kindof(x[3])
+        rhsval = x[3].val
+        if decl_T == getsymbolserver(server)[:Core][:String] && !(rhskind === CSTParser.Tokens.STRING || rhskind === CSTParser.Tokens.TRIPLE_STRING)
             seterror!(x[3], KwDefaultMismatch)
-        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Symbol] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.IDENTIFIER
+        elseif decl_T == getsymbolserver(server)[:Core][:Symbol] && rhskind !== CSTParser.Tokens.IDENTIFIER
             seterror!(x[3], KwDefaultMismatch)
-        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Int] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.INTEGER
+        elseif decl_T == getsymbolserver(server)[:Core][:Int] && rhskind !== CSTParser.Tokens.INTEGER
             seterror!(x[3], KwDefaultMismatch)
-        elseif refof(x[1][3]) == getsymbolserver(server)[:Core][:Float64] && typof(x[3]) === CSTParser.LITERAL && kindof(x[3]) !== CSTParser.Tokens.FLOAT
+        elseif decl_T == getsymbolserver(server)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && rhskind !== CSTParser.Tokens.INTEGER
             seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Bool] && !(rhskind === CSTParser.Tokens.TRUE || rhskind === CSTParser.Tokens.FALSE)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Char] && rhskind !== CSTParser.Tokens.CHAR
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Float64] && rhskind !== CSTParser.Tokens.FLOAT
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Float32] && !(rhskind === CSTParser.Tokens.FLOAT && occursin("f", rhsval))
+            seterror!(x[3], KwDefaultMismatch)
+        else
+            for T in (UInt8, UInt16, UInt32, UInt64, UInt128)
+                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                    # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
+                    # between upper and lower literal boundaries for `T` where the boundaries
+                    # depend on the type of literal (binary, octal, hex)
+                    n = count(x -> x != '_', rhsval) - 2
+                    ub = sizeof(T)
+                    lb = ub ÷ 2
+                    if rhskind == CSTParser.Tokens.BIN_INT
+                        8lb < n <= 8ub || seterror!(x[3], KwDefaultMismatch)
+                    elseif rhskind == CSTParser.Tokens.OCT_INT
+                        3lb < n <= 3ub || seterror!(x[3], KwDefaultMismatch)
+                    elseif rhskind == CSTParser.Tokens.HEX_INT
+                        2lb < n <= 2ub || seterror!(x[3], KwDefaultMismatch)
+                    else
+                        seterror!(x[3], KwDefaultMismatch)
+                    end
+                end
+            end
+            # signed integers of non native size can't be declared as literal
+            for T in (Int8, Int16, Sys.WORD_SIZE == 64 ? Int32 : Int64, Int128)
+                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                    seterror!(x[3], KwDefaultMismatch)
+                end
+            end
+
         end
     end
 end
-
 
 function check_use_of_literal(x::EXPR)
     if CSTParser.defines_module(x) && length(x.args) > 1 && isbadliteral(x.args[2])
