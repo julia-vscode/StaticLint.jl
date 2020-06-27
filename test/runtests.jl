@@ -1240,8 +1240,6 @@ f(arg) = arg
         kw_default_ok("f(x::Float32 = -0f02")
         kw_default_ok("f(x::Float32 = Inf32")
         kw_default_ok("f(x::Float32 = 30f3")
-        kw_default_ok("f(x::Int = 1)")
-        kw_default_ok("f(x::Int = f())")
         kw_default_ok("f(x::String = \"1\")")
         kw_default_ok("f(x::String = f())")
         kw_default_ok("f(x::Symbol = :x")
@@ -1262,13 +1260,16 @@ f(arg) = arg
         kw_default_ok("f(x::UInt32 = -0x00000")
         kw_default_ok("f(x::UInt64 = 0x0000_0000_0")
         kw_default_ok("f(x::UInt128 = 0x00000000_00000000_00000000_00000000")
-        kw_default_ok("f(x::Int64 = 0x0000_0000")
         kw_default_ok("f(x::UInt128 = 0x00000000_00000000_00000000_00000000")
         if Sys.WORD_SIZE == 64
+            kw_default_ok("f(x::Int64 = 0")
             kw_default_ok("f(x::UInt = 0x0000_0000_0")
         else
+            kw_default_ok("f(x::Int32 = 0")
             kw_default_ok("f(x::UInt = 0x0000_0")
         end
+        kw_default_ok("f(x::Int = 1)")
+        kw_default_ok("f(x::Int = f())")
         kw_default_ok("f(x::Int8 = Int8(0)")
         kw_default_ok("f(x::Int8 = convert(Int8,0)")
 
@@ -1276,10 +1277,12 @@ f(arg) = arg
             kw_default_notok("f(x::Int8 = 0")
             kw_default_notok("f(x::Int16 = 0")
             kw_default_notok("f(x::Int32 = 0")
+            kw_default_notok("f(x::Int64 = 0x0000_0000_0")
             kw_default_notok("f(x::Int128 = 0")
         else
             kw_default_notok("f(x::Int8 = 0")
             kw_default_notok("f(x::Int16 = 0")
+            kw_default_notok("f(x::Int32 = 0x0000_0")
             kw_default_notok("f(x::Int64 = 0")
             kw_default_notok("f(x::Int128 = 0")
         end

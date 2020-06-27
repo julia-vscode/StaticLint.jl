@@ -726,6 +726,8 @@ function check_kw_default(x::EXPR, server)
             seterror!(x[3], KwDefaultMismatch)
         elseif decl_T == getsymbolserver(server)[:Core][:Int] && rhskind !== CSTParser.Tokens.INTEGER
             seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && rhskind !== CSTParser.Tokens.INTEGER
+            seterror!(x[3], KwDefaultMismatch)
         elseif decl_T == getsymbolserver(server)[:Core][:Bool] && !(rhskind === CSTParser.Tokens.TRUE || rhskind === CSTParser.Tokens.FALSE)
             seterror!(x[3], KwDefaultMismatch)
         elseif decl_T == getsymbolserver(server)[:Core][:Char] && rhskind !== CSTParser.Tokens.CHAR
@@ -749,6 +751,8 @@ function check_kw_default(x::EXPR, server)
                         3lb < n <= 3ub || seterror!(x[3], KwDefaultMismatch)
                     elseif rhskind == CSTParser.Tokens.HEX_INT
                         2lb < n <= 2ub || seterror!(x[3], KwDefaultMismatch)
+                    else
+                        seterror!(x[3], KwDefaultMismatch)
                     end
                 end
             end
@@ -758,6 +762,7 @@ function check_kw_default(x::EXPR, server)
                     seterror!(x[3], KwDefaultMismatch)
                 end
             end
+
         end
     end
 end
