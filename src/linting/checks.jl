@@ -742,7 +742,7 @@ function check_kw_default(x::EXPR, server)
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
-                    n = count(x -> x != '_', rhsval) - 2
+                    n = count(x->x != '_', rhsval) - 2
                     ub = sizeof(T)
                     lb = ub ÷ 2
                     if rhskind == CSTParser.Tokens.BIN_INT
