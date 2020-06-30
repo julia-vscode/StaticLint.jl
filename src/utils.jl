@@ -175,7 +175,7 @@ function _is_in_basedir(path::String)
     return ""
 end
 
-isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && ((m[k] isa SymbolServer.SymStore && m[k].exported) || k in m.exportednames)
+isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && k in m.exportednames
 isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m)
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
