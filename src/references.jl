@@ -88,6 +88,12 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
         end
     elseif is_macroname(x1)
         x = x1[2]
+        if valof(x) == "." && m.name == VarRef(nothing, :Base)
+            # @. gets converted to @__dot__, probably during lowering.
+            setref!(x, m[:Broadcast][Symbol("@__dot__")])
+            return true
+        end
+
         mn = Symbol("@", valof(x))
         if isexportedby(mn, m)
             setref!(x, maybe_lookup(m[mn], state.server))
