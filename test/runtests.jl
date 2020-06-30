@@ -1352,4 +1352,10 @@ f(arg) = arg
             @test errorof(cst[2]) === StaticLint.ShouldBeInALoop
         end
     end
+
+    @testset "@." begin
+        let cst = parse_and_pass("@. a + b")
+            @test StaticLint.hasref(cst[1][1][2])
+        end
+    end
 end
