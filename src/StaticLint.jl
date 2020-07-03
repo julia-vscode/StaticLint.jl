@@ -3,10 +3,11 @@ module StaticLint
 include("exception_types.jl")
 
 using SymbolServer, CSTParser
-using CSTParser: EXPR, isidentifier, Import, Using, Export, Quote, Quotenode, x_Str, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment, isoperator, ispunctuation, iskw, defines_function
+using CSTParser: EXPR, isidentifier, setparent!, kindof, valof, headof, parentof, is_assignment, isoperator, ispunctuation, defines_function
 using SymbolServer: VarRef
 
-const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
+const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
+
 baremodule CoreTypes # Convenience
 using ..SymbolServer
 using Base: ==
@@ -65,7 +66,7 @@ function (state::Toplevel)(x::EXPR)
     resolve_ref(x, state)
     followinclude(x, state)
 
-    if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || typof(x) === CSTParser.Export
+    if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export
         push!(state.delayed, x)
     else
         traverse(x, state)
@@ -101,32 +102,25 @@ Iterates across the child nodes of an EXPR in execution order (rather than
 storage order) calling `state` on each node.
 """
 function traverse(x::EXPR, state)
-    if is_binary_call(x) && (CSTParser.is_assignment(x) && !CSTParser.is_func_call(x[1]) || typof(x[2]) === CSTParser.Tokens.DECLARATION) && !(CSTParser.is_assignment(x) && is_curly(x[1]))
-        state(x[3])
-        state(x[2])
-        state(x[1])
-    elseif is_where(x)
-        @inbounds for i = 3:length(x)
-            state(x[i])
+    if (is_assignment(x) && !(CSTParser.is_func_call(x.args[1] || CSTParser.is_curly(x.args[1])))) || CSTParser.is_declaration(x) || CSTParser.is_where(x)
+        state(x.args[2])
+        state(x.args[1])
+    elseif headof(x) === :generator
+        @inbounds for i = 2:length(x.args)
+            state(x.args[i])
         end
-        state(x[1])
-        state(x[2])
-    elseif typof(x) === CSTParser.Generator
-        @inbounds for i = 2:length(x)
-            state(x[i])
-        end
-        state(x[1])
-    elseif typof(x) === CSTParser.Flatten  && length(x) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
-        for i = 3:length(x[1][1])
-            state(x[1][1][i])
-        end
-        for i = 3:length(x[1])
-            state(x[1][i])
-        end
-        state(x[1][1][1])
-    elseif length(x) > 0
-        @inbounds for i in 1:length(x)
-            state(x[i])
+        state(x.args[1])
+    # elseif typof(x) === CSTParser.Flatten  && length(x) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
+    #     for i = 3:length(x[1][1])
+    #         state(x[1][1][i])
+    #     end
+    #     for i = 3:length(x[1])
+    #         state(x[1][i])
+    #     end
+    #     state(x[1][1][1])
+    elseif x.args !== nothing && length(x.args) > 0
+        @inbounds for i in 1:length(x.args)
+            state(x.args[i])
         end
     end
 end
@@ -142,7 +136,7 @@ If this is successful it traverses the code associated with the loaded file.
 
 """
 function followinclude(x, state::State)
-    if is_call(x) && length(x) > 0 && isidentifier(x[1]) && valofid(x[1]) == "include"
+    if CSTParser.is_call(x) && length(x.args) > 0 && isidentifier(x.args[1]) && valofid(x.args[1]) == "include"
         path = get_path(x, state)
         if isempty(path)
         elseif isabspath(path)

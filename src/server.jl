@@ -95,27 +95,26 @@ Usually called on the argument to `include` calls, and attempts to determine
 the path of the file to be included. Has limited support for `joinpath` calls.
 """
 function get_path(x::EXPR, state)
-    if is_call(x) && length(x) == 4
-        parg = x[3]
+    if CSTParser.is_call(x) && length(x.args) == 2
+        parg = x.args[2]
         if CSTParser.is_lit_string(parg)
             path = CSTParser.str_value(parg)
             path = normpath(path)
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif typof(parg) === x_Str && length(parg) == 2 && isidentifier(parg[1]) && valof(parg[1]) == "raw" && typof(parg[2]) === CSTParser.LITERAL && (kindof(parg[2]) == CSTParser.Tokens.STRING || kindof(parg[2]) == CSTParser.Tokens.TRIPLE_STRING)
-            path = normpath(CSTParser.str_value(parg[2]))
+        elseif headof(parg.args[1]) === :macroname && length(parg.args[1].args) == 2 && valof(parg.args[1].args[2]) == "raw_str" && CSTParser.is_lit_string(parg.args[3])
+            path = normpath(CSTParser.str_value(parg.args[3]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif is_call(parg) && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
+        elseif CSTParser.is_call(parg) && isidentifier(parg.args[1]) && valofid(parg.args[1]) == "joinpath"
             path_elements = String[]
 
-            for i = 2:length(parg)
+            for i = 2:length(parg.args)
                 arg = parg[i]
-                if ispunctuation(arg)
-                elseif _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
+                if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.is_lit_string(arg)
-                    push!(path_elements, string(CSTParser.str_value(arg)))
+                    push!(path_elements, string(valofid(arg)))
                 else
                     return ""
                 end
@@ -130,6 +129,4 @@ function get_path(x::EXPR, state)
     return ""
 end
 
-_is_macrocall_to_BaseDIR(arg) = is_macro_call(arg) && length(arg) == 1 &&
-    is_macroname(arg[1]) &&
-    valof(arg[1][2]) == "__DIR__"
+_is_macrocall_to_BaseDIR(arg) = headof(arg) === :macrocall && length(arg.args) == 2 && headof(arg.args[1]) === :macroname && length(arg.args[1].args) == 2 && valof(arg.args[1].args[2]) == "__DIR__"

@@ -1,8 +1,8 @@
 function resolve_import(x, state::State)
-    if typof(x) === Using || typof(x) === Import
-        u = typof(x) === Using
+    if headof(x) === :using || headof(x) === :import
+        u = headof(x) === :using
         i = 2
-        n = length(x)
+        n = length(x.args)
 
         root = par = getsymbolserver(state.server)
         while i <= n
