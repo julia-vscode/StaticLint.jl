@@ -63,14 +63,14 @@ Does this expression introduce a new scope?
 """
 function introduces_scope(x::EXPR, state)
     # TODO: remove unused 2nd argument.
-    if CSTParser.is_assignment(x) && (CSTParser.is_func_call(x.args[1]) || CSTParser.is_curly(x.args[1]))
+    if CSTParser.isassignment(x) && (CSTParser.is_func_call(x.args[1]) || CSTParser.iscurly(x.args[1]))
         return true
     elseif CSTParser.defines_anon_function(x)
         return true
-    elseif CSTParser.is_where(x) 
+    elseif CSTParser.iswhere(x) 
         # unless in func def signature
         return !_in_func_def(x)
-    elseif CSTParser.is_tuple(x) && CSTParser.hastrivia(x) && ispunctuation(x.trivia[1]) && is_assignment(x.args[1])
+    elseif CSTParser.istuple(x) && CSTParser.hastrivia(x) && ispunctuation(x.trivia[1]) && length(x.args) > 0 && isassignment(x.args[1])
         # named tuple
         return true
     elseif headof(x) === :function ||

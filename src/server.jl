@@ -95,25 +95,25 @@ Usually called on the argument to `include` calls, and attempts to determine
 the path of the file to be included. Has limited support for `joinpath` calls.
 """
 function get_path(x::EXPR, state)
-    if CSTParser.is_call(x) && length(x.args) == 2
+    if CSTParser.iscall(x) && length(x.args) == 2
         parg = x.args[2]
-        if CSTParser.is_lit_string(parg)
+        if CSTParser.isstringliteral(parg)
             path = CSTParser.str_value(parg)
             path = normpath(path)
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif headof(parg.args[1]) === :macroname && length(parg.args[1].args) == 2 && valof(parg.args[1].args[2]) == "raw_str" && CSTParser.is_lit_string(parg.args[3])
+        elseif headof(parg.args[1]) === :macroname && length(parg.args[1].args) == 2 && valof(parg.args[1].args[2]) == "raw_str" && CSTParser.isstringliteral(parg.args[3])
             path = normpath(CSTParser.str_value(parg.args[3]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif CSTParser.is_call(parg) && isidentifier(parg.args[1]) && valofid(parg.args[1]) == "joinpath"
+        elseif CSTParser.iscall(parg) && isidentifier(parg.args[1]) && valofid(parg.args[1]) == "joinpath"
             path_elements = String[]
 
             for i = 2:length(parg.args)
                 arg = parg[i]
                 if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
-                elseif CSTParser.is_lit_string(arg)
+                elseif CSTParser.isstringliteral(arg)
                     push!(path_elements, string(valofid(arg)))
                 else
                     return ""

@@ -7,8 +7,8 @@ function infer_type(binding::Binding, scope, state)
             binding.type = CoreTypes.Function
         elseif binding.val isa EXPR && CSTParser.defines_datatype(binding.val)
             binding.type = CoreTypes.DataType
-        elseif binding.val isa EXPR && is_binary_call(binding.val)
-            if kindof(binding.val[2]) === CSTParser.Tokens.EQ
+        elseif binding.val isa EXPR
+            if isassignment(binding.val)
                 if CSTParser.is_func_call(binding.val[1])
                     binding.type = CoreTypes.Function
                 elseif CSTParser.is_func_call(binding.val[3])
@@ -22,30 +22,28 @@ function infer_type(binding::Binding, scope, state)
                             end
                         end
                     end
-                elseif kindof(binding.val[3]) === CSTParser.Tokens.INTEGER
+                elseif headof(binding.val[3]) === :INTEGER
                     binding.type = CoreTypes.Int
-                elseif kindof(binding.val[3]) === CSTParser.Tokens.FLOAT
+                elseif headof(binding.val[3]) === :FLOAT
                     binding.type = CoreTypes.Float64
-                elseif CSTParser.is_lit_string(binding.val[3])
+                elseif CSTParser.isstringliteral(binding.val[3])
                     binding.type = CoreTypes.String
                 elseif isidentifier(binding.val[3]) && refof(binding.val[3]) isa Binding
                     binding.type = refof(binding.val[3]).type
                 end
-            elseif kindof(binding.val[2]) === CSTParser.Tokens.DECLARATION
-                t = binding.val[3]
+            elseif binding.val.head isa EXPR && valof(binding.val.head) === "::"
+                t = binding.val.args[2]
                 if isidentifier(t)
                     resolve_ref(t, scope, state)
                 end
-                if is_curly(t)
-                    t = t[1]
+                if iscurly(t)
+                    t = t.args[1]
                     resolve_ref(t, scope, state)
                 end
-                if is_getfield_w_quotenode(t)
+                if CSTParser.is_getfield_w_quotenode(t)
                     resolve_getfield(t, scope, state)
-                    t = t[3][1]
-
+                    t = t.args[2].args[1]
                 end
-
                 if refof(t) isa Binding
                     rb = get_root_method(refof(t), state.server)
                     if rb isa Binding && rb.type == CoreTypes.DataType

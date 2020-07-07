@@ -43,7 +43,7 @@ function mark_bindings!(x::EXPR, state)
     if !hasmeta(x)
         x.meta = Meta()
     end
-    if is_assignment(x)
+    if isassignment(x)
         if CSTParser.is_func_call(x.args[1])
             name = CSTParser.get_name(x)
             mark_binding!(x)
@@ -51,33 +51,27 @@ function mark_bindings!(x::EXPR, state)
             if isidentifier(name)
                 setref!(name, bindingof(x))
             end
-        elseif CSTParser.is_curly(x.args[1])
+        elseif CSTParser.iscurly(x.args[1])
             mark_typealias_bindings!(x)
         elseif !is_getfield(x.args[1])
             mark_binding!(x.args[1], x)
         end
-    elseif CSTParser.is_anon_func(x)
+    elseif CSTParser.defines_anon_function(x)
         mark_binding!(x.args[1], x)
-    elseif CSTParser.is_where(x)
-        if headof(x.args[2]) === :braces
-            for i = 1:length(x.args[2].args)
-                mark_binding!(x.args[2].args[i])
-            end
-        else
-            mark_binding!(x.args[2])
+    elseif CSTParser.iswhere(x)
+        for i = 2:length(x.args)
+            mark_binding!(x.args[i])
         end
     elseif headof(x) === :for
         markiterbinding!(x.args[2])
-    # elseif headof(x) === :generator
-    #     for i = 3:length(x)
-    #         ispunctuation(x[i]) && continue
-    #         markiterbinding!(x[i])
-    #     end
-    # elseif headof(x) === CSTParser.Filter
-    #     for i = 1:length(x) - 2
-    #         ispunctuation(x[i]) && continue
-    #         markiterbinding!(x[i])
-    #     end
+    elseif headof(x) === :generator 
+        for i = 2:length(x.args)
+            markiterbinding!(x.args[i])
+        end
+    elseif headof(x) === :filter
+        for i = 2:length(x.args)
+            markiterbinding!(x.args[i])
+        end
     # elseif headof(x) === CSTParser.Flatten && length(x.args) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
     #     for i = 3:length(x[1][1])
     #         ispunctuation(x[1][1][i]) && continue
@@ -88,9 +82,9 @@ function mark_bindings!(x::EXPR, state)
     #         markiterbinding!(x[1][i])
     #     end
     elseif headof(x) === :do
-        if is_tuple(x.args[2])
+        if istuple(x.args[2])
             for i in 1:length(x.args[2].args)
-                mark_binding!(x.args[2][i])
+                mark_binding!(x.args[2].args[i])
             end
         end
     elseif headof(x) === :function || headof(x) === :macro
@@ -119,34 +113,27 @@ function mark_bindings!(x::EXPR, state)
                 mark_binding!(x.args[3].args[i])
             end
         end
-    # elseif headof(x) === :local
-    #     if length(x) == 2
-    #         if isidentifier(x[2])
-    #             mark_binding!(x[2])
-    #             setref!(x[2], bindingof(x[2]))
-    #         elseif is_tuple(x[2])
-    #             for i = 1:length(x[2])
-    #                 if isidentifier(x[2][i])
-    #                     mark_binding!(x[2][i])
-    #                     setref!(x[2][i], bindingof(x[2][i]))
-    #                 end
-    #             end
-    #         end
-    #     end
+    elseif headof(x) === :local
+        for i = 1:length(x.args)
+            if isidentifier(x.args[i])
+                mark_binding!(x.args[i])
+                setref!(x.args[i], bindingof(x.args[i]))
+            end
+        end
     end
 end
 
 
 function mark_binding!(x::EXPR, val = x)
-    if CSTParser.is_kwarg(x) || (CSTParser.is_declaration(x) && CSTParser.is_tuple(x.args[1]))
+    if CSTParser.iskwarg(x) || (CSTParser.isdeclaration(x) && CSTParser.istuple(x.args[1]))
         mark_binding!(x.args[1], x)
-    elseif CSTParser.is_tuple(x) || CSTParser.is_parameters(x)
+    elseif CSTParser.istuple(x) || CSTParser.isparameters(x)
         for arg in x.args
             mark_binding!(arg, val)
         end
     elseif CSTParser.isbracketed(x)
         mark_binding!(CSTParser.rem_invis(x), val)
-    elseif !(CSTParser.is_unary_call(x) && headof(x.args[1]) === CSTParser.Tokens.DECLARATION)
+    elseif !(isunarysyntax(x) && valof(headof(x)) == "::")
         if !hasmeta(x)
             x.meta = Meta()
         end
@@ -158,7 +145,7 @@ end
 
 function mark_parameters(sig::EXPR)
     signame = CSTParser.rem_where_subtype(sig)
-    if CSTParser.is_curly(signame)
+    if CSTParser.iscurly(signame)
         for i = 2:length(signame.args)
             mark_binding!(signame.args[i])
         end
@@ -168,9 +155,9 @@ end
 
 
 function markiterbinding!(iter::EXPR)
-    if CSTParser.is_assignment(iter)
+    if CSTParser.isassignment(iter)
         mark_binding!(iter.args[1], iter)
-    elseif CSTParser.is_call(iter) && CSTParser.isoperator(iter.args[1]) && (valof(iter.args[1]) == "in" || valof(iter.args[1]) == "∈")
+    elseif CSTParser.iscall(iter) && CSTParser.isoperator(iter.args[1]) && (valof(iter.args[1]) == "in" || valof(iter.args[1]) == "∈")
         mark_binding!(iter.args[2], iter)
     elseif headof(iter) === :block
         for i = 1:length(iter.args)
@@ -181,13 +168,13 @@ function markiterbinding!(iter::EXPR)
 end
 
 function mark_sig_args!(x::EXPR)
-    if CSTParser.is_call(x) || CSTParser.is_tuple(x)
-        if CSTParser.isbracketed(x.args[1]) && CSTParser.is_declaration(x.args[1].args[1])
+    if CSTParser.iscall(x) || CSTParser.istuple(x)
+        if CSTParser.isbracketed(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
             mark_binding!(x.args[1].args[1])
         end
         for i = 2:length(x.args)
             a = x.args[i]
-            if CSTParser.is_parameters(a)
+            if CSTParser.isparameters(a)
                 for j = 1:length(a.args)
                     aa = a.args[j]
                     mark_binding!(aa)
@@ -196,20 +183,16 @@ function mark_sig_args!(x::EXPR)
                 mark_binding!(a)
             end
         end
-    elseif CSTParser.is_where(x)
-        if headof(x.args[2]) === :braces
-            for i in 1:length(x.args[2])
-                mark_binding!(x.args[2].args[i])
-            end
-        else
-            mark_binding!(x.args[2])
+    elseif CSTParser.iswhere(x)
+        for i in 1:length(x.args)
+            mark_binding!(x.args[i])
         end
         mark_sig_args!(x.args[1])
     elseif CSTParser.isbracketed(x)
         mark_sig_args!(x.args[1])
     elseif CSTParser.isdeclaration(x)
         mark_sig_args!(x.args[1])
-    elseif CSTParser.isbinarycall
+    elseif CSTParser.isbinarycall(x)
         mark_binding!(x.args[1])
         mark_binding!(x.args[2])
     elseif CSTParser.isunarycall(x) && length(x.args) == 2 && CSTParser.isbracketed(x.args[2])
@@ -231,14 +214,14 @@ function mark_typealias_bindings!(x::EXPR)
     return x
 end
 
-rem_wheres_decls(x) = (CSTParser.is_where(x) || CSTParser.isdeclaration(x)) ? x.args[1] : x
+rem_wheres_decls(x) = (CSTParser.iswhere(x) || CSTParser.isdeclaration(x)) ? x.args[1] : x
 
 function is_in_funcdef(x)
     if !(parentof(x) isa EXPR)
         return false
-    elseif CSTParser.is_where(parentof(x)) || CSTParser.isbracketed(parentof(x))
+    elseif CSTParser.iswhere(parentof(x)) || CSTParser.isbracketed(parentof(x))
         return is_in_funcdef(parentof(x))
-    elseif headof(parentof(x)) === :function || CSTParser.is_assignment(parentof(x))
+    elseif headof(parentof(x)) === :function || CSTParser.isassignment(parentof(x))
         return true
     else
         return false
@@ -250,7 +233,7 @@ function _in_func_def(x::EXPR)
     # check 1st arg contains a call (or op call)
     ex = rem_wheres_decls(x.args[1])
 
-    !(CSTParser.is_call(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && return false
+    !(CSTParser.iscall(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && return false
 
     # check parent is func def
     return is_in_funcdef(x)
@@ -263,7 +246,7 @@ function add_binding(x, state, scope = state.scope)
         b.next = nothing
         if isidentifier(b.name)
             name = valofid(b.name)
-        elseif CSTParser.is_macroname(b.name)
+        elseif CSTParser.ismacroname(b.name)
             name = string(Expr(b.name))
         elseif isoperator(b.name)
             name = string(Expr(b.name))

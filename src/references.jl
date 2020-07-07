@@ -19,7 +19,7 @@ end
 # (i.e. a function) it gets pushed to list (.urefs) to be resolved after we've
 # run over the entire top-level scope.
 function resolve_ref(x, state)
-    if !(parentof(x) isa EXPR && typof(parentof(x)) == CSTParser.Quotenode)
+    if !(parentof(x) isa EXPR && headof(parentof(x)) === :quotenode)
         resolved = resolve_ref(x, state.scope, state)
     end
 end
@@ -43,12 +43,12 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
 
     if is_getfield(x)
         return resolve_getfield(x, scope, state)
-    elseif is_kwarg(x)
+    elseif iskwarg(x)
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
-        if isidentifier(x[1])
-            setref!(x[1], Binding(noname, nothing, nothing, [], nothing, nothing))
-        elseif is_declaration(x[1]) && isidentifier(x[1][1])
-            setref!(x[1][1], Binding(noname, nothing, nothing, [], nothing, nothing))
+        if isidentifier(x.args[1])
+            setref!(x.args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
+        elseif isdeclaration(x.args[1]) && isidentifier(x.args[1].args[1])
+            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
         end
         return true
     elseif is_special_macro_term(x) || new_within_struct(x)
@@ -86,8 +86,8 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
             return true
         end
-    elseif is_macroname(x1)
-        x = x1[2]
+    elseif CSTParser.ismacroname(x1)
+        x = x1.args[2]
         if valof(x) == "." && m.name == VarRef(nothing, :Base)
             # @. gets converted to @__dot__, probably during lowering.
             setref!(x, m[:Broadcast][Symbol("@__dot__")])
@@ -99,13 +99,13 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, maybe_lookup(m[mn], state.server))
             return true
         end
-    elseif typof(x1) === x_Str
-        mac = x1
-        mn = Symbol("@", valof(mac[1]), "_str")
-        if isexportedby(mn, m)
-            setref!(mac[1], maybe_lookup(m[mn], state.server))
-            return true
-        end
+    # elseif headof(x1) === x_Str
+    #     mac = x1
+    #     mn = Symbol("@", valof(mac[1]), "_str")
+    #     if isexportedby(mn, m)
+    #         setref!(mac[1], maybe_lookup(m[mn], state.server))
+    #         return true
+    #     end
     end
     return false
 end
@@ -133,7 +133,7 @@ function scope_exports(scope::Scope, name::String, state)
     if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
         initial_pass_on_exports(scope.expr, state.server)
         for ref in b.refs
-            if ref isa EXPR && parentof(ref) isa EXPR && typof(parentof(ref)) === CSTParser.Export
+            if ref isa EXPR && parentof(ref) isa EXPR && headof(parentof(ref)) === :export
                 return true
             end
         end
@@ -149,8 +149,8 @@ whether a variable is made available by an import statement.
 """
 function initial_pass_on_exports(x::EXPR, server)
     # @assert CSTParser.defines_module(x)
-    for a in x[3] # module block expressions
-        if typof(a) === CSTParser.Export
+    for a in x.args[3] # module block expressions
+        if headof(a) === :export
             traverse(a, Delayed(retrieve_scope(a), server))
         end
     end
@@ -161,8 +161,8 @@ function resolve_ref(x::EXPR, m, state::State)::Bool
     return hasref(x)::Bool
 end
 
-rhs_of_getfield(x::EXPR) = is_getfield_w_quotenode(x) ? isquoted(x[3]) ? x[3][2] : x[3][1] : x
-lhs_of_getfield(x::EXPR) = rhs_of_getfield(x[1])
+rhs_of_getfield(x::EXPR) = CSTParser.is_getfield_w_quotenode(x) ? x.args[2].args[1] : x
+lhs_of_getfield(x::EXPR) = rhs_of_getfield(x.args[1])
 
 """
     resolve_getfield(x::EXPR, parent::Union{EXPR,Scope,ModuleStore,Binding}, state::State)::Bool
@@ -174,10 +174,10 @@ a field matching `x`.
 """
 function resolve_getfield(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
-    resolved = resolve_ref(x[1], scope, state)
-    if isidentifier(x[1])
-        lhs = x[1]
-    elseif is_getfield_w_quotenode(x[1])
+    resolved = resolve_ref(x.args[1], scope, state)
+    if isidentifier(x.args[1])
+        lhs = x.args[1]
+    elseif CSTParser.is_getfield_w_quotenode(x.args[1])
         lhs = lhs_of_getfield(x)
     else
         return resolved
@@ -234,7 +234,7 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(CSTParser.str_value(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
+    if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
         if tls.overloaded !== nothing  && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
@@ -243,8 +243,8 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
         end
         setref!(x, val)
         resolved = true
-    elseif is_macroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol("@", CSTParser.str_value(x[2])), m, getsymbolserver(state.server)), state.server)) !== nothing
-        setref!(x[2], val)
+    elseif CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol("@", valofid(x.args[2])), m, getsymbolserver(state.server)), state.server)) !== nothing
+        setref!(x.args[2], val)
         resolved = true
     end
     return resolved
@@ -264,7 +264,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     return resolved
 end
 
-resolvable_macroname(x::EXPR) = is_macroname(x) && isidentifier(x[2]) && refof(x[2]) === nothing
+resolvable_macroname(x::EXPR) = CSTParser.ismacroname(x) && isidentifier(x.args[2]) && refof(x.args[2]) === nothing
 
 """
     module_safety_trip(scope::Scope,  visited_scopes)
@@ -273,8 +273,8 @@ Checks whether the scope is a module and we've visited it before,
 otherwise adds the module to the list.
 """
 function module_safety_trip(scope::Scope,  visited_scopes)
-    if CSTParser.defines_module(scope.expr) && length(scope.expr) > 1 && isidentifier(scope.expr[2])
-        s_m_name = valofid(scope.expr[2])
+    if CSTParser.defines_module(scope.expr) && length(scope.expr.args) > 1 && isidentifier(scope.expr.args[2])
+        s_m_name = valofid(scope.expr.args[2])
         if s_m_name in visited_scopes
             return true
         else
@@ -290,11 +290,8 @@ function nameof_expr_to_resolve(x)
         x1 = x
         mn = valofid(x)
     elseif resolvable_macroname(x)
-        x1 = x[2]
+        x1 = x.args[2]
         mn = string("@", valofid(x1))
-    elseif typof(x) === x_Str && isidentifier(x[1])
-        x1 = x[1]
-        mn = string("@", valofid(x1), "_str")
     else
         return x, true
     end
@@ -307,7 +304,7 @@ end
 Returns the string value of an expression for which `isidentifier` is true, 
 i.e. handles NONSTDIDENTIFIERs.
 """
-valofid(x::EXPR) = typof(x) === CSTParser.IDENTIFIER ? valof(x) : valof(x[2])
+valofid(x::EXPR) = headof(x) === :IDENTIFIER ? valof(x) : valof(x.args[2])
 
 """
 new_within_struct(x::EXPR)
