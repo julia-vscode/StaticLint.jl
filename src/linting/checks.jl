@@ -150,12 +150,12 @@ function func_nargs(x::EXPR)
                 arg1 = arg.args[j]
                 if iskwarg(arg1)
                     push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
-                elseif CSTParser.is_splat(arg1)
+                elseif issplat(arg1)
                     kwsplat = true
                 end
             end
         elseif iskwarg(arg)
-            if CSTParser.is_splat(arg.args[1])
+            if issplat(arg.args[1])
                 maxargs = typemax(Int)
             else
                 maxargs !== typemax(Int) && (maxargs += 1)
@@ -441,7 +441,7 @@ function check_farg_unused(x::EXPR)
     if CSTParser.defines_function(x)
         sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
         if (headof(x) === :function && length(x.args) == 2 && x.args[2] isa EXPR && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1])) ||
-            (headof(x.args[2]) === :block && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1]))
+            (length(x.args) > 1 && headof(x.args[2]) === :block && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1]))
             return # Allow functions that return constants
         end
         if iscall(sig)
