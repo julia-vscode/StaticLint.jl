@@ -277,6 +277,7 @@ is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens
 is_where(x::EXPR) = typof(x) === CSTParser.WhereOpCall
 isnonstdid(x::EXPR) = typof(x) === CSTParser.NONSTDIDENTIFIER
 is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
+is_kwsplat(x::EXPR) = is_unary_call(x) && kindof(last(x)) === CSTParser.Tokens.DDDOT
 is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
 is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
 is_curly(x::EXPR) = typof(x) === CSTParser.Curly
