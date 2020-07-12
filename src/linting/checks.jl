@@ -152,17 +152,17 @@ function func_nargs(x::EXPR)
             for a in arg
                 if is_kwarg(a)
                     push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(a[1]))))
-                elseif is_kwsplat(a)
+                elseif is_splat(a)
                     kwsplat = true
                 end
             end
         elseif is_kwarg(arg)
-            if is_unary_call(arg[1]) && kindof(arg[1][2]) === CSTParser.Tokens.DDDOT
+            if is_splat(arg[1])
                 maxargs = typemax(Int)
             else
                 maxargs !== typemax(Int) && (maxargs += 1)
             end
-        elseif (is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
+        elseif is_splat(arg) ||
             (is_declaration(arg) &&
             ((isidentifier(arg[3]) && valofid(arg[3]) == "Vararg") ||
             (is_curly(arg[3]) && isidentifier(arg[3][1]) && valofid(arg[3][1]) == "Vararg")))
