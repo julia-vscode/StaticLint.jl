@@ -97,8 +97,8 @@ function check_all(x::EXPR, opts::LintOptions, server)
     check_use_of_literal(x)
     check_break_continue(x)
 
-    for i in 1:length(x)
-        check_all(x[i], opts, server)
+    for arg in x
+        check_all(arg, opts, server)
     end
 end
 
@@ -696,16 +696,35 @@ function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
 end
 
 function check_const_decl(x::EXPR)
-    if CSTParser.defines_datatype(x) && hasbinding(x) && bindingof(x).prev !== nothing
+    (bind_prev = get_bind_and_prev(x)) === nothing && return
+    bind, _ = bind_prev
+    if CSTParser.defines_datatype(x) || is_const(bind)
         seterror!(x, CannotDeclareConst)
     end
 end
 
 function check_const_redef(x::EXPR)
-    if hasbinding(x) && bindingof(x) isa Binding && bindingof(x).prev isa Binding && bindingof(x).prev.type === CoreTypes.DataType && bindingof(x).type !== CoreTypes.Function
+    (bind_prev = get_bind_and_prev(x)) === nothing && return
+    bind, prev = bind_prev
+    bind.type === CoreTypes.Function && return
+    if prev.type === CoreTypes.DataType || is_const(prev)
         seterror!(x, InvalidRedefofConst)
     end
 end
+
+function get_bind_and_prev(x::EXPR)
+    hasbinding(x) || return nothing
+    (bind = bindingof(x)) isa Binding || return nothing
+    (prev = bind.prev) isa Binding || return nothing
+    return bind, prev
+end
+
+is_const(x) = false
+is_const(b::Binding) = is_const(b.val)
+is_const(x::EXPR) = is_const_expr(parentof(x))
+
+is_const_expr(x) = false
+is_const_expr(x::EXPR) = length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.CONST
 
 
 """
@@ -798,6 +817,3 @@ function check_break_continue(x::EXPR)
         seterror!(x, ShouldBeInALoop)
     end
 end
-
-
-
