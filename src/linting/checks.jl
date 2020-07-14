@@ -229,24 +229,17 @@ end
 
 # compare_f_call(m_counts, call_counts) = true # fallback method
 
-function compare_f_call(
-    (ref_minargs, ref_maxargs, ref_kws, kwsplat),
-    (act_minargs, act_maxargs, act_kws),
-)
-    # check matching on positional arguments
-    if act_maxargs == typemax(Int)
-        act_minargs <= act_maxargs < ref_minargs && return false
+function compare_f_call(m_counts::Tuple{Int,Int,Array{Symbol},Bool}, call_counts::Tuple{Int,Int,Array{Symbol}})
+    if call_counts[2] == typemax(Int)
+        call_counts[1] <= call_counts[2] < m_counts[1] && return false
     else
-        !(ref_minargs <= act_minargs <= act_maxargs <= ref_maxargs) && return false
+        !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
     end
-
-    # check matching on keyword arguments
-    kwsplat && return true # splatted kw in method so accept any kw in call
-
-    # no splatted kw in method sig
-    length(act_kws) > length(ref_kws) && return false # call has more kws than method accepts
-    !all(kw in ref_kws for kw in act_kws) && return false # call supplies a kw that isn't defined in the method
-
+    if !m_counts[4] # no splatted kw in method sig
+        length(call_counts[3]) > length(m_counts[3]) && return false # call has more kws than method accepts
+        !all(kw in m_counts[3] for kw in call_counts[3]) && return false # call supplies a kw that isn't defined in the method
+    else # splatted kw in method so accept any kw in call
+    end
     return true
 end
 
