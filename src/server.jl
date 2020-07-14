@@ -102,7 +102,7 @@ function get_path(x::EXPR, state)
             path = normpath(path)
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif headof(parg.args[1]) === :macroname && length(parg.args[1].args) == 2 && valof(parg.args[1].args[2]) == "raw_str" && CSTParser.isstringliteral(parg.args[3])
+        elseif CSTParser.ismacroname(parg.args[1]) && length(parg.args[1]) && valof(parg.args[1]) == "@raw_str" && CSTParser.isstringliteral(parg.args[3])
             path = normpath(CSTParser.str_value(parg.args[3]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
@@ -129,4 +129,4 @@ function get_path(x::EXPR, state)
     return ""
 end
 
-_is_macrocall_to_BaseDIR(arg) = headof(arg) === :macrocall && length(arg.args) == 2 && headof(arg.args[1]) === :macroname && length(arg.args[1].args) == 2 && valof(arg.args[1].args[2]) == "__DIR__"
+_is_macrocall_to_BaseDIR(arg) = headof(arg) === :macrocall && length(arg.args) == 2 && valof(arg.args[1]) == "@__DIR__"

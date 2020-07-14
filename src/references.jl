@@ -77,18 +77,10 @@ end
 # Searches a module store for a binding/variable that matches the reference `x1`.
 function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x1) && return true
-    if isidentifier(x1)
+    
+    if CSTParser.ismacroname(x1)
         x = x1
-        if Symbol(valof(x)) == m.name.name
-            setref!(x, m)
-            return true
-        elseif isexportedby(x, m)
-            setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
-            return true
-        end
-    elseif CSTParser.ismacroname(x1)
-        x = x1.args[2]
-        if valof(x) == "." && m.name == VarRef(nothing, :Base)
+        if valof(x) == "@." && m.name == VarRef(nothing, :Base)
             # @. gets converted to @__dot__, probably during lowering.
             setref!(x, m[:Broadcast][Symbol("@__dot__")])
             return true
@@ -97,6 +89,15 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
         mn = Symbol("@", valof(x))
         if isexportedby(mn, m)
             setref!(x, maybe_lookup(m[mn], state.server))
+            return true
+        end
+    elseif isidentifier(x1)
+        x = x1
+        if Symbol(valof(x)) == m.name.name
+            setref!(x, m)
+            return true
+        elseif isexportedby(x, m)
+            setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
             return true
         end
     # elseif headof(x1) === x_Str
@@ -234,7 +235,10 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
+    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(valofid(x), m, getsymbolserver(state.server)), state.server)) !== nothing
+        setref!(x, val)
+        resolved = true
+    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
         if tls.overloaded !== nothing  && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
@@ -242,9 +246,6 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
             return true
         end
         setref!(x, val)
-        resolved = true
-    elseif CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol("@", valofid(x.args[2])), m, getsymbolserver(state.server)), state.server)) !== nothing
-        setref!(x.args[2], val)
         resolved = true
     end
     return resolved
@@ -264,7 +265,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     return resolved
 end
 
-resolvable_macroname(x::EXPR) = CSTParser.ismacroname(x) && isidentifier(x.args[2]) && refof(x.args[2]) === nothing
+resolvable_macroname(x::EXPR) = isidentifier(x) && CSTParser.ismacroname(x) && refof(x) === nothing
 
 """
     module_safety_trip(scope::Scope,  visited_scopes)
@@ -287,15 +288,11 @@ end
 
 function nameof_expr_to_resolve(x)
     if isidentifier(x)
-        x1 = x
         mn = valofid(x)
-    elseif resolvable_macroname(x)
-        x1 = x.args[2]
-        mn = string("@", valofid(x1))
     else
         return x, true
     end
-    x1, mn
+    x, mn
 end
 
 """

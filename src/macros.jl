@@ -54,7 +54,7 @@ function handle_macro(x::EXPR, state)
             if length(x.args) == 3 && isidentifier(x.args[3])
                 mark_binding!(x.args[3])
             end
-        elseif length(x.args[1].args) == 2 && isidentifier(x.args[1].args[2]) && valofid(x.args[1].args[2]) == "nospecialize"
+        elseif valofid(x.args[1]) == "@nospecialize"
             for i = 2:length(x.args)
                 if bindingof(x.args[i]) !== nothing
                     break
@@ -121,7 +121,7 @@ end
 function _points_to_Base_macro(x::EXPR, name, state)
     CSTParser.is_getfield_w_quotenode(x) && return _points_to_Base_macro(x.args[2].args[1], name, state)
     targetmacro =  maybe_lookup(getsymbolserver(state.server)[:Base][Symbol("@", name)], state.server)
-    length(x.args) == 2 && isidentifier(x.args[2]) && Symbol(valofid(x.args[2])) == name && (ref = refof(x.args[2])) !== nothing &&
+    isidentifier(x) && Symbol(valofid(x)) == name && (ref = refof(x)) !== nothing &&
     (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
 end
 

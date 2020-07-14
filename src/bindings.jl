@@ -246,7 +246,9 @@ function add_binding(x, state, scope = state.scope)
         b.next = nothing
         if isidentifier(b.name)
             name = valofid(b.name)
-        elseif CSTParser.ismacroname(b.name)
+        elseif CSTParser.ismacroname(b.name) # must be getfield
+            # name = CSTParser.rhs_getfield(b.name)
+            @info 1
             name = string(Expr(b.name))
         elseif isoperator(b.name)
             name = string(Expr(b.name))

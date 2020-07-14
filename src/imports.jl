@@ -13,11 +13,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal = 
             end
         elseif isidentifier(arg) || (i == n && (CSTParser.ismacroname(arg) || isoperator(arg)))
             root = hasref(arg) ? refof(arg) : _get_field(root, arg, state)
-            if CSTParser.ismacroname(arg)
-                setref!(arg.args[2], root)
-            else
-                setref!(arg, root)
-            end
+            setref!(arg, root)
             if i == n
                 markfinal && _mark_import_arg(arg, root, state, usinged)
                 return refof(arg)
