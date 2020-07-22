@@ -412,7 +412,7 @@ function is_never_datatype(b::Binding, server, visited = Binding[])
     if b in visited
         return false
     else
-        push!(b, visited)
+        push!(visited, b)
     end
     if b.val isa Binding
         return is_never_datatype(b.val, server, visited)
