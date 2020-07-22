@@ -403,20 +403,25 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server)
+is_never_datatype(b, server, visited = nothing) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server, visited = nothing) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server, visited = nothing)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server)
+function is_never_datatype(b::Binding, server, visited = Binding[])
+    if b in visited
+        return false
+    else
+        push!(visited, b)
+    end
     if b.val isa Binding
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, server, visited)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
     elseif b.type == CoreTypes.DataType
         return false
     elseif b.type == CoreTypes.Function && b.prev !== nothing
-        return is_never_datatype(b.prev, server)
+        return is_never_datatype(b.prev, server, visited)
     elseif b.type !== nothing
         return true
     end
