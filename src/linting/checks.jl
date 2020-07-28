@@ -153,7 +153,7 @@ function func_nargs(x::EXPR)
                 arg1 = arg[j]
                 if is_kwarg(arg1)
                     push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1[1]))))
-                elseif is_binary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
+                elseif is_unary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
                     kwsplat = true
                 end
             end
