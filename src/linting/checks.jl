@@ -75,7 +75,7 @@ function struct_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = typof(x) === CSTParser.Mutable ? x[4] : x[3]
     length(args) == 0 && return 0, typemax(Int), kws, kwsplat
-    inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
+    inner_constructor = findfirst(a -> CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args[inner_constructor])
     else
@@ -239,7 +239,7 @@ function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
         func_ref = func_ref.val
     end
     if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
-        return iterate_over_ss_methods(func_ref, tls, server, m->compare_f_call(func_nargs(m), call_counts))
+        return iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
     elseif func_ref isa Binding
         if func_ref.type == CoreTypes.Function && func_ref.val isa EXPR
             m_counts = func_nargs(func_ref.val)
@@ -404,7 +404,10 @@ function check_farg_unused(x::EXPR)
         end
         if is_call(sig)
             for i = 2:length(sig)
-                if hasbinding(sig[i])
+                if is_macro_call(sig[i]) && sig[i].args[1].args[2].val == "nospecialize"
+                    # or check for `length(sig[i].args) == 4` here to treat all 1-arg macro calls like this
+                    arg = sig[i].args[3]
+                elseif hasbinding(sig[i])
                     arg = sig[i]
                 elseif is_kwarg(sig[i]) && hasbinding(sig[i][1])
                     arg = sig[i][1]
@@ -479,7 +482,7 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
             # collect lint hints
