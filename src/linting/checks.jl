@@ -18,7 +18,11 @@ TypePiracy,
 UnusedFunctionArgument,
 CannotDeclareConst,
 InvalidRedefofConst,
-NotEqDef)
+NotEqDef,
+KwDefaultMismatch,
+InappropriateUseOfLiteral,
+ShouldBeInALoop)
+
 
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
@@ -39,7 +43,11 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnusedFunctionArgument => "An argument is included in a function signature but not used within its body.",
     CannotDeclareConst => "Cannot declare constant; it already has a value.",
     InvalidRedefofConst => "Invalid redefinition of constant.",
-    NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.")
+    NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.",
+    KwDefaultMismatch => "The default value provided does not match the specified argument type.",
+    InappropriateUseOfLiteral => "You really shouldn't be using a literal value here.",
+    ShouldBeInALoop => "`break` or `continue` used outside loop."
+    )
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)
@@ -49,6 +57,49 @@ function seterror!(x::EXPR, e)
         x.meta = Meta()
     end
     x.meta.error = e
+end
+
+const default_options = (true, true, true, true, true, true, true, true, true, true)
+
+struct LintOptions
+    call::Bool
+    iter::Bool
+    nothingcomp::Bool
+    constif::Bool
+    lazy::Bool
+    datadecl::Bool
+    typeparam::Bool
+    modname::Bool
+    pirates::Bool
+    useoffuncargs::Bool
+end
+LintOptions() = LintOptions(default_options...)
+LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
+
+LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
+    LintOptions(something.(options, default_options)...)
+
+function check_all(x::EXPR, opts::LintOptions, server)
+    # Do checks
+    opts.call && check_call(x, server)
+    opts.iter && check_loop_iter(x, server)
+    opts.nothingcomp && check_nothing_equality(x, server)
+    opts.constif && check_if_conds(x)
+    opts.lazy && check_lazy(x)
+    opts.datadecl && check_datatype_decl(x, server)
+    opts.typeparam && check_typeparams(x)
+    opts.modname && check_modulename(x)
+    opts.pirates && check_for_pirates(x)
+    opts.useoffuncargs && check_farg_unused(x)
+    check_const_decl(x)
+    check_const_redef(x)
+    check_kw_default(x, server)
+    check_use_of_literal(x)
+    check_break_continue(x)
+
+    for i in 1:length(x)
+        check_all(x[i], opts, server)
+    end
 end
 
 
@@ -102,7 +153,7 @@ function func_nargs(x::EXPR)
                 arg1 = arg[j]
                 if is_kwarg(arg1)
                     push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1[1]))))
-                elseif is_binary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
+                elseif is_unary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
                     kwsplat = true
                 end
             end
@@ -352,20 +403,25 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server)
+is_never_datatype(b, server, visited = nothing) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server, visited = nothing) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server, visited = nothing)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server)
+function is_never_datatype(b::Binding, server, visited = Binding[])
+    if b in visited
+        return false
+    else
+        push!(visited, b)
+    end
     if b.val isa Binding
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, server, visited)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
     elseif b.type == CoreTypes.DataType
         return false
     elseif b.type == CoreTypes.Function && b.prev !== nothing
-        return is_never_datatype(b.prev, server)
+        return is_never_datatype(b.prev, server, visited)
     elseif b.type !== nothing
         return true
     end
@@ -424,44 +480,7 @@ function check_farg_unused(x::EXPR)
     end
 end
 
-const default_options = (true, true, true, true, true, true, true, true, true, true)
 
-struct LintOptions
-    call::Bool
-    iter::Bool
-    nothingcomp::Bool
-    constif::Bool
-    lazy::Bool
-    datadecl::Bool
-    typeparam::Bool
-    modname::Bool
-    pirates::Bool
-    useoffuncargs::Bool
-end
-LintOptions() = LintOptions(default_options...)
-LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
-
-LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
-    LintOptions(something.(options, default_options)...)
-
-function check_all(x::EXPR, opts::LintOptions, server)
-    # Do checks
-    opts.call && check_call(x, server)
-    opts.iter && check_loop_iter(x, server)
-    opts.nothingcomp && check_nothing_equality(x, server)
-    opts.constif && check_if_conds(x)
-    opts.lazy && check_lazy(x)
-    opts.datadecl && check_datatype_decl(x, server)
-    opts.typeparam && check_typeparams(x)
-    opts.modname && check_modulename(x)
-    opts.pirates && check_for_pirates(x)
-    opts.useoffuncargs && check_farg_unused(x)
-    check_const_decl(x)
-    check_const_redef(x)
-    for i in 1:length(x)
-        check_all(x[i], opts, server)
-    end
-end
 
 
 """
@@ -693,5 +712,97 @@ end
 function check_const_redef(x::EXPR)
     if hasbinding(x) && bindingof(x) isa Binding && bindingof(x).prev isa Binding && bindingof(x).prev.type === CoreTypes.DataType && bindingof(x).type !== CoreTypes.Function
         seterror!(x, InvalidRedefofConst)
+    end
+end
+
+
+"""
+    check_kw_default(x::EXPR, server)
+
+Check that the default value matches the type for keyword arguments. Following types are
+checked: `String, Symbol, Int, Char, Bool, Float32, Float64, UInt8, UInt16, UInt32,
+UInt64, UInt128`.
+"""
+function check_kw_default(x::EXPR, server)
+    if typof(x) == CSTParser.Kw && is_declaration(x[1]) && typof(x[3]) === CSTParser.LITERAL && hasref(x[1][3])
+        decl_T = refof(x[1][3])
+        rhskind = kindof(x[3])
+        rhsval = x[3].val
+        if decl_T == getsymbolserver(server)[:Core][:String] && !(rhskind === CSTParser.Tokens.STRING || rhskind === CSTParser.Tokens.TRIPLE_STRING)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Symbol] && rhskind !== CSTParser.Tokens.IDENTIFIER
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Int] && rhskind !== CSTParser.Tokens.INTEGER
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && rhskind !== CSTParser.Tokens.INTEGER
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Bool] && !(rhskind === CSTParser.Tokens.TRUE || rhskind === CSTParser.Tokens.FALSE)
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Char] && rhskind !== CSTParser.Tokens.CHAR
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Float64] && rhskind !== CSTParser.Tokens.FLOAT
+            seterror!(x[3], KwDefaultMismatch)
+        elseif decl_T == getsymbolserver(server)[:Core][:Float32] && !(rhskind === CSTParser.Tokens.FLOAT && occursin("f", rhsval))
+            seterror!(x[3], KwDefaultMismatch)
+        else
+            for T in (UInt8, UInt16, UInt32, UInt64, UInt128)
+                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                    # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
+                    # between upper and lower literal boundaries for `T` where the boundaries
+                    # depend on the type of literal (binary, octal, hex)
+                    n = count(x->x != '_', rhsval) - 2
+                    ub = sizeof(T)
+                    lb = ub ÷ 2
+                    if rhskind == CSTParser.Tokens.BIN_INT
+                        8lb < n <= 8ub || seterror!(x[3], KwDefaultMismatch)
+                    elseif rhskind == CSTParser.Tokens.OCT_INT
+                        3lb < n <= 3ub || seterror!(x[3], KwDefaultMismatch)
+                    elseif rhskind == CSTParser.Tokens.HEX_INT
+                        2lb < n <= 2ub || seterror!(x[3], KwDefaultMismatch)
+                    else
+                        seterror!(x[3], KwDefaultMismatch)
+                    end
+                end
+            end
+            # signed integers of non native size can't be declared as literal
+            for T in (Int8, Int16, Sys.WORD_SIZE == 64 ? Int32 : Int64, Int128)
+                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                    seterror!(x[3], KwDefaultMismatch)
+                end
+            end
+
+        end
+    end
+end
+
+function check_use_of_literal(x::EXPR)
+    if CSTParser.defines_module(x) && length(x.args) > 1 && isbadliteral(x.args[2])
+        seterror!(x.args[2], InappropriateUseOfLiteral)
+    elseif CSTParser.defines_abstract(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif CSTParser.defines_primitive(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif CSTParser.defines_struct(x)
+        if CSTParser.defines_mutable(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+            seterror!(x.args[3], InappropriateUseOfLiteral)
+        elseif length(x.args) > 1 && isbadliteral(x.args[2])
+            seterror!(x.args[2], InappropriateUseOfLiteral)
+        end
+    elseif CSTParser.defines_primitive(x) && length(x.args) > 2 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif (is_assignment(x) || is_kwarg(x)) && isbadliteral(x.args[1])
+        seterror!(x.args[1], InappropriateUseOfLiteral)
+    elseif is_declaration(x) && length(x.args) == 3 && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    elseif is_binary_call(x, CSTParser.Tokens.ISA) && isbadliteral(x.args[3])
+        seterror!(x.args[3], InappropriateUseOfLiteral)
+    end
+end
+
+isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)
+
+function check_break_continue(x::EXPR)
+    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x->typof(x) in (CSTParser.For, CSTParser.While))
+        seterror!(x, ShouldBeInALoop)
     end
 end

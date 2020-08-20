@@ -1217,4 +1217,145 @@ f(arg) = arg
             @test refof(cst[1][3][3][3][2]) !== nothing
         end
     end
+
+
+    @testset "check kw default definition" begin
+        function kw_default_ok(s)
+            cst = parse_and_pass(s)
+            StaticLint.check_kw_default(cst[1][3], server)
+            @test errorof(cst[1][3][3]) === nothing
+        end
+        function kw_default_notok(s)
+            cst = parse_and_pass(s)
+            StaticLint.check_kw_default(cst[1][3], server)
+            @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+        end
+
+        kw_default_ok("f(x::Float64 = 0.1)")
+        kw_default_ok("f(x::Float64 = f())")
+        kw_default_ok("f(x::Float32 = f())")
+        kw_default_ok("f(x::Float32 = 3f0")
+        kw_default_ok("f(x::Float32 = 3_0f0")
+        kw_default_ok("f(x::Float32 = 0f00")
+        kw_default_ok("f(x::Float32 = -0f02")
+        kw_default_ok("f(x::Float32 = Inf32")
+        kw_default_ok("f(x::Float32 = 30f3")
+        kw_default_ok("f(x::String = \"1\")")
+        kw_default_ok("f(x::String = f())")
+        kw_default_ok("f(x::Symbol = :x")
+        kw_default_ok("f(x::Symbol = f()")
+        kw_default_ok("f(x::Char = 'a'")
+        kw_default_ok("f(x::Bool = true")
+        kw_default_ok("f(x::Bool = false")
+        kw_default_ok("f(x::UInt8 = 0b0100_0010")
+        kw_default_ok("f(x::UInt16 = 0b0000_0000_0000")
+        kw_default_ok("f(x::UInt32 = 0b00000000000000000000000000000000")
+        kw_default_ok("f(x::UInt8 = 0o000")
+        kw_default_ok("f(x::UInt16 = 0o0_0_0_0_0_0")
+        kw_default_ok("f(x::UInt32 = 0o000000000")
+        kw_default_ok("f(x::UInt64 = 0o000_000_000_000_0")
+        kw_default_ok("f(x::UInt8 = 0x0")
+        kw_default_ok("f(x::UInt16 = 0x0000")
+        kw_default_ok("f(x::UInt32 = 0x00000")
+        kw_default_ok("f(x::UInt32 = -0x00000")
+        kw_default_ok("f(x::UInt64 = 0x0000_0000_0")
+        kw_default_ok("f(x::UInt128 = 0x00000000_00000000_00000000_00000000")
+        kw_default_ok("f(x::UInt128 = 0x00000000_00000000_00000000_00000000")
+        if Sys.WORD_SIZE == 64
+            kw_default_ok("f(x::Int64 = 0")
+            kw_default_ok("f(x::UInt = 0x0000_0000_0")
+        else
+            kw_default_ok("f(x::Int32 = 0")
+            kw_default_ok("f(x::UInt = 0x0000_0")
+        end
+        kw_default_ok("f(x::Int = 1)")
+        kw_default_ok("f(x::Int = f())")
+        kw_default_ok("f(x::Int8 = Int8(0)")
+        kw_default_ok("f(x::Int8 = convert(Int8,0)")
+
+        if Sys.WORD_SIZE == 64
+            kw_default_notok("f(x::Int8 = 0")
+            kw_default_notok("f(x::Int16 = 0")
+            kw_default_notok("f(x::Int32 = 0")
+            kw_default_notok("f(x::Int64 = 0x0000_0000_0")
+            kw_default_notok("f(x::Int128 = 0")
+        else
+            kw_default_notok("f(x::Int8 = 0")
+            kw_default_notok("f(x::Int16 = 0")
+            kw_default_notok("f(x::Int32 = 0x0000_0")
+            kw_default_notok("f(x::Int64 = 0")
+            kw_default_notok("f(x::Int128 = 0")
+        end
+        kw_default_notok("f(x::Int8 = 0000_0000")
+        kw_default_notok("f(x::Int16 = 0000_0000")
+        kw_default_notok("f(x::Int128 = 0000_0000")
+        kw_default_notok("f(x::Float64 = 1)")
+        kw_default_notok("f(x::Float32 = 3.4")
+        kw_default_notok("f(x::Float32 = -23.")
+        kw_default_notok("f(x::Int = 0.1)")
+        kw_default_notok("f(x::String = 0.1)")
+        kw_default_notok("f(x::Symbol = \"a\"")
+        kw_default_notok("f(x::Char = \"a\"")
+        kw_default_notok("f(x::Bool = 1")
+        kw_default_notok("f(x::Bool = 0x01")
+        kw_default_notok("f(x::UInt8 = 0b000000000")
+        kw_default_notok("f(x::UInt16 = 0b0000_0000_0000_0000_0")
+        kw_default_notok("f(x::UInt32 = 0b0")
+        kw_default_notok("f(x::UInt64 = 0b0_0")
+        kw_default_notok("f(x::UInt128 = 0b0")
+        kw_default_notok("f(x::UInt8 = 0o0000")
+        kw_default_notok("f(x::UInt16 = 0o0")
+        kw_default_notok("f(x::UInt32 = 0o00000000000000")
+        kw_default_notok("f(x::UInt64 = 0o0_0")
+        kw_default_notok("f(x::UInt128 = 0o00")
+        kw_default_notok("f(x::UInt8 = 0x000")
+        kw_default_notok("f(x::UInt16 = 0x00000")
+        kw_default_notok("f(x::UInt32 = 0x0000_00_000")
+        kw_default_notok("f(x::UInt64 = 0x000_0_0")
+        kw_default_notok("f(x::UInt128 = 0x000000")
+    end
+
+    @testset "check_use_of_literal" begin
+        let cst = parse_and_pass("""
+            module \"a\" end
+            abstract type \"\"\"123\"\"\" end
+            primitive type 1 8 end
+            struct 1.0 end
+            mutable struct 'a' end
+            1 = 1
+            f(true = 1)
+            123::123
+            123 isa false
+            """)
+            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+            @test errorof(cst[1][2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[2][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[3][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[4][2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[5][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[6][1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[7][3][1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[8][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst[9][3]) === StaticLint.InappropriateUseOfLiteral
+        end
+    end
+
+    @testset "check_break_continue" begin
+        let cst = parse_and_pass("""
+            for i = 1:10
+                continue
+            end
+            break
+            """)
+            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+            @test errorof(cst[1][3][1]) === nothing
+            @test errorof(cst[2]) === StaticLint.ShouldBeInALoop
+        end
+    end
+
+    @testset "@." begin
+        let cst = parse_and_pass("@. a + b")
+            @test StaticLint.hasref(cst[1][1][2])
+        end
+    end
 end
