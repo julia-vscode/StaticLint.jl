@@ -226,7 +226,7 @@ function interpret_eval(x::EXPR, state)
     end
 end
 
-function collect_expr_with_bindings(x, bound_exprs = EXPR[])
+function collect_expr_with_bindings(x, bound_exprs=EXPR[])
     if hasbinding(x)
         push!(bound_exprs, x)
         # Assuming here that if an expression has a binding we don't want anything bound to chlid nodes.
