@@ -34,9 +34,9 @@ Meta() = Meta(nothing, nothing, nothing, nothing)
 
 function Base.show(io::IO, m::Meta)
     m.binding !== nothing && show(io, m.binding)
-    m.ref !== nothing && printstyled(io, " * ", color = :red)
-    m.scope !== nothing && printstyled(io, " new scope", color = :green)
-    m.error !== nothing && printstyled(io, " lint ", color = :red)
+    m.ref !== nothing && printstyled(io, " * ", color=:red)
+    m.scope !== nothing && printstyled(io, " new scope", color=:green)
+    m.error !== nothing && printstyled(io, " lint ", color=:red)
 end
 hasmeta(x::EXPR) = x.meta isa Meta
 hasbinding(m::Meta) = m.binding isa Binding

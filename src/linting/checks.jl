@@ -126,7 +126,7 @@ function struct_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = typof(x) === CSTParser.Mutable ? x[4] : x[3]
     length(args) == 0 && return 0, typemax(Int), kws, kwsplat
-    inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
+    inner_constructor = findfirst(a -> CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args[inner_constructor])
     else
@@ -286,7 +286,7 @@ function check_call(x, server)
     end
 end
 
-function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
+function sig_match_any(func_ref, x, call_counts, tls, server, visited=[])
     if func_ref in visited
         return true
     else
@@ -296,7 +296,7 @@ function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
         func_ref = func_ref.val
     end
     if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
-        return iterate_over_ss_methods(func_ref, tls, server, m->compare_f_call(func_nargs(m), call_counts))
+        return iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
     elseif func_ref isa Binding
         if func_ref.type == CoreTypes.Function && func_ref.val isa EXPR
             m_counts = func_nargs(func_ref.val)
@@ -409,20 +409,25 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server)
+is_never_datatype(b, server, visited=nothing) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server, visited=nothing) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server, visited=nothing)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server)
+function is_never_datatype(b::Binding, server, visited=Binding[])
+    if b in visited
+        return false
+    else
+        push!(visited, b)
+    end
     if b.val isa Binding
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, server, visited)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
     elseif b.type == CoreTypes.DataType
         return false
     elseif b.type == CoreTypes.Function && b.prev !== nothing
-        return is_never_datatype(b.prev, server)
+        return is_never_datatype(b.prev, server, visited)
     elseif b.type !== nothing
         return true
     end
@@ -487,7 +492,7 @@ collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tupl
 Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
 identifiers are marked, the :all option will mark identifiers used in getfield calls."
 """
-function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -499,7 +504,7 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> is_call(x) && isidentifier(x[1]) && valof(x[1]) == "ccall"))
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
             # collect lint hints
@@ -672,8 +677,8 @@ function refers_to_nonimported_type(arg::EXPR)
     return false
 end
 
-overwrites_imported_function(b, visited_bindings = Binding[]) = false
-function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
+overwrites_imported_function(b, visited_bindings=Binding[]) = false
+function overwrites_imported_function(b::Binding, visited_bindings=Binding[])
     if b in visited_bindings
         return false
     else
@@ -748,7 +753,7 @@ function check_kw_default(x::EXPR, server)
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
-                    n = count(x->x != '_', rhsval) - 2
+                    n = count(x -> x != '_', rhsval) - 2
                     ub = sizeof(T)
                     lb = ub ÷ 2
                     if rhskind == CSTParser.Tokens.BIN_INT
@@ -800,7 +805,7 @@ end
 isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)
 
 function check_break_continue(x::EXPR)
-    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x->typof(x) in (CSTParser.For, CSTParser.While))
+    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x -> typof(x) in (CSTParser.For, CSTParser.While))
         seterror!(x, ShouldBeInALoop)
     end
 end
