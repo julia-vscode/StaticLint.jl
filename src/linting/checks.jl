@@ -460,11 +460,12 @@ function check_farg_unused(x::EXPR)
         end
         if is_call(sig)
             for i = 2:length(sig)
-                if is_macro_call(sig[i]) && sig[i].args[1].args[2].val == "nospecialize"
-                    # or check for `length(sig[i].args) == 4` here to treat all 1-arg macro calls like this
-                    arg = sig[i].args[3]
-                elseif hasbinding(sig[i])
-                    arg = sig[i]
+                if hasbinding(sig[i])
+                    if is_macro_call(sig[i]) && length(sig[i].args) == 4 && sig[i].args[1].args[2].val == "nospecialize"
+                        arg = sig[i].args[3]
+                    else
+                        arg = sig[i]
+                    end
                 elseif is_kwarg(sig[i]) && hasbinding(sig[i][1])
                     arg = sig[i][1]
                 else
@@ -750,7 +751,7 @@ function check_kw_default(x::EXPR, server)
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
-                    n = count(x->x != '_', rhsval) - 2
+                    n = count(x -> x != '_', rhsval) - 2
                     ub = sizeof(T)
                     lb = ub ÷ 2
                     if rhskind == CSTParser.Tokens.BIN_INT
@@ -802,7 +803,7 @@ end
 isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (kindof(x) === CSTParser.Tokens.STRING || kindof(x) === CSTParser.Tokens.TRIPLE_STRING || kindof(x) === CSTParser.Tokens.INTEGER || kindof(x) === CSTParser.Tokens.FLOAT || kindof(x) === CSTParser.Tokens.CHAR || kindof(x) === CSTParser.Tokens.TRUE || kindof(x) === CSTParser.Tokens.FALSE)
 
 function check_break_continue(x::EXPR)
-    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x->typof(x) in (CSTParser.For, CSTParser.While))
+    if iskw(x) && (kindof(x) === CSTParser.Tokens.CONTINUE || kindof(x) === CSTParser.Tokens.BREAK) && !is_in_fexpr(x, x -> typof(x) in (CSTParser.For, CSTParser.While))
         seterror!(x, ShouldBeInALoop)
     end
 end
