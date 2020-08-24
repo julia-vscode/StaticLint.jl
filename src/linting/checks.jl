@@ -280,7 +280,7 @@ function check_call(x, server)
     end
 end
 
-function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
+function sig_match_any(func_ref, x, call_counts, tls, server, visited=[])
     if func_ref in visited
         return true
     else
@@ -403,12 +403,12 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server, visited = nothing) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server, visited = nothing) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server, visited = nothing)
+is_never_datatype(b, server, visited=nothing) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server, visited=nothing) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server, visited=nothing)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server, visited = Binding[])
+function is_never_datatype(b::Binding, server, visited=Binding[])
     if b in visited
         return false
     else
@@ -490,7 +490,7 @@ collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tupl
 Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
 identifiers are marked, the :all option will mark identifiers used in getfield calls."
 """
-function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -675,8 +675,8 @@ function refers_to_nonimported_type(arg::EXPR)
     return false
 end
 
-overwrites_imported_function(b, visited_bindings = Binding[]) = false
-function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
+overwrites_imported_function(b, visited_bindings=Binding[]) = false
+function overwrites_imported_function(b::Binding, visited_bindings=Binding[])
     if b in visited_bindings
         return false
     else

@@ -4,7 +4,7 @@ using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
 server = StaticLint.FileServer();
 
-function get_ids(x, ids = [])
+function get_ids(x, ids=[])
     if StaticLint.typof(x) == CSTParser.IDENTIFIER
         push!(ids, x)
     else
