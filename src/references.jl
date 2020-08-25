@@ -254,7 +254,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     hasref(x) && return true
     resolved = false
     if isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
-        fi = findfirst(f->Symbol(valof(x)) == f, parent.fieldnames)
+        fi = findfirst(f -> Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
         val = SymbolServer._lookup(ft, getsymbolserver(state.server), true)
         # TODO: Need to handle the case where we get back a FakeUnion, etc.
