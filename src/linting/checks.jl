@@ -467,7 +467,11 @@ function check_farg_unused(x::EXPR)
         if is_call(sig)
             for i = 2:length(sig)
                 if hasbinding(sig[i])
-                    arg = sig[i]
+                    if is_macro_call(sig[i]) && length(sig[i].args) == 4 && sig[i].args[1].args[2].val == "nospecialize"
+                        arg = sig[i].args[3]
+                    else
+                        arg = sig[i]
+                    end
                 elseif is_kwarg(sig[i]) && hasbinding(sig[i][1])
                     arg = sig[i][1]
                 else
