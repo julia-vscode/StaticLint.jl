@@ -179,6 +179,8 @@ function mark_sig_args!(x::EXPR)
                     aa = a.args[j]
                     mark_binding!(aa)
                 end
+            elseif CSTParser.ismacrocall(a) && CSTParser.isidentifier(a.args[1]) && valofid(a.args[1]) == "@nospecialize" && length(a.args) == 3
+                mark_binding!(a.args[3])
             else
                 mark_binding!(a)
             end
@@ -248,7 +250,6 @@ function add_binding(x, state, scope = state.scope)
             name = valofid(b.name)
         elseif CSTParser.ismacroname(b.name) # must be getfield
             # name = CSTParser.rhs_getfield(b.name)
-            @info 1
             name = string(Expr(b.name))
         elseif isoperator(b.name)
             name = string(Expr(b.name))

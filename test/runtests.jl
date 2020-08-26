@@ -239,14 +239,14 @@ f(arg) = arg
             end
 
             let cst = parse_and_pass("""raw\"whatever\"""")
-                @test refof(cst.args[1].args[1].args[2]) !== nothing
+                @test refof(cst.args[1].args[1]) !== nothing
             end
 
             let cst = parse_and_pass("""
         macro mac_str() end
         mac"whatever"
         """)
-                @test refof(cst.args[2].args[1].args[2]) == bindingof(cst.args[1])
+                @test refof(cst.args[2].args[1]) == bindingof(cst.args[1])
             end
 
             let cst = parse_and_pass("[i * j for i = 1:10 for j = i:10]")
@@ -1338,7 +1338,7 @@ f(arg) = arg
 
     @testset "@." begin
         let cst = parse_and_pass("@. a + b")
-            @test StaticLint.hasref(cst.args[1].args[1].args[2])
+            @test StaticLint.hasref(cst.args[1].args[1])
         end
     end
 
@@ -1365,5 +1365,16 @@ f(arg) = arg
         @test StaticLint.hasbinding(cst.args[1].args[1].args[3].args[1])
         
         cst = parse_and_pass("using Base.Meta: quot, lower")
+    end
+
+    @testset "issue 1609" begin
+        let
+            cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
+            cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
+            StaticLint.check_all(cst1, StaticLint.LintOptions(), server)
+            StaticLint.check_all(cst2, StaticLint.LintOptions(), server)
+            @test !StaticLint.haserror(cst1.args[1].args[1].args[2].args[3])
+            @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
+        end
     end
 end

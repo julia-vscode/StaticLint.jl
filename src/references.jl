@@ -55,10 +55,9 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
         setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
         return true
     end
-
     x1, mn = nameof_expr_to_resolve(x)
     mn == true && return true
-
+    
     if scopehasbinding(scope, mn)
         setref!(x1, scope.names[mn])
         resolved = true
@@ -77,7 +76,7 @@ end
 # Searches a module store for a binding/variable that matches the reference `x1`.
 function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x1) && return true
-    
+
     if CSTParser.ismacroname(x1)
         x = x1
         if valof(x) == "@." && m.name == VarRef(nothing, :Base)
@@ -86,7 +85,7 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             return true
         end
 
-        mn = Symbol("@", valof(x))
+        mn = Symbol(valof(x))
         if isexportedby(mn, m)
             setref!(x, maybe_lookup(m[mn], state.server))
             return true
@@ -100,13 +99,6 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
             return true
         end
-    # elseif headof(x1) === x_Str
-    #     mac = x1
-    #     mn = Symbol("@", valof(mac[1]), "_str")
-    #     if isexportedby(mn, m)
-    #         setref!(mac[1], maybe_lookup(m[mn], state.server))
-    #         return true
-    #     end
     end
     return false
 end

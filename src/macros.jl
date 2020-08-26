@@ -3,7 +3,7 @@ function handle_macro(x::EXPR, state)
     !CSTParser.ismacrocall(x) && return
     if CSTParser.ismacroname(x.args[1])
         state(x.args[1])
-        if _points_to_Base_macro(x.args[1], :deprecate, state) && length(x.args) == 4
+        if _points_to_Base_macro(x.args[1], Symbol("@deprecate"), state) && length(x.args) == 4
             if bindingof(x.args[3]) !== nothing
                 return
             elseif CSTParser.is_func_call(x.args[3])
@@ -20,9 +20,9 @@ function handle_macro(x::EXPR, state)
             elseif isidentifier(x.args[3])
                 mark_binding!(x.args[3], x)
             end
-        elseif _points_to_Base_macro(x.args[1], :deprecate_binding, state) && length(x.args) == 4 && isidentifier(x.args[3]) && isidentifier(x.args[4])
+        elseif _points_to_Base_macro(x.args[1], Symbol("@deprecate_binding"), state) && length(x.args) == 4 && isidentifier(x.args[3]) && isidentifier(x.args[4])
             setref!(x.args[3], refof(x.args[4]))
-        elseif _points_to_Base_macro(x.args[1], :eval, state) && length(x.args) == 3 && state isa Toplevel
+        elseif _points_to_Base_macro(x.args[1], Symbol("@eval"), state) && length(x.args) == 3 && state isa Toplevel
             # Create scope around eval'ed expression. This ensures anybindings are
             # correctly hoisted to the top-level scope.
             setscope!(x, Scope(x))
@@ -31,9 +31,9 @@ function handle_macro(x::EXPR, state)
             state.scope = scopeof(x)
             interpret_eval(x.args[3], state)
             state.scope = s0
-        elseif _points_to_Base_macro(x.args[1], :irrational, state) && length(x.args) == 5
+        elseif _points_to_Base_macro(x.args[1], Symbol("@irrational"), state) && length(x.args) == 5
             mark_binding!(x.args[3], x)
-        elseif _points_to_Base_macro(x.args[1], :enum, state)
+        elseif _points_to_Base_macro(x.args[1], Symbol("@enum"), state)
             for i = 3:length(x.args)
                 if bindingof(x.args[i]) !== nothing
                     break
@@ -46,21 +46,21 @@ function handle_macro(x::EXPR, state)
                 end
                 mark_binding!(x.args[i], x)
             end
-        elseif _points_to_Base_macro(x.args[1], :goto, state)
+        elseif _points_to_Base_macro(x.args[1], Symbol("@goto"), state)
             if length(x.args) == 3 && isidentifier(x.args[3])
                 setref!(x.args[3], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
             end
-        elseif _points_to_Base_macro(x.args[1], :label, state)
+        elseif _points_to_Base_macro(x.args[1], Symbol("@label"), state)
             if length(x.args) == 3 && isidentifier(x.args[3])
                 mark_binding!(x.args[3])
             end
-        elseif valofid(x.args[1]) == "@nospecialize"
-            for i = 2:length(x.args)
-                if bindingof(x.args[i]) !== nothing
-                    break
-                end
-                mark_binding!(x.args[i], x)
-            end
+        # elseif valofid(x.args[1]) == "@nospecialize"
+        #     for i = 2:length(x.args)
+        #         if bindingof(x.args[i]) !== nothing
+        #             break
+        #         end
+        #         mark_binding!(x.args[i], x)
+        #     end
         # elseif _points_to_arbitrary_macro(x.args[1], :Turing, :model, state) && length(x) == 3 &&
         #     isassignment(x.args[3]) &&
         #     headof(x.args[3].args[2]) === CSTParser.Begin && length(x.args[3].args[2]) == 3 && headof(x.args[3].args[2].args[2]) === :block
@@ -120,7 +120,7 @@ end
 
 function _points_to_Base_macro(x::EXPR, name, state)
     CSTParser.is_getfield_w_quotenode(x) && return _points_to_Base_macro(x.args[2].args[1], name, state)
-    targetmacro =  maybe_lookup(getsymbolserver(state.server)[:Base][Symbol("@", name)], state.server)
+    targetmacro =  maybe_lookup(getsymbolserver(state.server)[:Base][name], state.server)
     isidentifier(x) && Symbol(valofid(x)) == name && (ref = refof(x)) !== nothing &&
     (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
 end

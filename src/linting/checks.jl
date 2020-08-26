@@ -142,7 +142,7 @@ function func_nargs(x::EXPR)
     sig = rem_wheres_decls(CSTParser.get_sig(x))
     for i = 2:length(sig.args)
         arg = sig.args[i]
-        if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && length(arg.args[1].args) == 2 && isidentifier(arg.args[1].args[2]) && valofid(arg.args[1].args[2]) == "nospecialize"
+        if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
             arg = arg.args[3]
         end
         if isparameters(arg)
@@ -394,20 +394,25 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server)
+is_never_datatype(b, server, visited = nothing) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server, visited = nothing) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server, visited = nothing)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server)
+function is_never_datatype(b::Binding, server, visited = Binding[])
+    if b in visited
+        return false
+    else
+        push!(visited, b)
+    end
     if b.val isa Binding
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, server, visited)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
     elseif b.type == CoreTypes.DataType
         return false
     elseif b.type == CoreTypes.Function && b.prev !== nothing
-        return is_never_datatype(b.prev, server)
+        return is_never_datatype(b.prev, server, visited)
     elseif b.type !== nothing
         return true
     end
@@ -450,6 +455,8 @@ function check_farg_unused(x::EXPR)
                     arg = sig.args[i]
                 elseif iskwarg(sig.args[i]) && hasbinding(sig.args[i].args[1])
                     arg = sig.args[i].args[1]
+                elseif CSTParser.ismacrocall(sig.args[i]) && length(sig.args[i].args) == 3 && hasbinding(sig.args[i].args[3])
+                    arg = sig.args[i].args[3]
                 else
                     continue
                 end
@@ -729,7 +736,7 @@ function check_kw_default(x::EXPR, server)
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
-                    n = count(x->x != '_', rhsval) - 2
+                    n = count(x -> x != '_', rhsval) - 2
                     ub = sizeof(T)
                     lb = ub ÷ 2
                     if headof(rhs) == :BININT
@@ -773,7 +780,7 @@ end
 isbadliteral(x::EXPR) = CSTParser.isliteral(x) && (CSTParser.isstringliteral(x) || headof(x) === :INTEGER || headof(x) === :FLOAT || headof(x) === :CHAR || headof(x) === :TRUE || headof(x) === :FALSE)
 
 function check_break_continue(x::EXPR)
-    if iskeyword(x) && (headof(x) === :CONTINUE || headof(x) === :BREAK) && !is_in_fexpr(x, x->headof(x) in (:for, :while))
+    if iskeyword(x) && (headof(x) === :CONTINUE || headof(x) === :BREAK) && !is_in_fexpr(x, x -> headof(x) in (:for, :while))
         seterror!(x, ShouldBeInALoop)
     end
 end
