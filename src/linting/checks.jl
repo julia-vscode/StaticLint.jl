@@ -139,13 +139,7 @@ function func_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = rem_wheres_decls(CSTParser.get_sig(x))
     for i = 2:length(sig)
-        arg = sig[i]
-        if is_macro_call(arg) && length(arg) > 1 &&
-            is_macroname(arg[1]) && length(arg[1]) == 2 && isidentifier(arg[1][2]) && valofid(arg[1][2]) == "nospecialize"
-            if length(arg) == 2
-                arg = arg[2]
-            end
-        end
+        arg = unwrap_nospecialize(sig[i])
         if ispunctuation(arg)
             # skip
         elseif is_parameters(arg)
@@ -467,11 +461,7 @@ function check_farg_unused(x::EXPR)
         if is_call(sig)
             for i = 2:length(sig)
                 if hasbinding(sig[i])
-                    if is_macro_call(sig[i]) && length(sig[i].args) == 4 && sig[i].args[1].args[2].val == "nospecialize"
-                        arg = sig[i].args[3]
-                    else
-                        arg = sig[i]
-                    end
+                    arg = unwrap_nospecialize(sig[i])
                 elseif is_kwarg(sig[i]) && hasbinding(sig[i][1])
                     arg = sig[i][1]
                 else
@@ -487,8 +477,22 @@ function check_farg_unused(x::EXPR)
     end
 end
 
+function unwrap_nospecialize(x)
+    is_nospecialize_call(x) || return x
+    len = length(x)
+    return if len == 2
+        x[2] # enclosed form, e.g. `@nospecialize(a = 0)`
+    elseif len == 4
+        x[3] # open call form, e.g. `@nospecialize args...`
+    end
+end
 
-
+function is_nospecialize_call(x)
+    return is_macro_call(x) &&
+        length(x) > 1 &&
+        is_macroname(x[1]) &&
+        is_nospecialize(x[1])
+end
 
 """
 collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
