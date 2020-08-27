@@ -475,9 +475,9 @@ function unwrap_nospecialize(x)
     is_nospecialize(x) || return x
     len = length(x)
     return if len == 2
-        x[2] # unwrapped form
+        x[2] # enclosed form, e.g. `@nospecialize(a = 0)`
     elseif len == 4
-        x[3] # wrapped form
+        x[3] # open call form, e.g. `@nospecialize args...`
     end
 end
 
