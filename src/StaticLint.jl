@@ -34,9 +34,9 @@ Meta() = Meta(nothing, nothing, nothing, nothing)
 
 function Base.show(io::IO, m::Meta)
     m.binding !== nothing && show(io, m.binding)
-    m.ref !== nothing && printstyled(io, " * ", color = :red)
-    m.scope !== nothing && printstyled(io, " new scope", color = :green)
-    m.error !== nothing && printstyled(io, " lint ", color = :red)
+    m.ref !== nothing && printstyled(io, " * ", color=:red)
+    m.scope !== nothing && printstyled(io, " new scope", color=:green)
+    m.error !== nothing && printstyled(io, " lint ", color=:red)
 end
 hasmeta(x::EXPR) = x.meta isa Meta
 hasbinding(m::Meta) = m.binding isa Binding
@@ -143,7 +143,7 @@ If this is successful it traverses the code associated with the loaded file.
 """
 function followinclude(x, state::State)
     if is_call(x) && length(x) > 0 && isidentifier(x[1]) && valofid(x[1]) == "include"
-        path = get_path(x, state)
+        init_path = path = get_path(x, state)
         if isempty(path)
         elseif isabspath(path)
             if hasfile(state.server, path)
@@ -188,7 +188,7 @@ function followinclude(x, state::State)
             state(getcst(state.file))
             state.file = oldfile
             pop!(state.included_files)
-        elseif !is_in_fexpr(x, CSTParser.defines_function)
+        elseif !is_in_fexpr(x, CSTParser.defines_function) && !isempty(init_path)
             seterror!(x, MissingFile)
         end
     end

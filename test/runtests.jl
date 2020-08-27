@@ -4,7 +4,7 @@ using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
 server = StaticLint.FileServer();
 
-function get_ids(x, ids = [])
+function get_ids(x, ids=[])
     if StaticLint.typof(x) == CSTParser.IDENTIFIER
         push!(ids, x)
     else
@@ -1360,6 +1360,17 @@ f(arg) = arg
     @testset "@." begin
         let cst = parse_and_pass("@. a + b")
             @test StaticLint.hasref(cst[1][1][2])
+        end
+    end
+
+    @testset "issue 1609" begin
+        let
+            cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
+            cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
+            StaticLint.check_all(cst1, StaticLint.LintOptions(), server)
+            StaticLint.check_all(cst2, StaticLint.LintOptions(), server)
+            @test !StaticLint.haserror(cst1[1][2][3][3])
+            @test StaticLint.haserror(cst2[1][2][3][3])
         end
     end
 end

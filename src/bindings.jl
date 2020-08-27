@@ -11,7 +11,7 @@ Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothi
 function Base.show(io::IO, b::Binding)
     printstyled(io, "Binding(", Expr(b.name),
         b.type === nothing ? "" : ":: ",
-        b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color = :blue)
+        b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color=:blue)
 end
 
 
@@ -139,7 +139,7 @@ function mark_bindings!(x::EXPR, state)
 end
 
 
-function mark_binding!(x::EXPR, val = x)
+function mark_binding!(x::EXPR, val=x)
     if is_kwarg(x) || (is_declaration(x) && is_tuple(x[1]))
         mark_binding!(x[1], x)
     elseif is_tuple(x) || is_parameters(x)
@@ -260,7 +260,7 @@ function _in_func_def(x::EXPR)
     return is_in_funcdef(x)
 end
 
-function add_binding(x, state, scope = state.scope)
+function add_binding(x, state, scope=state.scope)
     if bindingof(x) isa Binding
         b = bindingof(x)
         b.prev = nothing
