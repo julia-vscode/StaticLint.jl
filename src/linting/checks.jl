@@ -143,21 +143,20 @@ function func_nargs(x::EXPR)
         if ispunctuation(arg)
             # skip
         elseif is_parameters(arg)
-            for j = 1:length(arg)
-                arg1 = arg[j]
-                if is_kwarg(arg1)
-                    push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1[1]))))
-                elseif is_unary_call(arg1) && kindof(arg1[2]) === CSTParser.Tokens.DDDOT
+            for a in arg
+                if is_kwarg(a)
+                    push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(a[1]))))
+                elseif is_splat(a)
                     kwsplat = true
                 end
             end
         elseif is_kwarg(arg)
-            if is_unary_call(arg[1]) && kindof(arg[1][2]) === CSTParser.Tokens.DDDOT
+            if is_splat(arg[1])
                 maxargs = typemax(Int)
             else
                 maxargs !== typemax(Int) && (maxargs += 1)
             end
-        elseif (is_unary_call(arg) && kindof(arg[2]) === CSTParser.Tokens.DDDOT) ||
+        elseif is_splat(arg) ||
             (is_declaration(arg) &&
             ((isidentifier(arg[3]) && valofid(arg[3]) == "Vararg") ||
             (is_curly(arg[3]) && isidentifier(arg[3][1]) && valofid(arg[3][1]) == "Vararg")))
@@ -224,17 +223,24 @@ end
 
 # compare_f_call(m_counts, call_counts) = true # fallback method
 
-function compare_f_call(m_counts::Tuple{Int,Int,Array{Symbol},Bool}, call_counts::Tuple{Int,Int,Array{Symbol}})
-    if call_counts[2] == typemax(Int)
-        call_counts[1] <= call_counts[2] < m_counts[1] && return false
+function compare_f_call(
+    (ref_minargs, ref_maxargs, ref_kws, kwsplat),
+    (act_minargs, act_maxargs, act_kws),
+)
+    # check matching on positional arguments
+    if act_maxargs == typemax(Int)
+        act_minargs <= act_maxargs < ref_minargs && return false
     else
-        !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
+        !(ref_minargs <= act_minargs <= act_maxargs <= ref_maxargs) && return false
     end
-    if !m_counts[4] # no splatted kw in method sig
-        length(call_counts[3]) > length(m_counts[3]) && return false # call has more kws than method accepts
-        !all(kw in m_counts[3] for kw in call_counts[3]) && return false # call supplies a kw that isn't defined in the method
-    else # splatted kw in method so accept any kw in call
-    end
+
+    # check matching on keyword arguments
+    kwsplat && return true # splatted kw in method so accept any kw in call
+
+    # no splatted kw in method sig
+    length(act_kws) > length(ref_kws) && return false # call has more kws than method accepts
+    !all(kw in ref_kws for kw in act_kws) && return false # call supplies a kw that isn't defined in the method
+
     return true
 end
 
