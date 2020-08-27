@@ -3,7 +3,7 @@ module StaticLint
 include("exception_types.jl")
 
 using SymbolServer, CSTParser
-using CSTParser: EXPR, isidentifier, Import, Using, Export, Quote, Quotenode, x_Str, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment, isoperator, ispunctuation, iskw, defines_function
+using CSTParser: EXPR, isidentifier, Import, Using, Export, Quote, Quotenode, x_Str, FunctionDef, setparent!, kindof, valof, typof, parentof, is_assignment, isoperator, ispunctuation, iskw, defines_function, is_splat
 using SymbolServer: VarRef
 
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
@@ -136,7 +136,7 @@ end
     followinclude(x, state)
 
 Checks whether the arguments of a call to `include` can be resolved to a path.
-If successful it checks whether a file with that path is loaded on the server  
+If successful it checks whether a file with that path is loaded on the server
 or a file exists on the disc that can be loaded.
 If this is successful it traverses the code associated with the loaded file.
 
