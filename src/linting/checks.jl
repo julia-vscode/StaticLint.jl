@@ -472,7 +472,7 @@ function check_farg_unused(x::EXPR)
 end
 
 function unwrap_nospecialize(x)
-    is_nospecialize(x) || return x
+    is_nospecialize_call(x) || return x
     len = length(x)
     return if len == 2
         x[2] # enclosed form, e.g. `@nospecialize(a = 0)`
@@ -481,13 +481,11 @@ function unwrap_nospecialize(x)
     end
 end
 
-function is_nospecialize(x)
+function is_nospecialize_call(x)
     return is_macro_call(x) &&
         length(x) > 1 &&
         is_macroname(x[1]) &&
-        length(x[1]) == 2 &&
-        isidentifier(x[1][2]) &&
-        valofid(x[1][2]) == "nospecialize"
+        is_nospecialize(x[1])
 end
 
 """

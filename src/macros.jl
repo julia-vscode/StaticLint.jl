@@ -56,7 +56,7 @@ function handle_macro(x::EXPR, state)
             if length(x) == 2 && isidentifier(x[2])
                 mark_binding!(x[2])
             end
-        elseif length(x[1]) == 2 && isidentifier(x[1][2]) && valofid(x[1][2]) == "nospecialize"
+        elseif is_nospecialize(x[1])
             for i = 2:length(x)
                 if !ispunctuation(x[i])
                     if bindingof(x[i]) !== nothing
@@ -99,6 +99,12 @@ function handle_macro(x::EXPR, state)
         mark_binding!(x[3])
         setref!(x[3], bindingof(x[3]))
     end
+end
+
+function is_nospecialize(x)
+    return length(x) == 2 &&
+        isidentifier(x[2]) &&
+        valofid(x[2]) == "nospecialize"
 end
 
 function _rem_ref(x::EXPR)
@@ -180,7 +186,7 @@ end
 interpret_eval(x::EXPR, state)
 
 Naive attempt to interpret `x` as though it has been eval'ed. Lifts
-any bindings made within the scope of `x` to the toplevel and replaces 
+any bindings made within the scope of `x` to the toplevel and replaces
 (some) interpolated binding names with the value where possible.
 """
 function interpret_eval(x::EXPR, state)
