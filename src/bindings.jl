@@ -197,8 +197,8 @@ function mark_sig_args!(x::EXPR)
     elseif CSTParser.isbinarycall(x)
         mark_binding!(x.args[1])
         mark_binding!(x.args[2])
-    elseif CSTParser.isunarycall(x) && length(x.args) == 2 && CSTParser.isbracketed(x.args[2])
-        mark_binding!(x.args[2].args[1])
+    elseif CSTParser.isunarycall(x) && length(x.args) == 2 && (CSTParser.isbracketed(x.args[2]) || CSTParser.isdeclaration(x.args[2]))
+        mark_binding!(x.args[2])
     end
 end
 
