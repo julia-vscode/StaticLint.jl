@@ -227,7 +227,7 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(valofid(x), m, getsymbolserver(state.server)), state.server)) !== nothing
+    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         setref!(x, val)
         resolved = true
     elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing

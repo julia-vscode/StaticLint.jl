@@ -69,8 +69,15 @@ function clear_meta(x::EXPR)
     clear_ref(x)
     clear_scope(x)
     clear_error(x)
-    for a in x
-        clear_meta(a)
+    if x.args !== nothing
+        for a in x.args
+            clear_meta(a)
+        end
+    end
+    if x.trivia !== nothing
+        for a in x.trivia
+            clear_meta(a)
+        end
     end
 end
 
