@@ -169,20 +169,22 @@ end
 
 function mark_sig_args!(x::EXPR)
     if CSTParser.iscall(x) || CSTParser.istuple(x)
-        if CSTParser.isbracketed(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
-            mark_binding!(x.args[1].args[1])
-        end
-        for i = 2:length(x.args)
-            a = x.args[i]
-            if CSTParser.isparameters(a)
-                for j = 1:length(a.args)
-                    aa = a.args[j]
-                    mark_binding!(aa)
+        if x.args !== nothing && length(x.args) > 0
+            if CSTParser.isbracketed(x.args[1]) && length(x.args[1].args) > 0 && CSTParser.isdeclaration(x.args[1].args[1])
+                mark_binding!(x.args[1].args[1])
+            end
+            for i = 2:length(x.args)
+                a = x.args[i]
+                if CSTParser.isparameters(a)
+                    for j = 1:length(a.args)
+                        aa = a.args[j]
+                        mark_binding!(aa)
+                    end
+                elseif CSTParser.ismacrocall(a) && CSTParser.isidentifier(a.args[1]) && valofid(a.args[1]) == "@nospecialize" && length(a.args) == 3
+                    mark_binding!(a.args[3])
+                else
+                    mark_binding!(a)
                 end
-            elseif CSTParser.ismacrocall(a) && CSTParser.isidentifier(a.args[1]) && valofid(a.args[1]) == "@nospecialize" && length(a.args) == 3
-                mark_binding!(a.args[3])
-            else
-                mark_binding!(a)
             end
         end
     elseif CSTParser.iswhere(x)
