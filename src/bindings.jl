@@ -173,7 +173,7 @@ function mark_sig_args!(x::EXPR)
             if CSTParser.isbracketed(x.args[1]) && length(x.args[1].args) > 0 && CSTParser.isdeclaration(x.args[1].args[1])
                 mark_binding!(x.args[1].args[1])
             end
-            for i = 2:length(x.args)
+            for i = (CSTParser.iscall(x) ? 2 : 1):length(x.args)
                 a = x.args[i]
                 if CSTParser.isparameters(a)
                     for j = 1:length(a.args)
@@ -370,7 +370,7 @@ function mark_globals(x::EXPR, state)
 end
 
 function name_extends_imported_method(b::Binding)
-    if b.type == CoreTypes.Function && hasparent(b.name) && CSTParser.is_getfield(parentof(b.name))
+    if b.type == CoreTypes.Function && CSTParser.hasparent(b.name) && CSTParser.is_getfield(parentof(b.name))
         if refof_maybe_getfield(parentof(b.name)[1]) !== nothing
 
         end
