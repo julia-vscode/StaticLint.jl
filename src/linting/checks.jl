@@ -480,7 +480,6 @@ Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) 
 identifiers are marked, the :all option will mark identifiers used in getfield calls."
 """
 function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
-    @info pos, x
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
