@@ -140,34 +140,36 @@ end
 function func_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = rem_wheres_decls(CSTParser.get_sig(x))
-    for i = 2:length(sig.args)
-        arg = sig.args[i]
-        if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
-            arg = arg.args[3]
-        end
-        if isparameters(arg)
-            for j = 1:length(arg.args)
-                arg1 = arg.args[j]
-                if iskwarg(arg1)
-                    push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
-                elseif issplat(arg1)
-                    kwsplat = true
-                end
+    if sig.args !== nothing
+        for i = 2:length(sig.args)
+            arg = sig.args[i]
+            if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
+                arg = arg.args[3]
             end
-        elseif iskwarg(arg)
-            if issplat(arg.args[1])
+            if isparameters(arg)
+                for j = 1:length(arg.args)
+                    arg1 = arg.args[j]
+                    if iskwarg(arg1)
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
+                    elseif issplat(arg1)
+                        kwsplat = true
+                    end
+                end
+            elseif iskwarg(arg)
+                if issplat(arg.args[1])
+                    maxargs = typemax(Int)
+                else
+                    maxargs !== typemax(Int) && (maxargs += 1)
+                end
+            elseif issplat(arg) ||
+                (isdeclaration(arg) &&
+                ((isidentifier(arg.args[2]) && valofid(arg.args[2]) == "Vararg") ||
+                (iscurly(arg.args[2]) && isidentifier(arg.args[2].args[1]) && valofid(arg.args[2].args[1]) == "Vararg")))
                 maxargs = typemax(Int)
             else
+                minargs += 1
                 maxargs !== typemax(Int) && (maxargs += 1)
             end
-        elseif issplat(arg) ||
-            (isdeclaration(arg) &&
-            ((isidentifier(arg.args[2]) && valofid(arg.args[2]) == "Vararg") ||
-            (iscurly(arg.args[2]) && isidentifier(arg.args[2].args[1]) && valofid(arg.args[2].args[1]) == "Vararg")))
-            maxargs = typemax(Int)
-        else
-            minargs += 1
-            maxargs !== typemax(Int) && (maxargs += 1)
         end
     end
 

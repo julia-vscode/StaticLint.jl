@@ -74,11 +74,11 @@ function clear_meta(x::EXPR)
             clear_meta(a)
         end
     end
-    if x.trivia !== nothing
-        for a in x.trivia
-            clear_meta(a)
-        end
-    end
+    # if x.trivia !== nothing
+    #     for a in x.trivia
+    #         clear_meta(a)
+    #     end
+    # end
 end
 
 function get_root_method(b, server)
