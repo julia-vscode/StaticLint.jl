@@ -22,3 +22,14 @@ function lint_string(str::AbstractString, root = nothing, server = SymbolServer.
 
     return file.cst
 end
+
+
+"""
+    isjuliafile(filepath::AbstractString)
+
+return true if it is a julia file.
+"""
+function isjuliafile(filepath::AbstractString)
+    ext = splitext(filepath)[2]
+    return ext == ".jl"
+end
