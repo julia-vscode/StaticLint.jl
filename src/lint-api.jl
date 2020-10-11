@@ -33,3 +33,31 @@ function isjuliafile(filepath::AbstractString)
     ext = splitext(filepath)[2]
     return ext == ".jl"
 end
+
+export lint_file
+"""
+    lint_file(filepath::AbstractString, root = nothing, server = SymbolServer.get_symbol_server()[1])
+
+Lint the given file and get the result as a StaticLint.File
+"""
+function lint_file(filepath::AbstractString, root = nothing, server = SymbolServer.get_symbol_server()[1])
+
+    # Check extention
+    if !isjuliafile(filepath)
+        error("$filepath is not a julia file.")
+    end
+
+    # read
+    str = Base.read(filepath, String)
+
+    # parse_code
+    cst = CSTParser.parse_code(str)
+
+    # File
+    file = StaticLint.File(filepath, str, cst, root, server)
+
+    # Get bindings and scopes
+    StaticLint.scopepass(file)
+
+    return file
+end
