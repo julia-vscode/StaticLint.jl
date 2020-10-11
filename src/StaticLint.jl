@@ -201,4 +201,7 @@ include("macros.jl")
 include("linting/checks.jl")
 include("type_inf.jl")
 include("utils.jl")
+include("modulefiles.jl")
+include("lint-api.jl")
+
 end
