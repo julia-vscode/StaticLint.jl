@@ -61,3 +61,21 @@ function lint_file(filepath::AbstractString, root = nothing, server = SymbolServ
 
     return file
 end
+
+export lint_module_file
+function lint_module_file(filepath::AbstractString, root = nothing, server = nothing)
+
+    # Check extention
+    if !isjuliafile(filepath)
+        error("$filepath is not a julia file.")
+    end
+
+    # read
+    str = Base.read(filepath, String)
+
+    # parse_code
+    cst = CSTParser.parse_code(str)
+
+    # File
+    return StaticLint.File(filepath, str, cst, root, server)
+end
