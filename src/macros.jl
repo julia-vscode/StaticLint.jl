@@ -54,13 +54,13 @@ function handle_macro(x::EXPR, state)
             if length(x.args) == 3 && isidentifier(x.args[3])
                 mark_binding!(x.args[3])
             end
-        # elseif valofid(x.args[1]) == "@nospecialize"
-        #     for i = 2:length(x.args)
-        #         if bindingof(x.args[i]) !== nothing
-        #             break
-        #         end
-        #         mark_binding!(x.args[i], x)
-        #     end
+        elseif is_nospecialize(x.args[1])
+            for i = 2:length(x.args)
+                if bindingof(x.args[i]) !== nothing
+                    break
+                end
+                mark_binding!(x.args[i], x)
+            end
         # elseif _points_to_arbitrary_macro(x.args[1], :Turing, :model, state) && length(x) == 3 &&
         #     isassignment(x.args[3]) &&
         #     headof(x.args[3].args[2]) === CSTParser.Begin && length(x.args[3].args[2]) == 3 && headof(x.args[3].args[2].args[2]) === :block
@@ -103,6 +103,8 @@ function _rem_ref(x::EXPR)
     end
     return x
 end
+
+is_nospecialize(x) = isidentifier(x) && valofid(x) == "@nospecialize"
 
 function _mark_JuMP_binding(arg)
     if isidentifier(arg) || headof(arg) === :ref

@@ -142,10 +142,12 @@ function func_nargs(x::EXPR)
     sig = rem_wheres_decls(CSTParser.get_sig(x))
     if sig.args !== nothing
         for i = 2:length(sig.args)
-            arg = sig.args[i]
-            if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
-                arg = arg.args[3]
-            end
+            # arg = sig.args[i]
+            # if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
+            #     arg = arg.args[3]
+            # end
+            
+            arg = unwrap_nospecialize(sig.args[i])
             if isparameters(arg)
                 for j = 1:length(arg.args)
                     arg1 = arg.args[j]
@@ -457,10 +459,8 @@ function check_farg_unused(x::EXPR)
                     arg = sig.args[i]
                 elseif iskwarg(sig.args[i]) && hasbinding(sig.args[i].args[1])
                     arg = sig.args[i].args[1]
-                elseif CSTParser.ismacrocall(sig.args[i]) && length(sig.args[i].args) == 3 && hasbinding(sig.args[i].args[3])
-                    arg = sig.args[i].args[3]
-                else
-                    continue
+                elseif is_nospecialize_call(sig.args[i]) && hasbinding(unwrap_nospecialize(sig.args[i]))
+                    arg = unwrap_nospecialize(sig.args[i])
                 end
                 b = bindingof(arg)
                 if (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
@@ -472,6 +472,16 @@ function check_farg_unused(x::EXPR)
     end
 end
 
+function unwrap_nospecialize(x)
+    is_nospecialize_call(x) || return x
+    x.args[3]
+end
+
+function is_nospecialize_call(x)
+    CSTParser.ismacrocall(x) && 
+    CSTParser.ismacroname(x.args[1]) && 
+    is_nospecialize(x.args[1])
+end
 
 
 
