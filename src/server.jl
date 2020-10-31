@@ -102,7 +102,7 @@ function get_path(x::EXPR, state)
             path = normpath(path)
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
-        elseif CSTParser.ismacroname(parg.args[1]) && length(parg.args[1]) && valof(parg.args[1]) == "@raw_str" && CSTParser.isstringliteral(parg.args[3])
+        elseif CSTParser.ismacrocall(parg) && valof(parg.args[1]) == "@raw_str" && CSTParser.isstringliteral(parg.args[3])
             path = normpath(CSTParser.str_value(parg.args[3]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
