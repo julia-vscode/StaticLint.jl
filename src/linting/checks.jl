@@ -468,8 +468,10 @@ function check_farg_unused(x::EXPR)
                     continue
                 end
                 b = bindingof(arg)
-                if (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
-                    b.next === nothing
+                if b === nothing || (
+                       (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
+                       b.next === nothing
+                   )
                     seterror!(arg, UnusedFunctionArgument)
                 end
             end
