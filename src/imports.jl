@@ -7,7 +7,8 @@ function resolve_import(x, state::State)
         root = par = getsymbolserver(state.server)
         while i <= n
             arg = x[i]
-            if is_id_or_macroname(arg)
+            if arg === nothing
+            elseif is_id_or_macroname(arg)
                 if refof(arg) !== nothing
                     par = refof(arg)
                 else

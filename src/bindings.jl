@@ -370,7 +370,7 @@ function hoist_prev_binding(b, name, scope, state)
 end
 
 isglobal(name, scope) = false
-isglobal(name::String, scope) = scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
+isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
 
 function mark_globals(x::EXPR, state)
     if typof(x) === CSTParser.Global
