@@ -138,7 +138,7 @@ function maybe_eventually_get_id(x::EXPR)
     if isidentifier(x)
         return x
     elseif isbracketed(x)
-        return maybe_eventually_get_id(x.args[2])
+        return maybe_eventually_get_id(x.args[1])
     end
     return nothing
 end
