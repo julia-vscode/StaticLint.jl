@@ -21,6 +21,7 @@ function parse_and_pass(s)
     StaticLint.setroot(f, f)
     StaticLint.setfile(server, "", f)
     StaticLint.scopepass(f)
+    StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
     return f.cst
 end
 
@@ -1375,6 +1376,14 @@ f(arg) = arg
             StaticLint.check_all(cst2, StaticLint.LintOptions(), server)
             @test !StaticLint.haserror(cst1.args[1].args[1].args[2].args[3])
             @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
+        end
+    end
+    @testset "j-vsc issue 1835" begin
+        let
+            cst = parse_and_pass("""const x::T = x
+            local const x = 1""")
+            @test errorof(cst.args[1]) === StaticLint.TypeDeclOnGlobalVariable
+            @test errorof(cst.args[2]) === StaticLint.UnsupportedConstLocalVariable
         end
     end
 end

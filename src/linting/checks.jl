@@ -21,7 +21,9 @@ InvalidRedefofConst,
 NotEqDef,
 KwDefaultMismatch,
 InappropriateUseOfLiteral,
-ShouldBeInALoop)
+ShouldBeInALoop,
+TypeDeclOnGlobalVariable,
+UnsupportedConstLocalVariable)
 
 
 
@@ -46,7 +48,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     NotEqDef => "`!=` is defined as `const != = !(==)` and should not be overloaded. Overload `==` instead.",
     KwDefaultMismatch => "The default value provided does not match the specified argument type.",
     InappropriateUseOfLiteral => "You really shouldn't be using a literal value here.",
-    ShouldBeInALoop => "`break` or `continue` used outside loop."
+    ShouldBeInALoop => "`break` or `continue` used outside loop.",
+    TypeDeclOnGlobalVariable => "Type declarations on global variables are not yet supported.",
+    UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable. "
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -96,6 +100,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     check_kw_default(x, server)
     check_use_of_literal(x)
     check_break_continue(x)
+    check_const(x)
 
     if x.args !== nothing
         for i in 1:length(x.args)
@@ -798,5 +803,12 @@ function check_break_continue(x::EXPR)
     end
 end
 
-
-
+function check_const(x::EXPR)
+    if headof(x) === :const 
+        if CSTParser.isassignment(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
+            seterror!(x, TypeDeclOnGlobalVariable)
+        elseif headof(x.args[1]) === :local
+            seterror!(x, UnsupportedConstLocalVariable)
+        end
+    end
+end
