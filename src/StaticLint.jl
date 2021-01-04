@@ -12,7 +12,7 @@ const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
 
 baremodule CoreTypes # Convenience
 using ..SymbolServer
-using Base: ==
+using Base: ==, @static, !
 const DataType = SymbolServer.stdlibs[:Core][:DataType]
 const Function = SymbolServer.stdlibs[:Core][:Function]
 const Module = SymbolServer.stdlibs[:Core][:Module]
@@ -21,9 +21,13 @@ const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
 const Int = SymbolServer.stdlibs[:Core][:Int]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
 const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
-isva(x) = (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
+@static if !(Vararg isa Type)
+    isva(x) = ((x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeTypeofVararg)) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
+else
+    isva(x) = (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
 end
 
+end
 include("bindings.jl")
 include("scope.jl")
 
