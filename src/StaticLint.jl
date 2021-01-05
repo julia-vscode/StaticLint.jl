@@ -9,7 +9,7 @@ using SymbolServer: VarRef
 const noname = EXPR(CSTParser.NoHead, nothing, 0, 0, nothing, CSTParser.NoKind, false, nothing, nothing)
 baremodule CoreTypes # Convenience
 using ..SymbolServer
-using Base: ==
+using Base: ==, @static
 const DataType = SymbolServer.stdlibs[:Core][:DataType]
 const Function = SymbolServer.stdlibs[:Core][:Function]
 const Module = SymbolServer.stdlibs[:Core][:Module]
@@ -18,7 +18,16 @@ const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
 const Int = SymbolServer.stdlibs[:Core][:Int]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
 const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
-isva(x) = (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
+
+isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
+@static if Core.Vararg isa Core.Type
+    function isva(x)
+        return (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg &&
+            x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core)
+    end
+else
+    isva(x) = x isa SymbolServer.FakeTypeofVararg
+end
 end
 
 include("bindings.jl")
