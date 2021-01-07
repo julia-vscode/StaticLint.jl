@@ -20,7 +20,7 @@ function parse_and_pass(s)
     f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
     StaticLint.setroot(f, f)
     StaticLint.setfile(server, "", f)
-    StaticLint.scopepass(f)
+    StaticLint.semantic_pass(f)
     StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
     return f.cst
 end
@@ -1070,7 +1070,7 @@ f(arg) = arg
     @testset "Test self" begin
         empty!(server.files)
         f = StaticLint.loadfile(server, joinpath(@__DIR__, "..", "src", "StaticLint.jl"))
-        StaticLint.scopepass(f)
+        StaticLint.semantic_pass(f)
     end
 
     let cst = parse_and_pass("""

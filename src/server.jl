@@ -19,7 +19,7 @@ FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServe
 
 # Interface spec.
 # AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
-# AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, scopepass, (get/set)server
+# AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, semantic_pass, (get/set)server
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
 canloadfile(server, path) = isfile(path)
@@ -38,7 +38,7 @@ end
 getsymbolserver(server::FileServer) = server.symbolserver
 getsymbolextendeds(server::FileServer) = server.symbol_extends
 
-function scopepass(file, target = nothing)
+function semantic_pass(file, target = nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
     state = Toplevel(file, target, [getpath(file)], scopeof(getcst(file)), EXPR[], server)
