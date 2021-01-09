@@ -97,12 +97,6 @@ function handle_macro(x::EXPR, state)
     end
 end
 
-function is_nospecialize(x)
-    return length(x) == 2 &&
-        isidentifier(x[2]) &&
-        valofid(x[2]) == "nospecialize"
-end
-
 function _rem_ref(x::EXPR)
     if headof(x) === :ref && length(x.args) > 0
         return x.args[1]

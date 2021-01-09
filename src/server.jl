@@ -38,7 +38,7 @@ end
 getsymbolserver(server::FileServer) = server.symbolserver
 getsymbolextendeds(server::FileServer) = server.symbol_extends
 
-function scopepass(file, target=nothing)
+function semantic_pass(file, target=nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
     state = Toplevel(file, target, [getpath(file)], scopeof(getcst(file)), EXPR[], server)

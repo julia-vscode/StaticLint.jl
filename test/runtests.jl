@@ -825,7 +825,7 @@ f(arg) = arg
         end
         let cst = parse_and_pass("func(@nospecialize(arg)) = arg")
             StaticLint.check_farg_unused(cst[1])
-            @test cst[1].args[1].args[3].meta.error === nothing
+            @test cst[1].args[1].args[2].meta.error === nothing
         end
     end
 
@@ -1369,10 +1369,8 @@ f(arg) = arg
         let
             cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
             cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
-            StaticLint.check_all(cst1, StaticLint.LintOptions(), server)
-            StaticLint.check_all(cst2, StaticLint.LintOptions(), server)
-            @test !StaticLint.haserror(cst1[1][2][3][3])
-            @test StaticLint.haserror(cst2[1][2][3][3])
+            @test !StaticLint.haserror(cst1.args[1].args[1].args[2].args[3])
+            @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
         end
     end
 end

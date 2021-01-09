@@ -501,13 +501,6 @@ function is_nospecialize_call(x)
     is_nospecialize(x.args[1])
 end
 
-function is_nospecialize_call(x)
-    return is_macro_call(x) &&
-        length(x) > 1 &&
-        is_macroname(x[1]) &&
-        is_nospecialize(x[1])
-end
-
 """
 collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
 
@@ -753,7 +746,7 @@ is_const(b::Binding) = is_const(b.val)
 is_const(x::EXPR) = is_const_expr(parentof(x))
 
 is_const_expr(x) = false
-is_const_expr(x::EXPR) = length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.CONST
+is_const_expr(x::EXPR) = headof(x) === :const
 
 
 """
