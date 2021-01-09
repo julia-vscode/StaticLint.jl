@@ -474,7 +474,6 @@ function check_farg_unused(x::EXPR)
                     arg = sig.args[i].args[1]
                 elseif is_nospecialize_call(sig.args[i]) && hasbinding(unwrap_nospecialize(sig.args[i]))
                     arg = unwrap_nospecialize(sig.args[i])
-
                 else
                     return
                 end

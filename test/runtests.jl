@@ -1373,4 +1373,9 @@ f(arg) = arg
             @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
         end
     end
+
+    @testset "issue #226" begin
+        cst = parse_and_pass("function my_function(::Any...) end")
+        @test !StaticLint.haserror(cst.args[1].args[1].args[2])
+    end
 end

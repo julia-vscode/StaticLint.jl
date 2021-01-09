@@ -133,6 +133,8 @@ function mark_binding!(x::EXPR, val = x)
         end
     elseif CSTParser.isbracketed(x)
         mark_binding!(CSTParser.rem_invis(x), val)
+    elseif CSTParser.issplat(x)
+        mark_binding!(x.args[1], x)
     elseif !(isunarysyntax(x) && valof(headof(x)) == "::")
         if !hasmeta(x)
             x.meta = Meta()
