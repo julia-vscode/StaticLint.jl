@@ -13,7 +13,7 @@ const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
 
 baremodule CoreTypes # Convenience
 using ..SymbolServer
-using Base: ==, @static
+using Base: ==, @static, @__DIR__
 using Core: include
 
 const DataType = SymbolServer.stdlibs[:Core][:DataType]
@@ -36,8 +36,8 @@ else
 end
 end
 
-Core.include(CoreTypes, "bindings.jl")
-Core.include(CoreTypes, "scope.jl")
+Core.include(CoreTypes, joinpath(@__DIR__, "bindings.jl"))
+Core.include(CoreTypes, joinpath(@__DIR__, "scope.jl"))
 
 mutable struct Meta
     binding::Union{Nothing,Binding}
