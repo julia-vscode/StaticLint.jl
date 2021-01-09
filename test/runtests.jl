@@ -263,7 +263,7 @@ f(arg) = arg
         end
         using .Reparse, CSTParser
         """)
-                @test refof(cst.args[2].args[1].args[2]) == bindingof(cst[1])
+                @test refof(cst.args[2].args[1].args[2]).val == bindingof(cst[1])
             end
 
             let cst = parse_and_pass("""
