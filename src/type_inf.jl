@@ -31,7 +31,7 @@ function infer_type(binding::Binding, scope, state)
                 elseif isidentifier(binding.val[3]) && refof(binding.val[3]) isa Binding
                     binding.type = refof(binding.val[3]).type
                 end
-            elseif binding.val.head isa EXPR && valof(binding.val.head) === "::"
+            elseif binding.val.head isa EXPR && valof(binding.val.head) == "::"
                 t = binding.val.args[2]
                 if isidentifier(t)
                     resolve_ref(t, scope, state)
