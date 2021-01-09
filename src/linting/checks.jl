@@ -145,6 +145,7 @@ end
 function func_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = rem_wheres_decls(CSTParser.get_sig(x))
+
     if sig.args !== nothing
         for i = 2:length(sig.args)
             # arg = sig.args[i]
@@ -234,17 +235,24 @@ end
 
 # compare_f_call(m_counts, call_counts) = true # fallback method
 
-function compare_f_call(m_counts::Tuple{Int,Int,Array{Symbol},Bool}, call_counts::Tuple{Int,Int,Array{Symbol}})
-    if call_counts[2] == typemax(Int)
-        call_counts[1] <= call_counts[2] < m_counts[1] && return false
+function compare_f_call(
+    (ref_minargs, ref_maxargs, ref_kws, kwsplat),
+    (act_minargs, act_maxargs, act_kws),
+)
+    # check matching on positional arguments
+    if act_maxargs == typemax(Int)
+        act_minargs <= act_maxargs < ref_minargs && return false
     else
-        !(m_counts[1] <= call_counts[1] <= call_counts[2] <= m_counts[2]) && return false
+        !(ref_minargs <= act_minargs <= act_maxargs <= ref_maxargs) && return false
     end
-    if !m_counts[4] # no splatted kw in method sig
-        length(call_counts[3]) > length(m_counts[3]) && return false # call has more kws than method accepts
-        !all(kw in m_counts[3] for kw in call_counts[3]) && return false # call supplies a kw that isn't defined in the method
-    else # splatted kw in method so accept any kw in call
-    end
+
+    # check matching on keyword arguments
+    kwsplat && return true # splatted kw in method so accept any kw in call
+
+    # no splatted kw in method sig
+    length(act_kws) > length(ref_kws) && return false # call has more kws than method accepts
+    !all(kw in ref_kws for kw in act_kws) && return false # call supplies a kw that isn't defined in the method
+
     return true
 end
 
@@ -284,7 +292,7 @@ function check_call(x, server)
     end
 end
 
-function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
+function sig_match_any(func_ref, x, call_counts, tls, server, visited=[])
     if func_ref in visited
         return true
     else
@@ -294,7 +302,7 @@ function sig_match_any(func_ref, x, call_counts, tls, server, visited = [])
         func_ref = func_ref.val
     end
     if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
-        return iterate_over_ss_methods(func_ref, tls, server, m->compare_f_call(func_nargs(m), call_counts))
+        return iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
     elseif func_ref isa Binding
         if func_ref.type == CoreTypes.Function && func_ref.val isa EXPR
             m_counts = func_nargs(func_ref.val)
@@ -466,12 +474,15 @@ function check_farg_unused(x::EXPR)
                     arg = sig.args[i].args[1]
                 elseif is_nospecialize_call(sig.args[i]) && hasbinding(unwrap_nospecialize(sig.args[i]))
                     arg = unwrap_nospecialize(sig.args[i])
+
                 else
                     return
                 end
                 b = bindingof(arg)
-                if (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
-                    b.next === nothing
+                if b === nothing || (
+                       (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
+                       b.next === nothing
+                   )
                     seterror!(arg, UnusedFunctionArgument)
                 end
             end
@@ -490,7 +501,12 @@ function is_nospecialize_call(x)
     is_nospecialize(x.args[1])
 end
 
-
+function is_nospecialize_call(x)
+    return is_macro_call(x) &&
+        length(x) > 1 &&
+        is_macroname(x[1]) &&
+        is_nospecialize(x[1])
+end
 
 """
 collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
@@ -498,7 +514,7 @@ collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tupl
 Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
 identifiers are marked, the :all option will mark identifiers used in getfield calls."
 """
-function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -511,6 +527,7 @@ function collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, er
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
             !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
+
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
             # collect lint hints
@@ -677,8 +694,8 @@ function refers_to_nonimported_type(arg::EXPR)
     return false
 end
 
-overwrites_imported_function(b, visited_bindings = Binding[]) = false
-function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
+overwrites_imported_function(b, visited_bindings=Binding[]) = false
+function overwrites_imported_function(b::Binding, visited_bindings=Binding[])
     if b in visited_bindings
         return false
     else
@@ -708,16 +725,35 @@ function overwrites_imported_function(b::Binding, visited_bindings = Binding[])
 end
 
 function check_const_decl(x::EXPR)
-    if CSTParser.defines_datatype(x) && hasbinding(x) && bindingof(x).prev !== nothing
+    (bind_prev = get_bind_and_prev(x)) === nothing && return
+    bind, _ = bind_prev
+    if CSTParser.defines_datatype(x) || is_const(bind)
         seterror!(x, CannotDeclareConst)
     end
 end
 
 function check_const_redef(x::EXPR)
-    if hasbinding(x) && bindingof(x) isa Binding && bindingof(x).prev isa Binding && bindingof(x).prev.type === CoreTypes.DataType && bindingof(x).type !== CoreTypes.Function
+    (bind_prev = get_bind_and_prev(x)) === nothing && return
+    bind, prev = bind_prev
+    bind.type === CoreTypes.Function && return
+    if prev.type === CoreTypes.DataType || is_const(prev)
         seterror!(x, InvalidRedefofConst)
     end
 end
+
+function get_bind_and_prev(x::EXPR)
+    hasbinding(x) || return nothing
+    (bind = bindingof(x)) isa Binding || return nothing
+    (prev = bind.prev) isa Binding || return nothing
+    return bind, prev
+end
+
+is_const(x) = false
+is_const(b::Binding) = is_const(b.val)
+is_const(x::EXPR) = is_const_expr(parentof(x))
+
+is_const_expr(x) = false
+is_const_expr(x::EXPR) = length(x.args) == 2 && kindof(x.args[1]) === CSTParser.Tokens.CONST
 
 
 """

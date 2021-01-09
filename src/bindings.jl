@@ -11,7 +11,7 @@ Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothi
 function Base.show(io::IO, b::Binding)
     printstyled(io, "Binding(", Expr(b.name),
         b.type === nothing ? "" : ":: ",
-        b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color = :blue)
+        b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color=:blue)
 end
 
 
@@ -243,7 +243,7 @@ function _in_func_def(x::EXPR)
     return is_in_funcdef(x)
 end
 
-function add_binding(x, state, scope = state.scope)
+function add_binding(x, state, scope=state.scope)
     if bindingof(x) isa Binding
         b = bindingof(x)
         b.prev = nothing
@@ -354,7 +354,7 @@ function hoist_prev_binding(b, name, scope, state)
 end
 
 isglobal(name, scope) = false
-isglobal(name::String, scope) = scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
+isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
 
 function mark_globals(x::EXPR, state)
     if headof(x) === :global

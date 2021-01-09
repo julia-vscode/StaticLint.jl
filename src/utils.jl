@@ -85,7 +85,7 @@ function get_root_method(b, server)
     return b
 end
 
-function get_root_method(b::Binding, server, b1 = nothing, visited_bindings = Binding[])
+function get_root_method(b::Binding, server, b1=nothing, visited_bindings=Binding[])
     if b.prev === nothing || b == b.prev || !(b.prev isa Binding) || b in visited_bindings
         return b
     end
@@ -149,7 +149,7 @@ end
 #     return rets, false
 # end
 
-last_method(b::Binding, visited = Binding[]) = b.next isa Binding && b.next.type === CoreTypes.Function && !(b in visited) ? (push!(visited, b);last_method(b.next, visited)) : b
+last_method(b::Binding, visited=Binding[]) = b.next isa Binding && b.next.type === CoreTypes.Function && !(b in visited) ? (push!(visited, b);last_method(b.next, visited)) : b
 
 function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
@@ -176,7 +176,7 @@ function _is_in_basedir(path::String)
     !hasreadperm(path1) && return ""
     !isdir(path1) && return ""
     files = readdir(path1)
-    if all(f->f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
+    if all(f -> f in files, ["Base.jl", "coreio.jl", "essentials.jl", "exports.jl"])
         return path1
     end
     return ""

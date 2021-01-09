@@ -79,13 +79,13 @@ f
 """)  == [false, true, true]
 
         @test check_resolved("""
-function f(a) 
+function f(a)
 end
 """)  == [true, true]
 
         @test check_resolved("""
 f, a
-function f(a) 
+function f(a)
     a
 end
 f, a
@@ -317,7 +317,7 @@ f(arg) = arg
         struct Graph
             children:: T
         end
-        
+
         function test()
             g = Graph()
             f = g.children
@@ -349,7 +349,7 @@ f(arg) = arg
         end
 
         @test check_resolved("""
-    @enum E a b 
+    @enum E a b
     E
     a
     b
@@ -823,6 +823,10 @@ f(arg) = arg
             StaticLint.check_farg_unused(cst[1])
             @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
         end
+        let cst = parse_and_pass("func(@nospecialize(arg)) = arg")
+            StaticLint.check_farg_unused(cst[1])
+            @test cst[1].args[1].args[3].meta.error === nothing
+        end
     end
 
     @testset "check redefinition of const" begin
@@ -946,7 +950,7 @@ f(arg) = arg
 
         @testset "interpret @eval" begin # e.g. `using StaticLint: StaticLint`
             let cst = parse_and_pass("""
-        let 
+        let
             @eval adf = 1
         end
         """)
@@ -954,7 +958,7 @@ f(arg) = arg
                 @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
             end
             let cst = parse_and_pass("""
-        let 
+        let
             @eval a,d,f = 1,2,3
         end
         """)
@@ -966,7 +970,7 @@ f(arg) = arg
                 @test !StaticLint.scopehasbinding(scopeof(cst[1]), "f")
             end
             let cst = parse_and_pass("""
-        let 
+        let
             @eval a = 1
             @eval d = 2
             @eval f = 3
@@ -1358,6 +1362,17 @@ f(arg) = arg
             local const x = 1""")
             @test errorof(cst.args[1]) === StaticLint.TypeDeclOnGlobalVariable
             @test errorof(cst.args[2]) === StaticLint.UnsupportedConstLocalVariable
+        end
+    end
+
+    @testset "issue 1609" begin
+        let
+            cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
+            cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
+            StaticLint.check_all(cst1, StaticLint.LintOptions(), server)
+            StaticLint.check_all(cst2, StaticLint.LintOptions(), server)
+            @test !StaticLint.haserror(cst1[1][2][3][3])
+            @test StaticLint.haserror(cst2[1][2][3][3])
         end
     end
 end

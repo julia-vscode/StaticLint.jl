@@ -10,7 +10,6 @@ function Base.show(io::IO, s::Scope)
     printstyled(io, headof(s.expr))
     printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
     s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color = :blue)
-    # println(io)
 end
 
 function overload_method(scope::Scope, b::Binding, vr::SymbolServer.VarRef)

@@ -3,6 +3,7 @@ module StaticLint
 include("exception_types.jl")
 
 using SymbolServer, CSTParser
+
 using CSTParser: EXPR, isidentifier, setparent!, kindof, valof, headof, hastrivia, parentof, isoperator, ispunctuation
 # CST utils
 using CSTParser: is_getfield, isassignment, isdeclaration, isbracketed, iskwarg, iscall, iscurly, isunarycall, isunarysyntax, isbinarycall, isbinarysyntax, issplat, defines_function, is_getfield_w_quotenode, iswhere, iskeyword, isstringliteral, isparameters, isnonstdid, istuple
@@ -12,7 +13,8 @@ const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
 
 baremodule CoreTypes # Convenience
 using ..SymbolServer
-using Base: ==, @static, !
+using Base: ==, @static
+
 const DataType = SymbolServer.stdlibs[:Core][:DataType]
 const Function = SymbolServer.stdlibs[:Core][:Function]
 const Module = SymbolServer.stdlibs[:Core][:Module]
@@ -21,10 +23,16 @@ const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
 const Int = SymbolServer.stdlibs[:Core][:Int]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
 const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
-@static if !(Vararg isa Type)
-    isva(x) = ((x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeTypeofVararg)) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
+
+isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
+@static if Core.Vararg isa Core.Type
+    function isva(x)
+        return (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg &&
+            x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core)
+    end
 else
-    isva(x) = (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg && x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core) || (x isa SymbolServer.FakeUnionAll && isva(x.body))
+    isva(x) = x isa SymbolServer.FakeTypeofVararg
+end
 end
 
 end
@@ -41,9 +49,9 @@ Meta() = Meta(nothing, nothing, nothing, nothing)
 
 function Base.show(io::IO, m::Meta)
     m.binding !== nothing && show(io, m.binding)
-    m.ref !== nothing && printstyled(io, " * ", color = :red)
-    m.scope !== nothing && printstyled(io, " new scope", color = :green)
-    m.error !== nothing && printstyled(io, " lint ", color = :red)
+    m.ref !== nothing && printstyled(io, " * ", color=:red)
+    m.scope !== nothing && printstyled(io, " new scope", color=:green)
+    m.error !== nothing && printstyled(io, " lint ", color=:red)
 end
 hasmeta(x::EXPR) = x.meta isa Meta
 hasbinding(m::Meta) = m.binding isa Binding
@@ -133,13 +141,14 @@ end
     followinclude(x, state)
 
 Checks whether the arguments of a call to `include` can be resolved to a path.
-If successful it checks whether a file with that path is loaded on the server  
+If successful it checks whether a file with that path is loaded on the server
 or a file exists on the disc that can be loaded.
 If this is successful it traverses the code associated with the loaded file.
 
 """
 function followinclude(x, state::State)
     if CSTParser.iscall(x) && length(x.args) > 0 && isidentifier(x.args[1]) && valofid(x.args[1]) == "include"
+
         init_path = path = get_path(x, state)
         if isempty(path)
         elseif isabspath(path)
