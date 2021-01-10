@@ -54,6 +54,12 @@ function handle_macro(x::EXPR, state)
             if length(x.args) == 3 && isidentifier(x.args[3])
                 mark_binding!(x.args[3])
             end
+        elseif _points_to_Base_macro(x.args[1], Symbol("@NamedTuple"), state) && length(x.args) > 2 && headof(x.args[3]) == :braces
+            for a in x.args[3].args
+                if CSTParser.isdeclaration(a) && isidentifier(a.args[1]) && !hasref(a.args[1])
+                    setref!(a.args[1], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
+                end
+            end
         elseif is_nospecialize(x.args[1])
             for i = 2:length(x.args)
                 if bindingof(x.args[i]) !== nothing

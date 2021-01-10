@@ -1401,4 +1401,9 @@ f(arg) = arg
         @test !StaticLint.haserror(cst.args[2].args[2].args[1].args[3].args[1].args[1])
         @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
     end
+
+    @testset "issue #210" begin
+        cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+        @test isempty(StaticLint.collect_hints(cst, server))
+    end
 end
