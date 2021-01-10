@@ -282,6 +282,9 @@ Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be ca
 """
 get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)
 
+maybe_get_parent_fexpr(x::Nothing, f) = nothing
+maybe_get_parent_fexpr(x::EXPR, f) = f(x) ? x : maybe_get_parent_fexpr(parentof(x), f)
+
 issigoffuncdecl(x::EXPR) = parentof(x) isa EXPR ? issigoffuncdecl(x, parentof(x)) : false
 function issigoffuncdecl(x::EXPR, p::EXPR)
     if CSTParser.iswhere(p) || CSTParser.isdeclaration(p)

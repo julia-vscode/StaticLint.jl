@@ -1378,4 +1378,27 @@ f(arg) = arg
         cst = parse_and_pass("function my_function(::Any...) end")
         @test !StaticLint.haserror(cst.args[1].args[1].args[2])
     end
+
+    @testset "issue #218" begin
+        cst = parse_and_pass("""
+        struct Asdf end
+
+        function foo(x)
+            if x > 0
+                ret = Asdf
+            else
+                ret = "hello"
+            end
+        end
+
+        function foo(x)
+            if x > 0
+                ret = Asdf()
+            else
+                ret = "hello"
+            end
+        end""")
+        @test !StaticLint.haserror(cst.args[2].args[2].args[1].args[3].args[1].args[1])
+        @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
+    end
 end

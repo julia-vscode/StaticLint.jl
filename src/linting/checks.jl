@@ -728,9 +728,40 @@ function check_const_redef(x::EXPR)
     (bind_prev = get_bind_and_prev(x)) === nothing && return
     bind, prev = bind_prev
     bind.type === CoreTypes.Function && return
-    if prev.type === CoreTypes.DataType || is_const(prev)
+    if (prev.type === CoreTypes.DataType && !is_mask_binding_of_datatype(prev)) || is_const(prev)
         seterror!(x, InvalidRedefofConst)
     end
+end
+
+function is_mask_binding_of_datatype(b::Binding)
+    b.val isa EXPR && CSTParser.isassignment(b.val) && (rhsref = refof(b.val.args[2])) !== nothing && (rhsref.val isa SymbolServer.DataTypeStore || (rhsref.val isa EXPR && CSTParser.defines_datatype(rhsref.val)))
+end
+# check whether a and b are in all the same :if blocks and in the same branches
+function in_same_if_branch(a, b)
+    a_branches = find_if_parents(a)
+    b_branches = find_if_parents(b)
+    
+    return length(a_branches) == length(b_branches) && all(k in keys(b_branches) for k in keys(a_branches)) && all(a_branches[k] == b_branches[k] for k in keys(a_branches))
+end
+
+# find any parent nodes that are :if blocks and a pseudo-index of which branch
+# x is in
+function find_if_parents(x::EXPR, current = Int[], list = Dict{EXPR, Vector{Int}}())
+    if x.head in (:block, :elseif) && parentof(x) isa EXPR && headof(parentof(x)) in (:if, :elseif)
+        i = 1
+        while i <= length(parentof(x).args)
+            if parentof(x).args[i] == x
+                pushfirst!(current, i)
+                break
+            end
+            i += 1
+        end
+        if headof(parentof(x)) == :if 
+            list[parentof(x)] = current
+            current = []
+        end
+    end
+    return parentof(x) isa EXPR ? find_if_parents(parentof(x), current, list) : list
 end
 
 function get_bind_and_prev(x::EXPR)
