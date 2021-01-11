@@ -1344,7 +1344,7 @@ f(arg) = arg
         cst = parse_and_pass("using Base.Meta: quot, lower")
         @test StaticLint.hasbinding(cst.args[1].args[1].args[2].args[1])
         @test StaticLint.hasbinding(cst.args[1].args[1].args[3].args[1])
-        
+
         cst = parse_and_pass("using Base.Meta: quot, lower")
     end
 
@@ -1402,8 +1402,10 @@ f(arg) = arg
         @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
     end
 
-    @testset "issue #210" begin
-        cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
-        @test isempty(StaticLint.collect_hints(cst, server))
+    if VERSION > v"1.5-"
+        @testset "issue #210" begin
+            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+            @test isempty(StaticLint.collect_hints(cst, server))
+        end
     end
 end

@@ -128,6 +128,7 @@ end
 
 function _points_to_Base_macro(x::EXPR, name, state)
     CSTParser.is_getfield_w_quotenode(x) && return _points_to_Base_macro(x.args[2].args[1], name, state)
+    haskey(getsymbolserver(state.server)[:Base], name) || return false
     targetmacro =  maybe_lookup(getsymbolserver(state.server)[:Base][name], state.server)
     isidentifier(x) && Symbol(valofid(x)) == name && (ref = refof(x)) !== nothing &&
     (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
