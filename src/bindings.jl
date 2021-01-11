@@ -103,6 +103,7 @@ function mark_bindings!(x::EXPR, state)
     elseif CSTParser.defines_datatype(x)
         name = CSTParser.get_name(x)
         x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
+        kwdef = parentof(x) isa EXPR && _points_to_Base_macro(parentof(x).args[1], Symbol("@kwdef"), state)
         if isidentifier(name)
             setref!(name, bindingof(x))
         end
@@ -110,7 +111,11 @@ function mark_bindings!(x::EXPR, state)
         if CSTParser.defines_struct(x) # mark field block
             for i in 1:length(x.args[3].args)
                 CSTParser.defines_function(x.args[3].args[i]) && continue
-                mark_binding!(x.args[3].args[i])
+                arg = x.args[3].args[i]
+                if kwdef && CSTParser.isassignment(arg)
+                    arg = arg.args[1]
+                end
+                mark_binding!(arg)
             end
         end
     elseif headof(x) === :local
