@@ -61,7 +61,7 @@ end
 
 # Work out what type a bound variable has by functions that are called on it.
 function infer_type_by_use(b::Binding, server)
-    # b.type !== nothing && return # b already has a type
+    b.type !== nothing && return # b already has a type
     possibletypes = []
     visitedmethods = []
     for ref in b.refs
