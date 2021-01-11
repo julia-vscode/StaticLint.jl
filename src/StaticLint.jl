@@ -107,7 +107,7 @@ function (state::Delayed)(x::EXPR)
         for (k,b) in state.scope.names
             infer_type_by_use(b, state.server)
         end
-        (state.scope = s0)
+        state.scope = s0
     end
     return state.scope
 end
