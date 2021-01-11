@@ -46,6 +46,9 @@ function semantic_pass(file, target=nothing)
     for x in state.delayed
         if hasscope(x)
             traverse(x, Delayed(scopeof(x), server))
+            for (k,b) in scopeof(x).names
+                infer_type_by_use(b, state.server)
+            end
         else
             ds = retrieve_delayed_scope(x)
             traverse(x, Delayed(ds, server))

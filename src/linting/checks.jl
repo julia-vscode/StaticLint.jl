@@ -560,6 +560,11 @@ function should_mark_missing_getfield_ref(x, server)
             if lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
                 return true
             elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
+                # We may have infered the lhs type after the semantic pass that was resolving references. Copied from `resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool`.
+                if scopehasbinding(scopeof(lhsref.type.val), valof(x))
+                    setref!(x, scopeof(lhsref.type.val).names[valof(x)])
+                    return false
+                end
                 return true
             end
         end

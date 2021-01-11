@@ -103,8 +103,12 @@ function (state::Delayed)(x::EXPR)
     resolve_ref(x, state)
 
     traverse(x, state)
-
-    state.scope != s0 && (state.scope = s0)
+    if state.scope != s0
+        for (k,b) in state.scope.names
+            infer_type_by_use(b, state.server)
+        end
+        (state.scope = s0)
+    end
     return state.scope
 end
 
