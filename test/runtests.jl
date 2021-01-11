@@ -1408,4 +1408,13 @@ f(arg) = arg
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
+    if isdefined(Base, Symbol("@kwdef"))
+        @testset "Base.@kwdef" begin
+            cst = parse_and_pass("""
+            Base.@kwdef struct T
+                arg = 1
+            end""")
+            @test isempty(StaticLint.collect_hints(cst, server))
+        end
+    end
 end
