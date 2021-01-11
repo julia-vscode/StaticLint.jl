@@ -4,11 +4,11 @@ using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
 server = StaticLint.FileServer();
 
-function get_ids(x, ids=[])
-    if StaticLint.typof(x) == CSTParser.IDENTIFIER
+function get_ids(x, ids = [])
+    if StaticLint.headof(x) === :IDENTIFIER
         push!(ids, x)
-    else
-        for a in x
+    elseif x.args !== nothing
+        for a in x.args
             get_ids(a, ids)
         end
     end
@@ -20,7 +20,8 @@ function parse_and_pass(s)
     f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
     StaticLint.setroot(f, f)
     StaticLint.setfile(server, "", f)
-    StaticLint.scopepass(f)
+    StaticLint.semantic_pass(f)
+    StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
     return f.cst
 end
 
@@ -172,42 +173,42 @@ f(arg) = arg
         @test check_resolved("[k * j for j in 1:10 for k in 1:10]") == [1, 1, 1, 1]
 
         @testset "inference" begin
-            @test bindingof(parse_and_pass("f(arg) = arg")[1]).type == StaticLint.CoreTypes.Function
-            @test bindingof(parse_and_pass("function f end")[1]).type == StaticLint.CoreTypes.Function
-            @test bindingof(parse_and_pass("struct T end")[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("mutable struct T end")[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("abstract type T end")[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("primitive type T 8 end")[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("x = 1")[1][1]).type == StaticLint.CoreTypes.Int
-            @test bindingof(parse_and_pass("x = 1.0")[1][1]).type == StaticLint.CoreTypes.Float64
-            @test bindingof(parse_and_pass("x = \"text\"")[1][1]).type == StaticLint.CoreTypes.String
-            @test bindingof(parse_and_pass("module A end")[1]).type == StaticLint.CoreTypes.Module
-            @test bindingof(parse_and_pass("baremodule A end")[1]).type == StaticLint.CoreTypes.Module
+            @test bindingof(parse_and_pass("f(arg) = arg").args[1]).type == StaticLint.CoreTypes.Function
+            @test bindingof(parse_and_pass("function f end").args[1]).type == StaticLint.CoreTypes.Function
+            @test bindingof(parse_and_pass("struct T end").args[1]).type == StaticLint.CoreTypes.DataType
+            @test bindingof(parse_and_pass("mutable struct T end").args[1]).type == StaticLint.CoreTypes.DataType
+            @test bindingof(parse_and_pass("abstract type T end").args[1]).type == StaticLint.CoreTypes.DataType
+            @test bindingof(parse_and_pass("primitive type T 8 end").args[1]).type == StaticLint.CoreTypes.DataType
+            @test bindingof(parse_and_pass("x = 1").args[1].args[1]).type == StaticLint.CoreTypes.Int
+            @test bindingof(parse_and_pass("x = 1.0").args[1].args[1]).type == StaticLint.CoreTypes.Float64
+            @test bindingof(parse_and_pass("x = \"text\"").args[1].args[1]).type == StaticLint.CoreTypes.String
+            @test bindingof(parse_and_pass("module A end").args[1]).type == StaticLint.CoreTypes.Module
+            @test bindingof(parse_and_pass("baremodule A end").args[1]).type == StaticLint.CoreTypes.Module
 
     # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
             let cst = parse_and_pass("""
         struct T end
         function f(x::T) x end""")
-                @test bindingof(cst[1]).type == StaticLint.CoreTypes.DataType
-                @test bindingof(cst[2]).type == StaticLint.CoreTypes.Function
-                @test bindingof(cst[2][2][3]).type == bindingof(cst[1])
-                @test refof(cst[2][3][1]) == bindingof(cst[2][2][3])
+                @test bindingof(cst.args[1]).type == StaticLint.CoreTypes.DataType
+                @test bindingof(cst.args[2]).type == StaticLint.CoreTypes.Function
+                @test bindingof(cst.args[2].args[1].args[2]).type == bindingof(cst.args[1])
+                @test refof(cst.args[2].args[2].args[1]) == bindingof(cst.args[2].args[1].args[2])
             end
             let cst = parse_and_pass("""
         struct T end
         T() = 1
         function f(x::T) x end""")
-                @test bindingof(cst[1]).type == StaticLint.CoreTypes.DataType
-                @test bindingof(cst[3]).type == StaticLint.CoreTypes.Function
-                @test bindingof(cst[3][2][3]).type == bindingof(cst[1])
-                @test refof(cst[3][3][1]) == bindingof(cst[3][2][3])
+                @test bindingof(cst.args[1]).type == StaticLint.CoreTypes.DataType
+                @test bindingof(cst.args[3]).type == StaticLint.CoreTypes.Function
+                @test bindingof(cst.args[3].args[1].args[2]).type == bindingof(cst.args[1])
+                @test refof(cst.args[3].args[2].args[1]) == bindingof(cst.args[3].args[1].args[2])
             end
 
             let cst = parse_and_pass("""
         struct T end
         t = T()""")
-                @test bindingof(cst[1]).type == StaticLint.CoreTypes.DataType
-                @test bindingof(cst[2][1]).type == bindingof(cst[1])
+                @test bindingof(cst.args[1]).type == StaticLint.CoreTypes.DataType
+                @test bindingof(cst.args[2].args[1]).type == bindingof(cst.args[1])
             end
 
             let cst = parse_and_pass("""
@@ -220,7 +221,7 @@ f(arg) = arg
         B.x
         end
         end""")
-                @test refof(cst[1][3][2][3][2][3][1]) == bindingof(cst[1][3][1][3][1][1])
+                @test refof(cst.args[1].args[3].args[2].args[3].args[2].args[2].args[1]) == bindingof(cst[1].args[3].args[1].args[3].args[1].args[1])
             end
 
             let cst = parse_and_pass("""
@@ -233,33 +234,28 @@ f(arg) = arg
         function f(arg::T1)
             arg.field.x
         end""");
-                @test refof(cst[3][3][1][1][1]) == bindingof(cst[3][2][3])
-                @test refof(cst[3][3][1][1][3][1]) == bindingof(cst[2][3][1])
-                @test refof(cst[3][3][1][3][1]) == bindingof(cst[1][3][1])
+                @test refof(cst.args[3].args[2].args[1].args[1].args[1]) == bindingof(cst.args[3].args[1].args[2])
+                @test refof(cst.args[3].args[2].args[1].args[1].args[2].args[1]) == bindingof(cst.args[2].args[3].args[1])
+                @test refof(cst.args[3].args[2].args[1].args[2].args[1]) == bindingof(cst.args[1].args[3].args[1])
             end
 
-
-            let cst = parse_and_pass("""
-        raw"whatever"
-        """)
-                @test refof(cst[1][1]) !== nothing
+            let cst = parse_and_pass("""raw\"whatever\"""")
+                @test refof(cst.args[1].args[1]) !== nothing
             end
+
             let cst = parse_and_pass("""
         macro mac_str() end
         mac"whatever"
         """)
-                @test refof(cst[2][1]) == bindingof(cst[1])
+                @test refof(cst.args[2].args[1]) == bindingof(cst.args[1])
             end
 
-            let cst = parse_and_pass("""
-        [i * j for i = 1:10 for j = i:10]
-        """)
-                @test refof(cst[1][2][1][3][3][1]) == bindingof(cst[1][2][1][1][3][1])
+            let cst = parse_and_pass("[i * j for i = 1:10 for j = i:10]")
+                @test refof(cst.args[1].args[1].args[1].args[1].args[2].args[2].args[2]) == bindingof(cst.args[1].args[1].args[1].args[2].args[1])
             end
-            let cst = parse_and_pass("""
-        [i * j for i = 1:10, j = 1:10 for k = i:10]
-        """)
-                @test refof(cst[1][2][1][3][3][1]) == bindingof(cst[1][2][1][1][3][1])
+
+            let cst = parse_and_pass("[i * j for i = 1:10, j = 1:10 for k = i:10]")
+                @test refof(cst.args[1].args[1].args[1].args[1].args[2].args[2].args[2]) == bindingof(cst.args[1].args[1].args[1].args[2].args[1])
             end
 
             let cst = parse_and_pass("""
@@ -267,7 +263,7 @@ f(arg) = arg
         end
         using .Reparse, CSTParser
         """)
-                @test refof(cst[2][3]).val == bindingof(cst[1])
+                @test refof(cst.args[2].args[1].args[2]).val == bindingof(cst[1])
             end
 
             let cst = parse_and_pass("""
@@ -275,9 +271,9 @@ f(arg) = arg
         A
         end
         """)
-                @test scopeof(cst).names["A"] == scopeof(cst[1]).names["A"]
-                @test refof(cst[1][2]) == bindingof(cst[1])
-                @test refof(cst[1][3][1]) == bindingof(cst[1])
+                @test scopeof(cst).names["A"] == scopeof(cst.args[1]).names["A"]
+                @test refof(cst.args[1].args[2]) == bindingof(cst.args[1])
+                @test refof(cst.args[1].args[3].args[1]) == bindingof(cst.args[1])
             end
     # let cst = parse_and_pass("""
     #     using Test: @test
@@ -287,8 +283,7 @@ f(arg) = arg
             let cst = parse_and_pass("""
         sin(1,2,3)
         """)
-                check_all(cst, StaticLint.LintOptions(:), server)
-                @test errorof(cst[1]) === StaticLint.IncorrectCallArgs
+                @test errorof(cst.args[1]) === StaticLint.IncorrectCallArgs
             end
             let cst = parse_and_pass("""
         for i in length(1) end
@@ -296,11 +291,10 @@ f(arg) = arg
         for i in 1 end
         for i in 1:1 end
         """)
-                check_all(cst, StaticLint.LintOptions(:), server)
-                @test errorof(cst[1][2]) === StaticLint.IncorrectIterSpec
-                @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
-                @test errorof(cst[3][2]) === StaticLint.IncorrectIterSpec
-                @test errorof(cst[4][2]) === nothing
+                @test errorof(cst.args[1].args[1]) === StaticLint.IncorrectIterSpec
+                @test errorof(cst.args[2].args[1]) === StaticLint.IncorrectIterSpec
+                @test errorof(cst.args[3].args[1]) === StaticLint.IncorrectIterSpec
+                @test errorof(cst.args[4].args[1]) === nothing
             end
 
             let cst = parse_and_pass("""
@@ -309,7 +303,6 @@ f(arg) = arg
         [i for i in 1 end]
         [i for i in 1:1 end]
         """)
-                check_all(cst, StaticLint.LintOptions(:), server)
                 @test errorof(cst[1][2][3]) === StaticLint.IncorrectIterSpec
                 @test errorof(cst[2][2][3]) === StaticLint.IncorrectIterSpec
                 @test errorof(cst[3][2][3]) === StaticLint.IncorrectIterSpec
@@ -317,7 +310,6 @@ f(arg) = arg
             end
 
             let cst = parse_and_pass("a == nothing")
-                check_all(cst, StaticLint.LintOptions(:), server)
                 @test errorof(cst[1][2]) === StaticLint.NothingEquality
             end
 
@@ -330,7 +322,7 @@ f(arg) = arg
             g = Graph()
             f = g.children
         end""")
-                @test cst[2][3][2][3][3][1] in bindingof(cst[1][3][1]).refs
+                @test cst.args[2].args[2].args[2].args[2].args[2].args[1] in bindingof(cst.args[1].args[3].args[1]).refs
             end
 
             let cst = parse_and_pass("""
@@ -406,22 +398,20 @@ f(arg) = arg
         f() where {T,S}
         f() where {T<:Any}
         """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-            @test StaticLint.errorof(cst[1][3]) == StaticLint.UnusedTypeParameter
-            @test StaticLint.errorof(cst[2][4]) == StaticLint.UnusedTypeParameter
-            @test StaticLint.errorof(cst[2][6]) == StaticLint.UnusedTypeParameter
-            @test StaticLint.errorof(cst[3][4]) == StaticLint.UnusedTypeParameter
+            @test StaticLint.errorof(cst.args[1].args[2]) == StaticLint.UnusedTypeParameter
+            @test StaticLint.errorof(cst.args[2].args[2]) == StaticLint.UnusedTypeParameter
+            @test StaticLint.errorof(cst.args[2].args[3]) == StaticLint.UnusedTypeParameter
+            @test StaticLint.errorof(cst.args[3].args[2]) == StaticLint.UnusedTypeParameter
         end
         let cst = parse_and_pass("""
         f(x::T) where T
         f(x::T,y::S) where {T,S}
         f(x::T) where {T<:Any}
         """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-            @test !StaticLint.haserror(cst[1][3])
-            @test !StaticLint.haserror(cst[2][4])
-            @test !StaticLint.haserror(cst[2][6])
-            @test !StaticLint.haserror(cst[3][4])
+            @test !StaticLint.haserror(cst.args[1].args[2])
+            @test !StaticLint.haserror(cst.args[2].args[2])
+            @test !StaticLint.haserror(cst.args[2].args[3])
+            @test !StaticLint.haserror(cst.args[3].args[2])
         end
     end
 
@@ -449,10 +439,10 @@ f(arg) = arg
         sin(x::T) = 1
         sin(x::Array{T}) = 1
         """)
-            StaticLint.check_for_pirates(cst[3])
-            StaticLint.check_for_pirates(cst[4])
-            @test errorof(cst[3]) === StaticLint.TypePiracy
-            @test errorof(cst[4]) === nothing
+            StaticLint.check_for_pirates(cst.args[3])
+            StaticLint.check_for_pirates(cst.args[4])
+            @test errorof(cst.args[3]) === StaticLint.TypePiracy
+            @test errorof(cst.args[4]) === nothing
         end
         let cst = parse_and_pass("""
         struct AreaIterator{T}
@@ -515,8 +505,8 @@ f(arg) = arg
     somefunc
     somefunc() = true
     """)
-            @test StaticLint.hasref(cst[1][3])
-            @test StaticLint.hasbinding(cst[1][3])
+            @test StaticLint.hasref(cst.args[1].args[4])
+            @test StaticLint.hasbinding(cst.args[1].args[4])
             @test refof(cst[1][3]) == bindingof(cst[1][3])
         end
     end
@@ -526,10 +516,10 @@ f(arg) = arg
         sin(1)
         sin(1,2)
         """)
-            StaticLint.check_call(cst[1], server)
-            StaticLint.check_call(cst[2], server)
-            @test StaticLint.errorof(cst[1]) === nothing
-            @test StaticLint.errorof(cst[2]) == StaticLint.IncorrectCallArgs
+            StaticLint.check_call(cst.args[1], server)
+            StaticLint.check_call(cst.args[2], server)
+            @test StaticLint.errorof(cst.args[1]) === nothing
+            @test StaticLint.errorof(cst.args[2]) == StaticLint.IncorrectCallArgs
         end
 
         let cst = parse_and_pass("""
@@ -538,25 +528,25 @@ f(arg) = arg
             1
         end
         """)
-            StaticLint.check_call(cst[1][1], server)
-            @test StaticLint.errorof(cst[1][1]) === nothing
-            StaticLint.check_call(cst[2][2], server)
-            @test StaticLint.errorof(cst[2][2]) === nothing
+            StaticLint.check_call(cst.args[1].args[1], server)
+            @test StaticLint.errorof(cst.args[1].args[1]) === nothing
+            StaticLint.check_call(cst.args[2].args[1], server)
+            @test StaticLint.errorof(cst.args[2].args[1]) === nothing
         end
 
         let cst = parse_and_pass("""
         f(x) = 1
         f(1, 2)
         """)
-            StaticLint.check_call(cst[2], server)
-            @test StaticLint.errorof(cst[2]) === StaticLint.IncorrectCallArgs
+            StaticLint.check_call(cst.args[2], server)
+            @test StaticLint.errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
         end
 
         let cst = parse_and_pass("""
         view([1], 1, 2, 3)
         """)
-            StaticLint.check_call(cst[1], server)
-            @test StaticLint.errorof(cst[1]) === nothing
+            StaticLint.check_call(cst.args[1], server)
+            @test StaticLint.errorof(cst.args[1]) === nothing
         end
 
         let cst = parse_and_pass("""
@@ -564,28 +554,28 @@ f(arg) = arg
         f(1)
         f(1, 2)
         """)
-            StaticLint.check_call(cst[2], server)
-            StaticLint.check_call(cst[3], server)
-            @test StaticLint.errorof(cst[2]) === nothing
-            @test StaticLint.errorof(cst[3]) === nothing
+            StaticLint.check_call(cst.args[2], server)
+            StaticLint.check_call(cst.args[3], server)
+            @test StaticLint.errorof(cst.args[2]) === nothing
+            @test StaticLint.errorof(cst.args[3]) === nothing
         end
         let cst = parse_and_pass("""
         function func(a, b)
             func(a...)
         end
         """)
-            StaticLint.check_call(cst[1][3][1], server)
-            m_counts = StaticLint.func_nargs(cst[1])
-            call_counts = StaticLint.call_nargs(cst[1][3][1])
-            @test StaticLint.errorof(cst[1][3][1]) === nothing
+            StaticLint.check_call(cst.args[1].args[2].args[1], server)
+            m_counts = StaticLint.func_nargs(cst.args[1])
+            call_counts = StaticLint.call_nargs(cst.args[1].args[2].args[1])
+            @test StaticLint.errorof(cst.args[1].args[2].args[1]) === nothing
         end
         let cst = parse_and_pass("""
         function func(@nospecialize args...) end
         func(1, 2)
         """)
-            @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
-            StaticLint.check_call(cst[2], server)
-            @test StaticLint.errorof(cst[2]) === nothing
+            @test StaticLint.func_nargs(cst.args[1]) == (0, typemax(Int), String[], false)
+            StaticLint.check_call(cst.args[2], server)
+            @test StaticLint.errorof(cst.args[2]) === nothing
         end
         let cst = parse_and_pass("""
         argtail(x, rest...) = 1
@@ -638,7 +628,6 @@ f(arg) = arg
         sin(1)
         """)
         # Checks that documented symbols are skipped
-            StaticLint.check_all(cst, StaticLint.LintOptions(), server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("""
@@ -647,14 +636,12 @@ f(arg) = arg
         sin(1)
         """)
         # Checks that documented symbols are skipped
-            StaticLint.check_all(cst, StaticLint.LintOptions(), server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("""
             function f(a::F)::Bool where {F} end
             """)
             # ensure we strip all type decl code from around signature
-            StaticLint.check_all(cst, StaticLint.LintOptions(), server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
@@ -670,15 +657,15 @@ f(arg) = arg
         end
         end
         """)
-            StaticLint.check_modulename(cst[1])
-            StaticLint.check_modulename(cst[1][3][1])
-            StaticLint.check_modulename(cst[2])
-            StaticLint.check_modulename(cst[2][3][1])
+            StaticLint.check_modulename(cst.args[1])
+            StaticLint.check_modulename(cst.args[1].args[3].args[1])
+            StaticLint.check_modulename(cst.args[2])
+            StaticLint.check_modulename(cst.args[2].args[3].args[1])
 
-            @test StaticLint.errorof(cst[1][2]) === nothing
-            @test StaticLint.errorof(cst[1][3][1][2]) === nothing
-            @test StaticLint.errorof(cst[2][2]) === nothing
-            @test StaticLint.errorof(cst[2][3][1][2]) === StaticLint.InvalidModuleName
+            @test StaticLint.errorof(cst.args[1].args[2]) === nothing
+            @test StaticLint.errorof(cst.args[1].args[3].args[1].args[2]) === nothing
+            @test StaticLint.errorof(cst.args[2].args[2]) === nothing
+            @test StaticLint.errorof(cst.args[2].args[3].args[1].args[2]) === StaticLint.InvalidModuleName
         end
     end
 
@@ -782,26 +769,26 @@ f(arg) = arg
         let cst = parse_and_pass("""
         if true end
         """)
-            StaticLint.check_if_conds(cst[1])
-            @test cst[1][2].meta.error == StaticLint.ConstIfCondition
+            StaticLint.check_if_conds(cst.args[1])
+            @test cst.args[1].args[1].meta.error == StaticLint.ConstIfCondition
         end
         let cst = parse_and_pass("""
         if x = 1 end
         """)
-            StaticLint.check_if_conds(cst[1])
-            @test cst[1][2].meta.error == StaticLint.EqInIfConditional
+            StaticLint.check_if_conds(cst.args[1])
+            @test cst.args[1].args[1].meta.error == StaticLint.EqInIfConditional
         end
         let cst = parse_and_pass("""
         if a || x = 1 end
         """)
-            StaticLint.check_if_conds(cst[1])
-            @test cst[1][2].meta.error == StaticLint.EqInIfConditional
+            StaticLint.check_if_conds(cst.args[1])
+            @test cst.args[1].args[1].meta.error == StaticLint.EqInIfConditional
         end
         let cst = parse_and_pass("""
         if x = 1 && b end
         """)
-            StaticLint.check_if_conds(cst[1])
-            @test cst[1][2].meta.error == StaticLint.EqInIfConditional
+            StaticLint.check_if_conds(cst.args[1])
+            @test cst.args[1].args[1].meta.error == StaticLint.EqInIfConditional
         end
     end
 
@@ -818,11 +805,11 @@ f(arg) = arg
             @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument
         end
         let cst = parse_and_pass("function f(arg1, arg2::T, arg3 = 1, arg4::T = 1) end")
-            StaticLint.check_farg_unused(cst[1])
-            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
-            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument
-            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[7][1]) === StaticLint.UnusedFunctionArgument
-            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[9][1]) === StaticLint.UnusedFunctionArgument
+            StaticLint.check_farg_unused(cst.args[1])
+            @test StaticLint.errorof(CSTParser.get_sig(cst.args[1]).args[2]) === StaticLint.UnusedFunctionArgument
+            @test StaticLint.errorof(CSTParser.get_sig(cst.args[1]).args[3]) === StaticLint.UnusedFunctionArgument
+            @test StaticLint.errorof(CSTParser.get_sig(cst.args[1]).args[4].args[1]) === StaticLint.UnusedFunctionArgument
+            @test StaticLint.errorof(CSTParser.get_sig(cst.args[1]).args[5].args[1]) === StaticLint.UnusedFunctionArgument
         end
         let cst = parse_and_pass("function f(arg) arg = 1 end")
             StaticLint.check_farg_unused(cst[1])
@@ -838,7 +825,7 @@ f(arg) = arg
         end
         let cst = parse_and_pass("func(@nospecialize(arg)) = arg")
             StaticLint.check_farg_unused(cst[1])
-            @test cst[1].args[1].args[3].meta.error === nothing
+            @test cst[1].args[1].args[2].meta.error === nothing
         end
     end
 
@@ -875,21 +862,17 @@ f(arg) = arg
         end
         ASDF() = something
         """)
-            @test bindingof(cst[1]) === bindingof(cst[1][3][3]).prev
-            @test bindingof(cst[1][3][3]) === bindingof(cst[2]).prev
+            @test bindingof(cst.args[1]) === bindingof(cst.args[1].args[3].args[3]).prev
+            @test bindingof(cst.args[1].args[3].args[3]) === bindingof(cst.args[2]).prev
         end
     end
 
     @testset "using statements" begin # e.g. `using StaticLint: StaticLint`
-        let cst = parse_and_pass("""
-        using Base.Filesystem: Filesystem
-        """)
-            @test StaticLint.hasref(cst[1][6])
+        let cst = parse_and_pass("using Base.Filesystem: Filesystem")
+            @test StaticLint.hasref(cst.args[1].args[1].args[2].args[1])
         end
-        let cst = parse_and_pass("""
-            using Base: Ordering
-            """)
-            @test StaticLint.hasbinding(cst[1][4])
+        let cst = parse_and_pass("using Base: Ordering")
+            @test StaticLint.hasbinding(cst.args[1].args[1].args[2].args[1])
         end
         let cst = parse_and_pass("""
             module Outer
@@ -901,8 +884,8 @@ f(arg) = arg
             end
             using .Outer: x, rand
             """)
-            @test StaticLint.hasbinding(cst[2][5])
-            @test StaticLint.hasbinding(cst[2][7])
+            @test StaticLint.hasbinding(cst.args[2].args[1].args[2].args[1])
+            @test StaticLint.hasbinding(cst.args[2].args[1].args[3].args[1])
         end
     end
 
@@ -912,8 +895,8 @@ f(arg) = arg
         Base.getproperty(x::T, s) = 1
         T
         """)
-            @test StaticLint.has_getproperty_method(bindingof(cst[1]))
-            @test StaticLint.has_getproperty_method(refof(cst[3]))
+            @test StaticLint.has_getproperty_method(bindingof(cst.args[1]))
+            @test StaticLint.has_getproperty_method(refof(cst.args[3]))
         end
         let cst = parse_and_pass("""
         struct T
@@ -923,7 +906,7 @@ f(arg) = arg
         Base.getproperty(x::T, s) = 1
         f(x::T) = x.f3
         """)
-            @test !StaticLint.hasref(cst[3][3][1][3][1])
+            @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("""
@@ -934,21 +917,17 @@ f(arg) = arg
         Base.getproperty(x::T{Int}, s) = 1
         f(x::T) = x.f3
         """)
-            @test !StaticLint.hasref(cst[3][3][1][3][1])
-            @test StaticLint.is_type_of_call_to_getproperty(cst[2][1][3][3][1])
+            @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
+            @test StaticLint.is_type_of_call_to_getproperty(cst.args[2].args[1].args[2].args[2].args[1])
             @test isempty(StaticLint.collect_hints(cst, server))
         end
 
-        let cst = parse_and_pass("""
-        f(x::Module) = x.parent1
-        """)
+        let cst = parse_and_pass("f(x::Module) = x.parent1")
             @test StaticLint.has_getproperty_method(server.symbolserver[:Core][:Module], server)
             @test !StaticLint.has_getproperty_method(server.symbolserver[:Core][:DataType], server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
-        let cst = parse_and_pass("""
-        f(x::DataType) = x.sdf
-        """)
+        let cst = parse_and_pass("f(x::DataType) = x.sdf")
             @test !isempty(StaticLint.collect_hints(cst, server))
         end
     end
@@ -962,12 +941,11 @@ f(arg) = arg
         Base.fetch(x) = 1
         function f(a::fetch) a end
         """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-            @test errorof(cst[1][2][3]) === StaticLint.InvalidTypeDeclaration
-            @test errorof(cst[2][2][3]) === StaticLint.InvalidTypeDeclaration
-            @test errorof(cst[3][2][3]) === nothing
-            @test errorof(cst[5][2][3]) === nothing
-            @test errorof(cst[7][2][3]) === StaticLint.InvalidTypeDeclaration
+            @test errorof(cst.args[1].args[1].args[2]) === StaticLint.InvalidTypeDeclaration
+            @test errorof(cst.args[2].args[1].args[2]) === StaticLint.InvalidTypeDeclaration
+            @test errorof(cst.args[3].args[1].args[2]) === nothing
+            @test errorof(cst.args[5].args[1].args[2]) === nothing
+            @test errorof(cst.args[7].args[1].args[2]) === StaticLint.InvalidTypeDeclaration
         end
 
         @testset "interpret @eval" begin # e.g. `using StaticLint: StaticLint`
@@ -1001,9 +979,9 @@ f(arg) = arg
                 @test StaticLint.scopehasbinding(scopeof(cst), "a")
                 @test StaticLint.scopehasbinding(scopeof(cst), "d")
                 @test StaticLint.scopehasbinding(scopeof(cst), "f")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "a")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "d")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "f")
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "a")
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "d")
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "f")
             end
 
             let cst = parse_and_pass("""
@@ -1012,7 +990,7 @@ f(arg) = arg
         end
         """)
                 @test StaticLint.scopehasbinding(scopeof(cst), "adf")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "adf")
             end
             let cst = parse_and_pass("""
         let name = [:adf]
@@ -1020,7 +998,7 @@ f(arg) = arg
         end
         """)
                 @test !StaticLint.scopehasbinding(scopeof(cst), "adf")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "adf")
             end
 
             let cst = parse_and_pass("""
@@ -1047,10 +1025,9 @@ f(arg) = arg
         end
         adf(1,2)
         """)
-                StaticLint.check_all(cst, StaticLint.LintOptions(), server)
                 @test StaticLint.scopehasbinding(scopeof(cst), "adf")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "adf")
-                @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "adf")
+                @test errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
             end
             let cst = parse_and_pass("""
         for name in (:sdf, :asdf)
@@ -1058,9 +1035,8 @@ f(arg) = arg
         end
         sdf(1,2)
         """)
-                StaticLint.check_all(cst, StaticLint.LintOptions(), server)
                 @test StaticLint.scopehasbinding(scopeof(cst), "sdf")
-                @test !StaticLint.scopehasbinding(scopeof(cst[1]), "asdf")
+                @test !StaticLint.scopehasbinding(scopeof(cst.args[1]), "asdf")
                 @test errorof(cst[2]) === StaticLint.IncorrectCallArgs
             end
         end
@@ -1077,8 +1053,8 @@ f(arg) = arg
         end
         end
         """)
-            @test bindingof(cst[1][3][3]) != refof(cst[1][3][3][2][3][3][3][1])
-            @test bindingof(cst[1][3][1][3][1]) == refof(cst[1][3][3][2][3][3][3][1])
+            @test bindingof(cst.args[1].args[3].args[3]) != refof(cst.args[1].args[3].args[3].args[1].args[2].args[2].args[2].args[1])
+            @test bindingof(cst.args[1].args[3].args[1].args[3].args[1]) == refof(cst.args[1].args[3].args[3][2][3][3][3][1])
         end
     end
     @testset "misc" begin # e.g. `using StaticLint: StaticLint`
@@ -1087,44 +1063,35 @@ f(arg) = arg
         function Bool(x) x end
         ^(z::Complex, n::Bool) = n ? z : one(z)
         """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("""
         (rand(d::Vector{T})::T) where {T}  =  1
         """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
     @testset "Test self" begin
         empty!(server.files)
         f = StaticLint.loadfile(server, joinpath(@__DIR__, "..", "src", "StaticLint.jl"))
-        StaticLint.scopepass(f)
+        StaticLint.semantic_pass(f)
     end
 
     let cst = parse_and_pass("""
-    using Base.@irrational
+    using Base:@irrational
     @irrational ase 0.45343 π
     ase
     """)
-        StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
         @test isempty(StaticLint.collect_hints(cst, server))
     end
 
     @testset "quoted getfield" begin
-        let cst = parse_and_pass("""
-    Base.:sin
-    """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
+        let cst = parse_and_pass("Base.:sin")
             @test isempty(StaticLint.collect_hints(cst[1], server))
         end
         @testset "quoted getfield" begin
-            let cst = parse_and_pass("""
-        Base.:sin
-        """)
-                StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-                @test isempty(StaticLint.collect_hints(cst[1], server))
+            let cst = parse_and_pass("Base.:sin")
+                @test isempty(StaticLint.collect_hints(cst.args[1], server))
             end
 
             let cst = parse_and_pass("""
@@ -1132,8 +1099,7 @@ f(arg) = arg
         Base.sin(1,1)
         Base.:sin(1,1)
         """)
-                StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-                @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
+                @test errorof(cst.args[1]) === errorof(cst.args[2]) === errorof(cst.args[3])
             end
         end
         @testset "overloading" begin
@@ -1145,7 +1111,7 @@ f(arg) = arg
                 @test haskey(cst.meta.scope.names, "sin") #
                 @test cst.meta.scope.names["sin"].prev == server.symbolserver[:Base][:sin]
                 StaticLint.check_call(cst[2], server)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst[2], server))
             end
     # As above but for user defined function
             let cst = parse_and_pass("""
@@ -1156,8 +1122,8 @@ f(arg) = arg
         M.f(1,2)
         """)
                 @test !haskey(cst.meta.scope.names, "f")
-                StaticLint.check_call(cst[3], server)
-                @test errorof(cst[3]) === nothing
+                StaticLint.check_call(cst.args[3], server)
+                @test errorof(cst.args[3]) === nothing
             end
 
             let cst = parse_and_pass("""
@@ -1165,7 +1131,6 @@ f(arg) = arg
     Base.sin(1,1)
     Base.:sin(1,1)
     """)
-                StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
                 @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
             end
         end
@@ -1186,25 +1151,22 @@ f(arg) = arg
         M.ff() = nothing
         M.ff()
         """)
-            @test !haskey(cst.meta.scope.names, "ff") #
-            StaticLint.check_call(cst[3], server)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test !haskey(cst.meta.scope.names, "ff")
+            @test isempty(StaticLint.collect_hints(cst[3], server))
         end
 
         let cst = parse_and_pass("""
-        import Base:argtail
+        import Base: argtail
         Base.argtail() = nothing
         Base.argtail()
         argtail()
         """)
 
-            @test cst.meta.scope.names["argtail"] === bindingof(cst[2])
-            @test bindingof(cst[2]).prev == bindingof(cst[1][4])
-            @test refof(cst[3][1][3][1]) === bindingof(cst[2])
-            StaticLint.check_call(cst[3], server)
-            StaticLint.check_call(cst[4], server)
-            @test isempty(StaticLint.collect_hints(cst, server))
-
+            @test cst.meta.scope.names["argtail"] === bindingof(cst.args[2])
+            @test bindingof(cst.args[2]).prev == bindingof(cst.args[1].args[1].args[2].args[1])
+            @test refof(cst.args[3].args[1].args[2].args[1]) === bindingof(cst.args[2])
+            @test isempty(StaticLint.collect_hints(cst[3], server))
+            @test isempty(StaticLint.collect_hints(cst[4], server))
         end
     end
 
@@ -1218,7 +1180,7 @@ f(arg) = arg
             T
             end
             end""")
-            @test refof(cst[1][3][3][3][2]) !== nothing
+            @test refof(cst.args[1].args[3].args[3].args[3].args[2]) !== nothing
         end
     end
 
@@ -1226,13 +1188,13 @@ f(arg) = arg
     @testset "check kw default definition" begin
         function kw_default_ok(s)
             cst = parse_and_pass(s)
-            StaticLint.check_kw_default(cst[1][3], server)
-            @test errorof(cst[1][3][3]) === nothing
+            StaticLint.check_kw_default(cst.args[1].args[2], server)
+            @test errorof(cst.args[1].args[2].args[2]) === nothing
         end
         function kw_default_notok(s)
             cst = parse_and_pass(s)
-            StaticLint.check_kw_default(cst[1][3], server)
-            @test errorof(cst[1][3][3]) == StaticLint.KwDefaultMismatch
+            StaticLint.check_kw_default(cst.args[1].args[2], server)
+            @test errorof(cst.args[1].args[2].args[2]) == StaticLint.KwDefaultMismatch
         end
 
         kw_default_ok("f(x::Float64 = 0.1)")
@@ -1331,16 +1293,15 @@ f(arg) = arg
             123::123
             123 isa false
             """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-            @test errorof(cst[1][2]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[2][3]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[3][3]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[4][2]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[5][3]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[6][1]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[7][3][1]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[8][3]) === StaticLint.InappropriateUseOfLiteral
-            @test errorof(cst[9][3]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[1].args[2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[2].args[1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[3].args[1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[4].args[2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[5].args[2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[6].args[1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[7].args[2].args[1]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[8].args[2]) === StaticLint.InappropriateUseOfLiteral
+            @test errorof(cst.args[9].args[3]) === StaticLint.InappropriateUseOfLiteral
         end
     end
 
@@ -1351,15 +1312,56 @@ f(arg) = arg
             end
             break
             """)
-            StaticLint.check_all(cst, StaticLint.LintOptions(:), server)
-            @test errorof(cst[1][3][1]) === nothing
-            @test errorof(cst[2]) === StaticLint.ShouldBeInALoop
+            @test errorof(cst.args[1].args[2].args[1]) === nothing
+            @test errorof(cst.args[2]) === StaticLint.ShouldBeInALoop
         end
     end
 
     @testset "@." begin
         let cst = parse_and_pass("@. a + b")
-            @test StaticLint.hasref(cst[1][1][2])
+            @test StaticLint.hasref(cst.args[1].args[1])
+        end
+    end
+
+    @testset "using" begin
+        cst = parse_and_pass("using Base")
+        @test StaticLint.hasbinding(cst.args[1].args[1].args[1])
+
+        cst = parse_and_pass("using Base.Meta")
+        @test !StaticLint.hasbinding(cst.args[1].args[1].args[1])
+        @test StaticLint.hasbinding(cst.args[1].args[1].args[2])
+        @test haskey(cst.meta.scope.modules, :Meta)
+
+        cst = parse_and_pass("using Core.Compiler.Pair")
+        @test !StaticLint.hasbinding(cst.args[1].args[1].args[1])
+        @test !StaticLint.hasbinding(cst.args[1].args[1].args[2])
+        @test StaticLint.hasbinding(cst.args[1].args[1].args[3])
+
+        cst = parse_and_pass("using Base.UUID, Base.any")
+        @test StaticLint.hasbinding(cst.args[1].args[1].args[2])
+        @test StaticLint.hasbinding(cst.args[1].args[2].args[2])
+
+        cst = parse_and_pass("using Base.Meta: quot, lower")
+        @test StaticLint.hasbinding(cst.args[1].args[1].args[2].args[1])
+        @test StaticLint.hasbinding(cst.args[1].args[1].args[3].args[1])
+
+        cst = parse_and_pass("using Base.Meta: quot, lower")
+    end
+
+    @testset "issue 1609" begin
+        let
+            cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
+            cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
+            @test !StaticLint.haserror(cst1.args[1].args[1].args[2].args[3])
+            @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
+        end
+    end
+    @testset "j-vsc issue 1835" begin
+        let
+            cst = parse_and_pass("""const x::T = x
+            local const x = 1""")
+            @test errorof(cst.args[1]) === StaticLint.TypeDeclOnGlobalVariable
+            @test errorof(cst.args[2]) === StaticLint.UnsupportedConstLocalVariable
         end
     end
 
@@ -1367,10 +1369,43 @@ f(arg) = arg
         let
             cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
             cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
-            StaticLint.check_all(cst1, StaticLint.LintOptions(), server)
-            StaticLint.check_all(cst2, StaticLint.LintOptions(), server)
-            @test !StaticLint.haserror(cst1[1][2][3][3])
-            @test StaticLint.haserror(cst2[1][2][3][3])
+            @test !StaticLint.haserror(cst1.args[1].args[1].args[2].args[3])
+            @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
+        end
+    end
+
+    @testset "issue #226" begin
+        cst = parse_and_pass("function my_function(::Any...) end")
+        @test !StaticLint.haserror(cst.args[1].args[1].args[2])
+    end
+
+    @testset "issue #218" begin
+        cst = parse_and_pass("""
+        struct Asdf end
+
+        function foo(x)
+            if x > 0
+                ret = Asdf
+            else
+                ret = "hello"
+            end
+        end
+
+        function foo(x)
+            if x > 0
+                ret = Asdf()
+            else
+                ret = "hello"
+            end
+        end""")
+        @test !StaticLint.haserror(cst.args[2].args[2].args[1].args[3].args[1].args[1])
+        @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
+    end
+
+    if VERSION > v"1.5-"
+        @testset "issue #210" begin
+            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+            @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
 end

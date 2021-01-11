@@ -1,5 +1,5 @@
-quoted(x) = typof(x) === Quote || typof(x) === Quotenode
-unquoted(x) = is_unary_call(x) && isoperator(x[1]) && kindof(x[1]) == CSTParser.Tokens.EX_OR
+quoted(x) = headof(x) === :quote || headof(x) === :quotenode
+unquoted(x) = isunarycall(x) && valof(x.args[1]) == "\$"
 
 function remove_ref(x::EXPR)
     if hasref(x) && refof(x) isa Binding && refof(x).refs isa Vector
@@ -30,7 +30,7 @@ function clear_scope(x::EXPR)
     if hasmeta(x) && scopeof(x) isa Scope
         setparent!(scopeof(x), nothing)
         empty!(scopeof(x).names)
-        if typof(x) === CSTParser.FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
+        if headof(x) === :file && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
             m1, m2 = getscopemodule(scopeof(x), :Base), getscopemodule(scopeof(x), :Core)
             empty!(scopeof(x).modules)
             addmoduletoscope!(scopeof(x), m1)
@@ -69,9 +69,16 @@ function clear_meta(x::EXPR)
     clear_ref(x)
     clear_scope(x)
     clear_error(x)
-    for a in x
-        clear_meta(a)
+    if x.args !== nothing
+        for a in x.args
+            clear_meta(a)
+        end
     end
+    # if x.trivia !== nothing
+    #     for a in x.trivia
+    #         clear_meta(a)
+    #     end
+    # end
 end
 
 function get_root_method(b, server)
@@ -115,43 +122,43 @@ function retrieve_scope(x)
 end
 
 
-function find_return_statements(x::EXPR)
-    rets = EXPR[]
-    if CSTParser.defines_function(x)
-        find_return_statements(x[3], true, rets)
-    end
-    return rets
-end
+# function find_return_statements(x::EXPR)
+#     rets = EXPR[]
+#     if CSTParser.defines_function(x)
+#         find_return_statements(x.args[2], true, rets)
+#     end
+#     return rets
+# end
 
-function find_return_statements(x::EXPR, last_stmt, rets)
-    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || iskw(x))
-        push!(rets, x)
-        return rets, false
-    end
+# function find_return_statements(x::EXPR, last_stmt, rets)
+#     if last_stmt && !(headof(x) === :block || headof(x) === :if || iskw(x))
+#         push!(rets, x)
+#         return rets, false
+#     end
 
-    if typof(x) === CSTParser.Return
-        push!(rets, x)
-        return rets, true
-    end
+#     if headof(x) === :return
+#         push!(rets, x)
+#         return rets, true
+#     end
 
 
-    for i = 1:length(x)
-        _, stop_iter = find_return_statements(x[i], last_stmt && (i == length(x) || (typof(x) === CSTParser.If && typof(x[i]) === CSTParser.Block)), rets)
-        stop_iter && break
-    end
-    return rets, false
-end
+#     for i = 1:length(x)
+#         _, stop_iter = find_return_statements(x[i], last_stmt && (i == length(x) || (headof(x) === CSTParser.If && headof(x[i]) === CSTParser.Block)), rets)
+#         stop_iter && break
+#     end
+#     return rets, false
+# end
 
 last_method(b::Binding, visited=Binding[]) = b.next isa Binding && b.next.type === CoreTypes.Function && !(b in visited) ? (push!(visited, b);last_method(b.next, visited)) : b
 
 function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
-    for i in 1:length(x[3])
-        expr = x[3][i]
-        if typof(expr) == CSTParser.Export &&
-            for j = 2:length(expr)
-                if isidentifier(expr[j]) && hasref(expr[j])
-                    push!(exported_vars, expr[j])
+    for i in 1:length(x.args[3].args)
+        expr = x.args[3].args[i]
+        if headof(expr) === :export
+            for j = 2:length(expr.args)
+                if isidentifier(expr.args[j]) && hasref(expr.args[j])
+                    push!(exported_vars, expr.args[j])
                 end
             end
         end
@@ -181,16 +188,16 @@ isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
 function retrieve_toplevel_scope(x::EXPR)
-    if scopeof(x) !== nothing && (CSTParser.defines_module(x) || typof(x) === CSTParser.FileH)
+    if scopeof(x) !== nothing && (CSTParser.defines_module(x) || headof(x) === :file)
         return scopeof(x)
     elseif parentof(x) isa EXPR
         return retrieve_toplevel_scope(parentof(x))
     else
-        @info "Tried to reach toplevel scope, no scope found. Final expression $(typof(x))"
+        @info "Tried to reach toplevel scope, no scope found. Final expression $(headof(x))"
         return nothing
     end
 end
-retrieve_toplevel_scope(s::Scope) = (CSTParser.defines_module(s.expr) || typof(s.expr) === CSTParser.FileH || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
+retrieve_toplevel_scope(s::Scope) = (CSTParser.defines_module(s.expr) || headof(s.expr) === :file || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
 
 
 # b::SymbolServer.FunctionStore or DataTypeStore
@@ -262,30 +269,6 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
     return false
 end
 
-# CST utils
-fcall_name(x::EXPR) = is_call(x) && length(x) > 0 && valof(x[1])
-is_call(x::EXPR) = typof(x) === CSTParser.Call
-is_unary_call(x::EXPR) = typof(x) === CSTParser.UnaryOpCall && length(x) == 2
-is_binary_call(x::EXPR) = typof(x) === CSTParser.BinaryOpCall && length(x) == 3
-is_binary_call(x::EXPR, opkind) = is_binary_call(x) && kindof(x[2]) === opkind
-is_macro_call(x::EXPR) = typof(x) === CSTParser.MacroCall
-is_macroname(x::EXPR) = (typof(x) === CSTParser.MacroName && length(x) == 2) || (is_getfield_w_quotenode(x) && is_macroname(x[3][1]))
-is_id_or_macroname(x::EXPR) = isidentifier(x) || is_macroname(x)
-is_getfield(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT
-is_getfield_w_quotenode(x) = x isa EXPR && is_binary_call(x) && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0
-is_declaration(x::EXPR) = is_binary_call(x) && kindof(x[2]) === CSTParser.Tokens.DECLARATION
-is_where(x::EXPR) = typof(x) === CSTParser.WhereOpCall
-isnonstdid(x::EXPR) = typof(x) === CSTParser.NONSTDIDENTIFIER
-is_kwarg(x::EXPR) = typof(x) === CSTParser.Kw
-is_parameters(x::EXPR) = typof(x) === CSTParser.Parameters
-is_tuple(x::EXPR) = typof(x) === CSTParser.TupleH
-is_curly(x::EXPR) = typof(x) === CSTParser.Curly
-is_invis_brackets(x::EXPR) = typof(x) === CSTParser.InvisBrackets
-iswherecall(x::EXPR) = typof(x) === CSTParser.WhereOpCall
-rem_wheres(x::EXPR) = iswherecall(x) ? rem_wheres(x[1]) : x
-rem_wheres_decls(x::EXPR) = iswherecall(x) || CSTParser.isdeclaration(x) ? rem_wheres_decls(x[1]) : x
-hasparent(x::EXPR) = parentof(x) isa EXPR
-
 
 """
     is_in_fexpr(x::EXPR, f)
@@ -299,9 +282,12 @@ Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be ca
 """
 get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)
 
+maybe_get_parent_fexpr(x::Nothing, f) = nothing
+maybe_get_parent_fexpr(x::EXPR, f) = f(x) ? x : maybe_get_parent_fexpr(parentof(x), f)
+
 issigoffuncdecl(x::EXPR) = parentof(x) isa EXPR ? issigoffuncdecl(x, parentof(x)) : false
 function issigoffuncdecl(x::EXPR, p::EXPR)
-    if CSTParser.is_where(p) || CSTParser.isdeclaration(p)
+    if CSTParser.iswhere(p) || CSTParser.isdeclaration(p)
         return issigoffuncdecl(parentof(p))
     elseif CSTParser.defines_function(p)
         return true

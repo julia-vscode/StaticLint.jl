@@ -1,57 +1,50 @@
-function resolve_import(x, state::State)
-    if typof(x) === Using || typof(x) === Import
-        u = typof(x) === Using
-        i = 2
-        n = length(x)
-
-        root = par = getsymbolserver(state.server)
-        while i <= n
-            arg = x[i]
-            if arg === nothing
-            elseif is_id_or_macroname(arg)
-                if refof(arg) !== nothing
-                    par = refof(arg)
-                else
-                    par = _get_field(par, arg, state)
-                end
-            elseif ispunctuation(arg) && kindof(arg) == CSTParser.Tokens.COMMA
-                # end of chain, make available
-                if i > 2
-                    _mark_import_arg(x[i - 1], par, state, u)
-                end
-                par = root
-            elseif isoperator(arg) && kindof(arg) == CSTParser.Tokens.COLON
-                root = par
-                if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
-                    setref!(x[i - 1], par)
-                end
-            elseif ispunctuation(arg) && kindof(arg) == CSTParser.Tokens.DOT
-                # dot between identifiers
-                if par !== nothing && i > 2 && isidentifier(x[i - 1]) && refof(x[i - 1]) === nothing
-                    setref!(x[i - 1], par)
-                end
-            elseif isoperator(arg) && kindof(arg) == CSTParser.Tokens.DOT
-                # dot prexceding identifiser
-                if par == root == getsymbolserver(state.server)
-                    par = state.scope
-                elseif par isa Scope && parentof(par) !== nothing
-                    par = parentof(par)
-                else
-                    return
-                end
-            elseif !isoperator(arg)
+function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal = true)
+    n = length(x.args)
+    for i = 1:length(x.args)
+        arg = x.args[i]
+        if isoperator(arg) && valof(arg) == "."
+            # Leading dots. Can only be leading elements.
+            if root == getsymbolserver(state.server)
+                root = state.scope
+            elseif root isa Scope && parentof(root) !== nothing
+                root = parentof(root)
+            else
                 return
             end
+        elseif isidentifier(arg) || (i == n && (CSTParser.ismacroname(arg) || isoperator(arg)))
+            root = hasref(arg) ? refof(arg) : _get_field(root, arg, state)
+            setref!(arg, root)
             if i == n
-                _mark_import_arg(x[i], par, state, u)
+                markfinal && _mark_import_arg(arg, root, state, usinged)
+                return refof(arg)
             end
-            i += 1
+        else
+            return 
+        end
+    end
+end
+
+function resolve_import(x::EXPR, state::State, root = getsymbolserver(state.server))
+    if headof(x) === :using || headof(x) === :import
+        usinged = headof(x) === :using
+        if length(x.args) > 0 && isoperator(headof(x.args[1])) && valof(headof(x.args[1])) == ":"
+            root = resolve_import_block(x.args[1].args[1], state, root, false, false)
+            for i = 2:length(x.args[1].args)
+                resolve_import_block(x.args[1].args[i], state, root, usinged)
+            end
+        else
+            for i = 1:length(x.args)
+                resolve_import_block(x.args[i], state, root, usinged)
+            end
+        end
+        for i = 1:length(x.args)
+            resolve_import_block(x.args[i], state, root, usinged)
         end
     end
 end
 
 function _mark_import_arg(arg, par, state, usinged)
-    if par !== nothing && is_id_or_macroname(arg)
+    if par !== nothing && CSTParser.is_id_or_macroname(arg)
         if par isa Binding # mark reference to binding
             push!(par.refs, arg)
         end
@@ -64,6 +57,7 @@ function _mark_import_arg(arg, par, state, usinged)
                 arg.meta = Meta()
             end
             arg.meta.binding = Binding(arg, par, _typeof(par, state), [], nothing, nothing)
+            setref!(arg, bindingof(arg))
         end
 
         if usinged
