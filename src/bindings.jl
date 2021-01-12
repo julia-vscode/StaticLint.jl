@@ -129,7 +129,7 @@ function mark_bindings!(x::EXPR, state)
 end
 
 
-function mark_binding!(x::EXPR, val = x)
+function mark_binding!(x::EXPR, val=x)
     if CSTParser.iskwarg(x) || (CSTParser.isdeclaration(x) && CSTParser.istuple(x.args[1]))
         mark_binding!(x.args[1], x)
     elseif CSTParser.istuple(x) || CSTParser.isparameters(x)
