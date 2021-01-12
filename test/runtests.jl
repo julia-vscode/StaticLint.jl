@@ -1460,4 +1460,12 @@ f(arg) = arg
         end""")
         @test bindingof(cst.args[3].args[1].args[2]).type !== nothing
 end
+@testset "check for unassigned keyword arguments" begin
+    cst = parse_and_pass("""
+    function func3(x; y) end
+    func3(2; y=3)
+    """)
+    @test StaticLint.haserror(cst.args[1].args[1].args[2].args[1])
+    @test StaticLint.haserror(cst.args[2])
+end
 end
