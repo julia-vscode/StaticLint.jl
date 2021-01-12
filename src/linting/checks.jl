@@ -883,7 +883,7 @@ end
 function check_kw_is_assigned(x::EXPR)
     if CSTParser.defines_function(x)
         sig = CSTParser.get_sig(x)
-        if length(sig.args) > 1 && headof(sig.args[2]) === :parameters
+        if sig.args !== nothing && length(sig.args) > 1 && headof(sig.args[2]) === :parameters
             params = sig.args[2]
             for a in params.args
                 if !(headof(a) == :kw || CSTParser.ismacrocall(a))
