@@ -23,7 +23,8 @@ KwDefaultMismatch,
 InappropriateUseOfLiteral,
 ShouldBeInALoop,
 TypeDeclOnGlobalVariable,
-UnsupportedConstLocalVariable)
+UnsupportedConstLocalVariable,
+UnassignedKeywordArgument)
 
 
 
@@ -50,7 +51,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     InappropriateUseOfLiteral => "You really shouldn't be using a literal value here.",
     ShouldBeInALoop => "`break` or `continue` used outside loop.",
     TypeDeclOnGlobalVariable => "Type declarations on global variables are not yet supported.",
-    UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable. "
+    UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable. ",
+    UnassignedKeywordArgument => "Keyword argument not assigned."
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -101,6 +103,7 @@ function check_all(x::EXPR, opts::LintOptions, server)
     check_use_of_literal(x)
     check_break_continue(x)
     check_const(x)
+    check_kw_is_assigned(x)
 
     if x.args !== nothing
         for i in 1:length(x.args)
@@ -560,6 +563,11 @@ function should_mark_missing_getfield_ref(x, server)
             if lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
                 return true
             elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
+                # We may have infered the lhs type after the semantic pass that was resolving references. Copied from `resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool`.
+                if scopehasbinding(scopeof(lhsref.type.val), valof(x))
+                    setref!(x, scopeof(lhsref.type.val).names[valof(x)])
+                    return false
+                end
                 return true
             end
         end
@@ -868,6 +876,20 @@ function check_const(x::EXPR)
             seterror!(x, TypeDeclOnGlobalVariable)
         elseif headof(x.args[1]) === :local
             seterror!(x, UnsupportedConstLocalVariable)
+        end
+    end
+end
+
+function check_kw_is_assigned(x::EXPR)
+    if CSTParser.defines_function(x)
+        sig = CSTParser.get_sig(x)
+        if sig.args !== nothing && length(sig.args) > 1 && headof(sig.args[2]) === :parameters
+            params = sig.args[2]
+            for a in params.args
+                if !(headof(a) == :kw || CSTParser.ismacrocall(a))
+                    seterror!(a, UnassignedKeywordArgument)
+                end
+            end
         end
     end
 end
