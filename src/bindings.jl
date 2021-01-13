@@ -9,7 +9,7 @@ end
 Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothing)
 
 function Base.show(io::IO, b::Binding)
-    printstyled(io, "Binding(", Expr(b.name),
+    printstyled(io, " Binding(", Expr(b.name),
         b.type === nothing ? "" : ":: ",
         b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color=:blue)
 end
