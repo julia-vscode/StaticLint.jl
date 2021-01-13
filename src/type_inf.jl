@@ -127,7 +127,7 @@ end
 function is_arg_of_resolved_call(x::EXPR) 
     parentof(x) isa EXPR && headof(parentof(x)) === :call && # check we're in a call signature
     (caller = parentof(x).args[1]) !== x && # and that x is not the caller
-    (hasref(caller) || (is_getfield(caller) && headof(caller.args[2]) === :quotenode && hasref(caller.args[2].args[1])))
+    ((CSTParser.isidentifier(caller) && hasref(caller)) || (is_getfield(caller) && headof(caller.args[2]) === :quotenode && hasref(caller.args[2].args[1])))
 end
 
 function get_arg_position_in_call(sig::EXPR, arg)
