@@ -1462,10 +1462,26 @@ f(arg) = arg
     end
     @testset "check for unassigned keyword arguments" begin
         cst = parse_and_pass("""
-    function func3(x; y) end
-    func3(2; y=3)
-    """)
+        function func3(x; y) end
+        func3(2; y=3)
+        """)
         @test StaticLint.haserror(cst.args[1].args[1].args[2].args[1])
         @test StaticLint.haserror(cst.args[2])
     end
+end
+
+@testset "add eval method to modules/toplevel scope" begin
+    cst = parse_and_pass("""
+    module M
+    expr = :(a + b)
+    eval(expr)
+    end
+    """)
+    @test !StaticLint.haserror(cst.args[1].args[3].args[2])
+
+    cst = parse_and_pass("""
+    expr = :(a + b)
+    eval(expr)
+    """)
+    @test !StaticLint.haserror(cst.args[2])
 end
