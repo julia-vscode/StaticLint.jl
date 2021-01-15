@@ -4,7 +4,7 @@ using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
 server = StaticLint.FileServer();
 
-function get_ids(x, ids = [])
+function get_ids(x, ids=[])
     if StaticLint.headof(x) === :IDENTIFIER
         push!(ids, x)
     elseif x.args !== nothing
@@ -1459,9 +1459,9 @@ f(arg) = arg
             f1(x)
         end""")
         @test bindingof(cst.args[3].args[1].args[2]).type !== nothing
-end
-@testset "check for unassigned keyword arguments" begin
-    cst = parse_and_pass("""
+    end
+    @testset "check for unassigned keyword arguments" begin
+        cst = parse_and_pass("""
     function func3(x; y) end
     func3(2; y=3)
     """)
@@ -1483,5 +1483,4 @@ end
     eval(expr)
     """)
     @test !StaticLint.haserror(cst.args[2])
-end
 end

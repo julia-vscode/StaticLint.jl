@@ -1,4 +1,4 @@
-function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal = true)
+function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=true)
     n = length(x.args)
     for i = 1:length(x.args)
         arg = x.args[i]
@@ -12,7 +12,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal = 
                 return
             end
         elseif isidentifier(arg) || (i == n && (CSTParser.ismacroname(arg) || isoperator(arg)))
-            root = hasref(arg) ? refof(arg) : _get_field(root, arg, state)
+            root = maybe_lookup(hasref(arg) ? refof(arg) : _get_field(root, arg, state), state.server)
             setref!(arg, root)
             if i == n
                 markfinal && _mark_import_arg(arg, root, state, usinged)
@@ -24,7 +24,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal = 
     end
 end
 
-function resolve_import(x::EXPR, state::State, root = getsymbolserver(state.server))
+function resolve_import(x::EXPR, state::State, root=getsymbolserver(state.server))
     if headof(x) === :using || headof(x) === :import
         usinged = headof(x) === :using
         if length(x.args) > 0 && isoperator(headof(x.args[1])) && valof(headof(x.args[1])) == ":"

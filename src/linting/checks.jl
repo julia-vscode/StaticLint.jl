@@ -136,7 +136,7 @@ function struct_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     args = x.args[3]
     length(args.args) == 0 && return 0, typemax(Int), kws, kwsplat
-    inner_constructor = findfirst(a->CSTParser.defines_function(a), args.args)
+    inner_constructor = findfirst(a -> CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
         return func_nargs(args.args[inner_constructor])
     else
@@ -414,12 +414,12 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server, visited = nothing) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server, visited = nothing) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server, visited = nothing)
+is_never_datatype(b, server, visited=nothing) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server, visited=nothing) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server, visited=nothing)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server, visited = Binding[])
+function is_never_datatype(b::Binding, server, visited=Binding[])
     if b in visited
         return false
     else
@@ -521,7 +521,7 @@ function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=T
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x->iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
 
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
@@ -754,7 +754,7 @@ end
 
 # find any parent nodes that are :if blocks and a pseudo-index of which branch
 # x is in
-function find_if_parents(x::EXPR, current = Int[], list = Dict{EXPR, Vector{Int}}())
+function find_if_parents(x::EXPR, current=Int[], list=Dict{EXPR,Vector{Int}}())
     if x.head in (:block, :elseif) && parentof(x) isa EXPR && headof(parentof(x)) in (:if, :elseif)
         i = 1
         while i <= length(parentof(x).args)
@@ -852,7 +852,7 @@ function check_use_of_literal(x::EXPR)
     elseif (CSTParser.defines_abstract(x) || CSTParser.defines_primitive(x)) && isbadliteral(x.args[1])
         seterror!(x.args[1], InappropriateUseOfLiteral)
     elseif CSTParser.defines_struct(x) && isbadliteral(x.args[2])
-            seterror!(x.args[2], InappropriateUseOfLiteral)
+        seterror!(x.args[2], InappropriateUseOfLiteral)
     elseif (isassignment(x) || iskwarg(x)) && isbadliteral(x.args[1])
         seterror!(x.args[1], InappropriateUseOfLiteral)
     elseif isdeclaration(x) && isbadliteral(x.args[2])

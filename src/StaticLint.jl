@@ -104,7 +104,7 @@ function (state::Delayed)(x::EXPR)
 
     traverse(x, state)
     if state.scope != s0
-        for (k,b) in state.scope.names
+        for (k, b) in state.scope.names
             infer_type_by_use(b, state.server)
         end
         state.scope = s0
