@@ -15,16 +15,7 @@ function get_ids(x, ids=[])
     ids
 end
 
-function parse_and_pass(s)
-    empty!(server.files)
-    f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
-    StaticLint.setroot(f, f)
-    StaticLint.setfile(server, "", f)
-    StaticLint.semantic_pass(f)
-    StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
-    return f.cst
-end
-
+parse_and_pass(s) = StaticLint.lint_string(s, server)
 
 function check_resolved(s)
     cst = parse_and_pass(s)
