@@ -144,7 +144,11 @@ end
 
 # Add an `eval` method
 function add_eval_method(x, state)
-    mod = x.head === :module ? Symbol(string(Expr(x.args[3]))) : Symbol("top-level")
+    mod = if x.head === :module
+        CSTParser.isidentifier(x.args[3]) ? Symbol(valof(x.args[3])) : :unknown
+    else
+        Symbol("top-level")
+    end
     meth = SymbolServer.MethodStore(:eval, mod, "", 0, [:expr => SymbolServer.FakeTypeName(SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any), [])], [], Any)
     state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbolserver(state.server)[:Core][:DataType], [], nothing, nothing)
 end
