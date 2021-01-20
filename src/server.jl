@@ -38,23 +38,6 @@ end
 getsymbolserver(server::FileServer) = server.symbolserver
 getsymbolextendeds(server::FileServer) = server.symbol_extends
 
-function semantic_pass(file, target=nothing)
-    server = file.server
-    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
-    state = Toplevel(file, target, [getpath(file)], scopeof(getcst(file)), EXPR[], server)
-    state(getcst(file))
-    for x in state.delayed
-        if hasscope(x)
-            traverse(x, Delayed(scopeof(x), server))
-            for (k, b) in scopeof(x).names
-                infer_type_by_use(b, state.server)
-            end
-        else
-            ds = retrieve_delayed_scope(x)
-            traverse(x, Delayed(ds, server))
-        end
-    end
-end
 
 getpath(file::File) = file.path
 

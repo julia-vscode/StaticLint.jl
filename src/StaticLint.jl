@@ -62,7 +62,6 @@ bindingof(m::Meta) = m.binding
 abstract type State end
 mutable struct Toplevel{T} <: State
     file::T
-    targetfile::Union{Nothing,T}
     included_files::Vector{String}
     scope::Scope
     delayed::Vector{EXPR}
@@ -110,6 +109,53 @@ function (state::Delayed)(x::EXPR)
         state.scope = s0
     end
     return state.scope
+end
+
+mutable struct ResolveOnly <: State
+    scope::Scope
+    server
+end
+
+function (state::ResolveOnly)(x::EXPR)
+    if hasscope(x)
+        s0 = state.scope
+        state.scope = scopeof(x)
+    else
+        s0 = state.scope
+    end
+    resolve_ref(x, state)
+
+    traverse(x, state)
+    if state.scope != s0
+        state.scope = s0
+    end
+    return state.scope
+end
+
+
+function semantic_pass(file, target=nothing)
+    server = file.server
+    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
+    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), EXPR[], server)
+    state(getcst(file))
+    for x in state.delayed
+        if target === nothing || x in target
+            if hasscope(x)
+                traverse(x, Delayed(scopeof(x), server)) 
+                for (k, b) in scopeof(x).names
+                    infer_type_by_use(b, state.server)
+                end
+            else
+                traverse(x, Delayed(retrieve_delayed_scope(x), server))
+            end
+        else
+            if hasscope(x)
+                traverse(x, ResolveOnly(scopeof(x), server))
+            else
+                traverse(x, ResolveOnly(retrieve_delayed_scope(x), server))
+            end
+        end
+    end
 end
 
 """
