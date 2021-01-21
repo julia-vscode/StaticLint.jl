@@ -64,7 +64,10 @@ mutable struct Toplevel{T} <: State
     file::T
     included_files::Vector{String}
     scope::Scope
+    hittarget::Bool
+    targetexprs::Union{Nothing,Vector{EXPR}}
     delayed::Vector{EXPR}
+    resolveonly::Vector{EXPR}
     server
 end
 
@@ -77,13 +80,22 @@ function (state::Toplevel)(x::EXPR)
     s0 = scopes(x, state)
     resolve_ref(x, state)
     followinclude(x, state)
-
+    
+    hittarget_old = state.hittarget
+    if state.targetexprs !== nothing && x in state.targetexprs
+        state.hittarget = true
+    end
     if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export
-        push!(state.delayed, x)
+        if state.hittarget
+            push!(state.delayed, x)
+        else
+            push!(state.resolveonly, x)
+        end
     else
         traverse(x, state)
     end
-
+    
+    state.hittarget = hittarget_old
     state.scope != s0 && (state.scope = s0)
     return state.scope
 end
@@ -136,10 +148,9 @@ end
 function semantic_pass(file, target=nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
-    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), EXPR[], server)
+    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), target === nothing, target, EXPR[], EXPR[], server)
     state(getcst(file))
     for x in state.delayed
-        if target === nothing || x in target
             if hasscope(x)
                 traverse(x, Delayed(scopeof(x), server)) 
                 for (k, b) in scopeof(x).names
@@ -148,7 +159,9 @@ function semantic_pass(file, target=nothing)
             else
                 traverse(x, Delayed(retrieve_delayed_scope(x), server))
             end
-        else
+    end
+    if state.resolveonly !== nothing
+        for x in state.resolveonly
             if hasscope(x)
                 traverse(x, ResolveOnly(scopeof(x), server))
             else
