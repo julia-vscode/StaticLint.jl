@@ -62,10 +62,12 @@ bindingof(m::Meta) = m.binding
 abstract type State end
 mutable struct Toplevel{T} <: State
     file::T
-    targetfile::Union{Nothing,T}
     included_files::Vector{String}
     scope::Scope
+    in_modified_expr::Bool
+    modified_exprs::Union{Nothing,Vector{EXPR}}
     delayed::Vector{EXPR}
+    resolveonly::Vector{EXPR}
     server
 end
 
@@ -78,13 +80,22 @@ function (state::Toplevel)(x::EXPR)
     s0 = scopes(x, state)
     resolve_ref(x, state)
     followinclude(x, state)
-
+    
+    old_in_modified_expr = state.in_modified_expr
+    if state.modified_exprs !== nothing && x in state.modified_exprs
+        state.in_modified_expr = true
+    end
     if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export
-        push!(state.delayed, x)
+        if state.in_modified_expr
+            push!(state.delayed, x)
+        else
+            push!(state.resolveonly, x)
+        end
     else
         traverse(x, state)
     end
-
+    
+    state.in_modified_expr = old_in_modified_expr
     state.scope != s0 && (state.scope = s0)
     return state.scope
 end
@@ -110,6 +121,54 @@ function (state::Delayed)(x::EXPR)
         state.scope = s0
     end
     return state.scope
+end
+
+mutable struct ResolveOnly <: State
+    scope::Scope
+    server
+end
+
+function (state::ResolveOnly)(x::EXPR)
+    if hasscope(x)
+        s0 = state.scope
+        state.scope = scopeof(x)
+    else
+        s0 = state.scope
+    end
+    resolve_ref(x, state)
+
+    traverse(x, state)
+    if state.scope != s0
+        state.scope = s0
+    end
+    return state.scope
+end
+
+
+function semantic_pass(file, modified_expr=nothing)
+    server = file.server
+    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
+    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], server)
+    state(getcst(file))
+    for x in state.delayed
+        if hasscope(x)
+            traverse(x, Delayed(scopeof(x), server)) 
+            for (k, b) in scopeof(x).names
+                infer_type_by_use(b, state.server)
+            end
+        else
+            traverse(x, Delayed(retrieve_delayed_scope(x), server))
+        end
+    end
+    if state.resolveonly !== nothing
+        for x in state.resolveonly
+            if hasscope(x)
+                traverse(x, ResolveOnly(scopeof(x), server))
+            else
+                traverse(x, ResolveOnly(retrieve_delayed_scope(x), server))
+            end
+        end
+    end
 end
 
 """
