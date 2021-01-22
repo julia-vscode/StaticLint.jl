@@ -1476,3 +1476,17 @@ end
     """)
     @test !StaticLint.haserror(cst.args[2])
 end
+
+@testset "reparse" begin
+    cst = parse_and_pass("""
+    x = 1
+    function f(arg)
+        x
+    end
+    """)
+    @test StaticLint.hasref(cst.args[2].args[2].args[1])
+    StaticLint.clear_meta(cst[2])
+    @test !StaticLint.hasref(cst.args[2].args[2].args[1])
+    StaticLint.semantic_pass(server.files[""], CSTParser.EXPR[cst[2]])
+    @test StaticLint.hasref(cst.args[2].args[2].args[1])
+end
