@@ -174,6 +174,9 @@ function _is_in_basedir(path::String)
     return ""
 end
 
+_is_macrocall_to_BaseDIR(arg) = headof(arg) === :macrocall && length(arg.args) == 2 && valof(arg.args[1]) == "@__DIR__"
+
+
 isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && k in m.exportednames
 isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m)
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
