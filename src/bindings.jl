@@ -1,7 +1,15 @@
+"""
+Bindings indicate that an `EXPR` _may_ introduce a new name into the current scope/namespace.
+Struct fields:
+* `name`: the `EXPR` that defines the unqualifed name of the binding.
+* `val`: what the binding points to, either a `Binding` (indicating ..), `EXPR` (this is generally the expression that defines the value) or `SymStore`.
+* `type`: the type of the binding, either a `Binding`, `EXPR`, or `SymStore`.
+* `refs`: a list containing all references that have been made to the binding.
+"""
 mutable struct Binding
     name::EXPR
     val::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
-    type::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
+    type::Union{Binding,SymbolServer.SymStore,Nothing}
     refs::Vector{Any}
 end
 Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [])
@@ -32,8 +40,11 @@ function gotoobjectofref(x::EXPR)
 end
 
 
-# Note to self, check consistency of marking self-reference of bindings (i.e.
-# for, `function f end` we resolve `f` to itself at this stage.)
+"""
+    mark_bindings!(x::EXPR, state)
+
+Checks whether the expression `x` should introduce new names and marks them as needed. Generally this marks expressions that would introdce names to the current scope (i.e. that x sits in) but in cases marks expressions that will add names to lower scopes. This is done when it is not knowable that a child node of `x` will introduce a new name without the context of where it sits in `x` -for example the arguments of the signature of a function definition.
+"""
 function mark_bindings!(x::EXPR, state)
     if hasbinding(x)
         return
@@ -230,6 +241,21 @@ function _in_func_def(x::EXPR)
     return is_in_funcdef(x)
 end
 
+
+"""
+    add_binding(x, state, scope=state.scope)
+
+Add the binding of `x` to the current scope. Special handling is required for:
+* macros: to prefix the `@`
+* functions: These are added to the top-level scope unless this syntax is used to define a closure within a function. If a function with the same name already exists in the scope then it is not replaced. This enables the `refs` list of the Binding of that 'root method' to hold a method table, the name of the new function will resolve to the binding of the root method (to get a list of actual methods -`[get_method(ref) for ref in binding.refs if get_method(ref) !== nothing]`). For example 
+```julia
+[1] f() = 1
+[2] f(x) = 2
+```
+[1] is the root method and the name of [2] resolves to the binding of [1]. Functions declared with qualified names require special handling, there are comments in the source.
+
+Some simple type inference is run.
+"""
 function add_binding(x, state, scope=state.scope)
     if bindingof(x) isa Binding
         b = bindingof(x)
@@ -238,7 +264,7 @@ function add_binding(x, state, scope=state.scope)
         elseif CSTParser.ismacroname(b.name) # must be getfield
             name = string(Expr(b.name))
         elseif isoperator(b.name)
-            name = string(Expr(b.name))
+            name = valof(b.name)
         else
             return
         end
