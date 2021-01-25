@@ -56,7 +56,7 @@ function _mark_import_arg(arg, par, state, usinged)
             if !hasmeta(arg)
                 arg.meta = Meta()
             end
-            arg.meta.binding = Binding(arg, par, _typeof(par, state), [], nothing, nothing)
+            arg.meta.binding = Binding(arg, par, _typeof(par, state), [])
             setref!(arg, bindingof(arg))
         end
 

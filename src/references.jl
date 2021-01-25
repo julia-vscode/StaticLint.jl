@@ -46,13 +46,13 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     elseif iskwarg(x)
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
         if isidentifier(x.args[1])
-            setref!(x.args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
+            setref!(x.args[1], Binding(noname, nothing, nothing, []))
         elseif isdeclaration(x.args[1]) && isidentifier(x.args[1].args[1])
-            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, [], nothing, nothing))
+            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, []))
         end
         return true
     elseif is_special_macro_term(x) || new_within_struct(x)
-        setref!(x, Binding(noname, nothing, nothing, [], nothing, nothing))
+        setref!(x, Binding(noname, nothing, nothing, []))
         return true
     end
     x1, mn = nameof_expr_to_resolve(x)
@@ -233,7 +233,16 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
-        if tls.overloaded !== nothing  && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
+        # if tls.overloaded !== nothing && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
+        #     @info 1
+        #     setref!(x, tls.overloaded[vr])
+        #     return true
+        # end
+        vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name
+        if haskey(tls.names, valof(x)) && tls.names[valof(x)] isa Binding && tls.names[valof(x)].val isa SymbolServer.FunctionStore
+            setref!(x, tls.names[valof(x)])
+            return true
+        elseif tls.overloaded !== nothing && haskey(tls.overloaded, vr)
             setref!(x, tls.overloaded[vr])
             return true
         end
@@ -243,6 +252,15 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     return resolved
 end
 
+# function is_overloaded1(x, tls, val)
+#     vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name
+#     if haskey(tls.names, valof(x)) && tls.names[valof(x)] isa Binding && first(tls.names[valof(x)]) isa SymbolServer.FunctionStore
+
+#     end
+#     haskey(tls.overloaded, vr)
+    
+# end
+
 function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
@@ -251,7 +269,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
         ft = parent.types[fi]
         val = SymbolServer._lookup(ft, getsymbolserver(state.server), true)
         # TODO: Need to handle the case where we get back a FakeUnion, etc.
-        setref!(x, Binding(noname, nothing, val, [], nothing, nothing))
+        setref!(x, Binding(noname, nothing, val, []))
         resolved = true
     end
     return resolved

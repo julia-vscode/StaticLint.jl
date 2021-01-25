@@ -17,10 +17,11 @@ function overload_method(scope::Scope, b::Binding, vr::SymbolServer.VarRef)
         scope.overloaded = Dict()
     end
     if haskey(scope.overloaded, vr)
-        b.prev = scope.overloaded[vr]
-        b.prev.next = b
+        # TODO: need to check this hasn't already been done
+        push!(scope.overloaded[vr].refs, b.val)
+    else
+        scope.overloaded[vr] = b
     end
-    scope.overloaded[vr] = b
 end
 
 """
@@ -150,5 +151,5 @@ function add_eval_method(x, state)
         Symbol("top-level")
     end
     meth = SymbolServer.MethodStore(:eval, mod, "", 0, [:expr => SymbolServer.FakeTypeName(SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any), [])], [], Any)
-    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbolserver(state.server)[:Core][:DataType], [], nothing, nothing)
+    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbolserver(state.server)[:Core][:DataType], [])
 end
