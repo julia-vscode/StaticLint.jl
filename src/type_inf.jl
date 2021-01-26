@@ -9,53 +9,82 @@ function infer_type(binding::Binding, scope, state)
             binding.type = CoreTypes.DataType
         elseif binding.val isa EXPR
             if isassignment(binding.val)
-                if CSTParser.is_func_call(binding.val[1])
+                if CSTParser.is_func_call(binding.val.args[1])
                     binding.type = CoreTypes.Function
-                elseif CSTParser.is_func_call(binding.val[3])
-                    callname = CSTParser.get_name(binding.val[3])
-                    if isidentifier(callname)
-                        resolve_ref(callname, scope, state)
-                        if hasref(callname)
-                            rb = get_root_method(refof(callname), state.server)
-                            if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
-                                binding.type = rb
-                            end
-                        end
-                    end
-                elseif headof(binding.val[3]) === :INTEGER
-                    binding.type = CoreTypes.Int
-                elseif headof(binding.val[3]) === :FLOAT
-                    binding.type = CoreTypes.Float64
-                elseif CSTParser.isstringliteral(binding.val[3])
-                    binding.type = CoreTypes.String
-                elseif isidentifier(binding.val[3]) && refof(binding.val[3]) isa Binding
-                    binding.type = refof(binding.val[3]).type
+                else
+                    infer_type_assignment_rhs(binding, state, scope)
                 end
             elseif binding.val.head isa EXPR && valof(binding.val.head) == "::"
-                t = binding.val.args[2]
-                if isidentifier(t)
-                    resolve_ref(t, scope, state)
-                end
-                if iscurly(t)
-                    t = t.args[1]
-                    resolve_ref(t, scope, state)
-                end
-                if CSTParser.is_getfield_w_quotenode(t)
-                    resolve_getfield(t, scope, state)
-                    t = t.args[2].args[1]
-                end
-                if refof(t) isa Binding
-                    rb = get_root_method(refof(t), state.server)
-                    if rb isa Binding && rb.type == CoreTypes.DataType
-                        binding.type = rb
-                    else
-                        binding.type = refof(t)
-                    end
-                elseif refof(t) isa SymbolServer.DataTypeStore
-                    binding.type = refof(t)
+                infer_type_decl(binding, state, scope)
+            end
+        end
+    end
+end
+
+function infer_type_assignment_rhs(binding, state, scope)
+    rhs = binding.val.args[2]
+    if CSTParser.is_func_call(rhs)
+        callname = CSTParser.get_name(rhs)
+        if isidentifier(callname)
+            resolve_ref(callname, scope, state)
+            if hasref(callname)
+                rb = get_root_method(refof(callname), state.server)
+                if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
+                    binding.type = rb
                 end
             end
         end
+    elseif headof(rhs) === :INTEGER
+        binding.type = CoreTypes.Int
+    elseif headof(rhs) === :FLOAT
+        binding.type = CoreTypes.Float64
+    elseif CSTParser.isstringliteral(rhs)
+        binding.type = CoreTypes.String
+    elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
+        refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
+        if refof_rhs isa Binding
+            rhs_bind = refof(rhs)
+            if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
+                binding.type = maybe_lookup(refof_rhs.val.typ.name, state.server)
+            elseif refof_rhs.val isa SymbolServer.FunctionStore
+                binding.type = CoreTypes.Function
+            elseif refof_rhs.val isa SymbolServer.DataTypeStore
+                binding.type = CoreTypes.DataType
+            else
+                binding.type = refof_rhs.type
+            end
+        elseif refof_rhs isa SymbolServer.GenericStore && refof_rhs.typ isa SymbolServer.FakeTypeName
+            binding.type = maybe_lookup(refof_rhs.typ.name, state.server)
+        elseif refof_rhs isa SymbolServer.FunctionStore
+            binding.type = CoreTypes.Function
+        elseif refof_rhs isa SymbolServer.DataTypeStore
+            binding.type = CoreTypes.DataType
+        end
+    end
+end
+
+function infer_type_decl(binding, state, scope)
+    t = binding.val.args[2]
+    if isidentifier(t)
+        resolve_ref(t, scope, state)
+    end
+    if iscurly(t)
+        t = t.args[1]
+        resolve_ref(t, scope, state)
+    end
+    if CSTParser.is_getfield_w_quotenode(t)
+        resolve_getfield(t, scope, state)
+        t = t.args[2].args[1]
+    end
+    if refof(t) isa Binding
+        rb = get_root_method(refof(t), state.server)
+        if rb isa Binding && rb.type == CoreTypes.DataType
+            binding.type = rb
+        else
+            binding.type = refof(t)
+        end
+    elseif refof(t) isa SymbolServer.DataTypeStore
+        binding.type = refof(t)
     end
 end
 
