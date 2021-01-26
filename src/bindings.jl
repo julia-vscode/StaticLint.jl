@@ -1,12 +1,18 @@
+"""
+Bindings indicate that an `EXPR` _may_ introduce a new name into the current scope/namespace.
+Struct fields:
+* `name`: the `EXPR` that defines the unqualifed name of the binding.
+* `val`: what the binding points to, either a `Binding` (indicating ..), `EXPR` (this is generally the expression that defines the value) or `SymStore`.
+* `type`: the type of the binding, either a `Binding`, `EXPR`, or `SymStore`.
+* `refs`: a list containing all references that have been made to the binding.
+"""
 mutable struct Binding
     name::EXPR
     val::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
-    type::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
+    type::Union{Binding,SymbolServer.SymStore,Nothing}
     refs::Vector{Any}
-    prev::Union{Binding,SymbolServer.SymStore,Nothing}
-    next::Union{Binding,SymbolServer.SymStore,Nothing}
 end
-Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], nothing, nothing)
+Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [])
 
 function Base.show(io::IO, b::Binding)
     printstyled(io, " Binding(", Expr(b.name),
@@ -34,8 +40,11 @@ function gotoobjectofref(x::EXPR)
 end
 
 
-# Note to self, check consistency of marking self-reference of bindings (i.e.
-# for, `function f end` we resolve `f` to itself at this stage.)
+"""
+    mark_bindings!(x::EXPR, state)
+
+Checks whether the expression `x` should introduce new names and marks them as needed. Generally this marks expressions that would introdce names to the current scope (i.e. that x sits in) but in cases marks expressions that will add names to lower scopes. This is done when it is not knowable that a child node of `x` will introduce a new name without the context of where it sits in `x` -for example the arguments of the signature of a function definition.
+"""
 function mark_bindings!(x::EXPR, state)
     if hasbinding(x)
         return
@@ -48,9 +57,6 @@ function mark_bindings!(x::EXPR, state)
             name = CSTParser.get_name(x)
             mark_binding!(x)
             mark_sig_args!(x.args[1])
-            if isidentifier(name)
-                setref!(name, bindingof(x))
-            end
         elseif CSTParser.iscurly(x.args[1])
             mark_typealias_bindings!(x)
         elseif !is_getfield(x.args[1])
@@ -64,45 +70,30 @@ function mark_bindings!(x::EXPR, state)
         end
     elseif headof(x) === :for
         markiterbinding!(x.args[2])
-    elseif headof(x) === :generator 
+    elseif headof(x) === :generator || headof(x) === :filter
         for i = 2:length(x.args)
             markiterbinding!(x.args[i])
         end
-    elseif headof(x) === :filter
-        for i = 2:length(x.args)
-            markiterbinding!(x.args[i])
-        end
-    # elseif headof(x) === CSTParser.Flatten && length(x.args) === 1 && length(x[1]) >= 3 && length(x[1][1]) >= 3
-    #     for i = 3:length(x[1][1])
-    #         ispunctuation(x[1][1][i]) && continue
-    #         markiterbinding!(x[1][1][i])
-    #     end
-    #     for i = 3:length(x[1])
-    #         ispunctuation(x[1][i]) && continue
-    #         markiterbinding!(x[1][i])
-    #     end
     elseif headof(x) === :do
-        if istuple(x.args[2])
-            for i in 1:length(x.args[2].args)
-                mark_binding!(x.args[2].args[i])
-            end
+        for i in 1:length(x.args[2].args)
+            mark_binding!(x.args[2].args[i])
         end
     elseif headof(x) === :function || headof(x) === :macro
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, CoreTypes.Function, [], nothing, nothing)
-        if isidentifier(name)
+        x.meta.binding = Binding(name, x, CoreTypes.Function, [])
+        if isidentifier(name) && headof(x) === :macro
             setref!(name, bindingof(x))
         end
         mark_sig_args!(CSTParser.get_sig(x))
     elseif CSTParser.defines_module(x)
-        x.meta.binding = Binding(x.args[2], x, CoreTypes.Module, [], nothing, nothing)
+        x.meta.binding = Binding(x.args[2], x, CoreTypes.Module, [])
         setref!(x.args[2], bindingof(x))
     elseif headof(x) === :try && isidentifier(x.args[2])
         mark_binding!(x.args[2])
         setref!(x.args[2], bindingof(x.args[2]))
     elseif CSTParser.defines_datatype(x)
         name = CSTParser.get_name(x)
-        x.meta.binding = Binding(name, x, CoreTypes.DataType, [], nothing, nothing)
+        x.meta.binding = Binding(name, x, CoreTypes.DataType, [])
         kwdef = parentof(x) isa EXPR && _points_to_Base_macro(parentof(x).args[1], Symbol("@kwdef"), state)
         if isidentifier(name)
             setref!(name, bindingof(x))
@@ -144,7 +135,7 @@ function mark_binding!(x::EXPR, val=x)
         if !hasmeta(x)
             x.meta = Meta()
         end
-        x.meta.binding = Binding(CSTParser.get_name(x), val, nothing, [], nothing, nothing)
+        x.meta.binding = Binding(CSTParser.get_name(x), val, nothing, [])
     end
     return x
 end
@@ -250,18 +241,30 @@ function _in_func_def(x::EXPR)
     return is_in_funcdef(x)
 end
 
+
+"""
+    add_binding(x, state, scope=state.scope)
+
+Add the binding of `x` to the current scope. Special handling is required for:
+* macros: to prefix the `@`
+* functions: These are added to the top-level scope unless this syntax is used to define a closure within a function. If a function with the same name already exists in the scope then it is not replaced. This enables the `refs` list of the Binding of that 'root method' to hold a method table, the name of the new function will resolve to the binding of the root method (to get a list of actual methods -`[get_method(ref) for ref in binding.refs if get_method(ref) !== nothing]`). For example 
+```julia
+[1] f() = 1
+[2] f(x) = 2
+```
+[1] is the root method and the name of [2] resolves to the binding of [1]. Functions declared with qualified names require special handling, there are comments in the source.
+
+Some simple type inference is run.
+"""
 function add_binding(x, state, scope=state.scope)
     if bindingof(x) isa Binding
         b = bindingof(x)
-        b.prev = nothing
-        b.next = nothing
         if isidentifier(b.name)
             name = valofid(b.name)
         elseif CSTParser.ismacroname(b.name) # must be getfield
-            # name = CSTParser.rhs_getfield(b.name)
             name = string(Expr(b.name))
         elseif isoperator(b.name)
-            name = string(Expr(b.name))
+            name = valof(b.name)
         else
             return
         end
@@ -276,53 +279,62 @@ function add_binding(x, state, scope=state.scope)
             if isidentifier(mn)
                 setref!(mn, b)
             end
-        else
-            if name_is_getfield(b.name)# && b.type == CoreTypes.Function
-                # Question: should `b.name` include the getfield itself?
-                # Binding name is part of a getfield : `A.name` so is either
-                # 1. Overloading of a function
-                # 2. Setting of a field or property
-                # We only care about 1.
+        elseif defines_function(x)
+            # TODO: Need to do check that we're not in a closure.
+            tls = retrieve_toplevel_or_func_scope(scope)
+            tls === nothing && return @warn "top-level scope not retrieved"
+            if name_is_getfield(b.name)
                 resolve_ref(parentof(parentof(b.name)).args[1], scope, state)
                 lhs_ref = refof_maybe_getfield(parentof(parentof(b.name)).args[1])
-                if lhs_ref === nothing
-                    # We don't know what we're assigning to, do nothing
-                else
-                    if lhs_ref isa SymbolServer.ModuleStore && haskey(lhs_ref.vals, Symbol(name))
-                        # Overloading
-                        tls = retrieve_toplevel_scope(b.val)
-                        tls === nothing && return # Shouldn't happen
-                        if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state.server)
-                            # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.
-                            overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
-                            b.prev = tls.names[name]
-                            b.prev.next = b
-                            tls.names[name] = b
-                        elseif isexportedby(name, lhs_ref)
-                            tls.names[name] = b
-                            b.prev = maybe_lookup(lhs_ref[Symbol(name)], state.server)
-                        else
+                if lhs_ref isa SymbolServer.ModuleStore && haskey(lhs_ref.vals, Symbol(name))
+                    # Overloading
+                    if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state.server)
+                        # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.
+                        if !hasref(b.name) 
+                            setref!(b.name, tls.names[name]) # Add ref to previous overload
                             overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
                         end
-                    elseif lhs_ref isa Binding && lhs_ref.type == CoreTypes.Module
-                        if hasscope(lhs_ref.val) && haskey(scopeof(lhs_ref.val).names, name)
-                            b.prev = scopeof(lhs_ref.val).names[name]
-                            scopeof(lhs_ref.val).names[name] = b
+                        # Do nothing, get_name(x) will resolve to the root method
+                    elseif isexportedby(name, lhs_ref)
+                        # Name is already available
+                        tls.names[name] = b 
+                        if !hasref(b.name) # Is this an appropriate indicator that we've not marked the overload?
+                            push!(b.refs, maybe_lookup(lhs_ref[Symbol(name)], state.server))
+                            setref!(b.name, b) # we actually set the rhs of the qualified name to point to this binding
                         end
+                    else
+                        # Mark as overloaded so that calls to `M.f()` resolve properly.
+                        overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name))) # Add to overloaded list but not scope.
+                    end
+                elseif lhs_ref isa Binding && lhs_ref.type == CoreTypes.Module
+                    if hasscope(lhs_ref.val) && haskey(scopeof(lhs_ref.val).names, name)
+                        # Don't need to do anything, name will resolve
                     end
                 end
-
-            elseif scopehasbinding(scope, name)
-                b.prev = scope.names[name]
-                scope.names[name] = b
-                b.prev.next = b
             else
-                scope.names[name] = b
+                if scopehasbinding(tls, name)
+                    if tls.names[name] isa Binding && ((tls.names[name].type == CoreTypes.Function || tls.names[name].type == CoreTypes.DataType) || tls.names[name] isa SymbolServer.FunctionStore || tls.names[name] isa SymbolServer.DataTypeStore)
+                        # do nothing name of `x` will resolve to the root method
+                    else
+                        seterror!(x, CannotDefineFuncAlreadyHasValue)
+                    end
+                else
+                    scope.names[name] = b
+                    if !hasref(b.name)
+                        setref!(b.name, b)
+                    end
+                end
+                if CSTParser.defines_struct(scope.expr) && parentof(scope) isa Scope
+                    # hoist binding for inner constructor to parent scope
+                    return add_binding(x, state, parentof(scope))
+                end
             end
-            # hoist binding for inner constructor to parent scope
-            if CSTParser.defines_struct(scope.expr) && CSTParser.defines_function(x) && parentof(scope) isa Scope
-                return add_binding(x, state, parentof(scope))
-            end
+        elseif scopehasbinding(scope, name)
+            # TODO: some checks about rebinding of consts
+            check_const_decl(name, b, scope)
+            scope.names[name] = b
+        else
+            scope.names[name] = b
         end
         infer_type(b, scope, state)
     elseif bindingof(x) isa SymbolServer.SymStore
@@ -338,27 +350,9 @@ eventually_overloads(b, x, server)
 
 
 """
-eventually_overloads(b::Binding, ss::SymbolServer.SymStore, server) = (b.val == ss || b.prev == ss) || (b.prev !== nothing && eventually_overloads(b.prev, ss, server))
-
+eventually_overloads(b::Binding, ss::SymbolServer.SymStore, server) = b.val == ss || (b.refs !== nothing && length(b.refs) > 0 && first(b.refs) == ss)
 eventually_overloads(b::Binding, ss::SymbolServer.VarRef, server) = eventually_overloads(b, maybe_lookup(ss, server), server)
-
 eventually_overloads(b, ss, server) = false
-
-
-
-function hoist_prev_binding(b, name, scope, state)
-    scope === nothing && return
-    if scope.modules !== nothing
-        if scopehasmodule(scope, Symbol(valofid(parentof(parentof(b.name)).args[1]))) # this scope (s1) has a module with matching name
-            mod = getscopemodule(scope, Symbol(valofid(parentof(parentof(b.name)).args[1])))
-            if mod isa SymbolServer.ModuleStore && haskey(mod, Symbol(name))
-                b.prev = maybe_lookup(mod[Symbol(name)], state.server)
-            end
-        end
-        return # We've reached a scope that loads modules, no need to keep searching upwards
-    end
-    return hoist_prev_binding(b, name, parentof(scope), state)
-end
 
 isglobal(name, scope) = false
 isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
@@ -366,7 +360,7 @@ isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#gl
 function mark_globals(x::EXPR, state)
     if headof(x) === :global
         if !scopehasbinding(state.scope, "#globals")
-            state.scope.names["#globals"] = Binding(EXPR(:IDENTIFIER, EXPR[], nothing, 0, 0, "#globals", nothing, nothing), nothing, nothing, [], nothing, nothing)
+            state.scope.names["#globals"] = Binding(EXPR(:IDENTIFIER, EXPR[], nothing, 0, 0, "#globals", nothing, nothing), nothing, nothing, [])
         end
         for i = 2:length(x.args)
             if isidentifier(x.args[i]) && !scopehasbinding(state.scope, valofid(x.args[i]))

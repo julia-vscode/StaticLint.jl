@@ -103,23 +103,24 @@ function check_ref_against_calls(x, visitedmethods, new_possibles, server)
         else
             func = refof(sig.args[1].args[2].args[1])
         end
-        # make sure we've got the last binding for func
-        if func isa Binding
-            func = get_last_method(func, server)
-        end
-        # what slot does ref sit in?
-        argi = get_arg_position_in_call(sig, x)
+        argi = get_arg_position_in_call(sig, x) # what slot does ref sit in?
         tls = retrieve_toplevel_scope(x)
-        while (func isa Binding && func.type == CoreTypes.Function) || func isa SymbolServer.SymStore
-            !(func in visitedmethods) ? push!(visitedmethods, func) : return # check whether we've been here before
-            if func isa Binding
-                get_arg_type_at_position(func, argi, new_possibles)
-                func = func.prev
-            else
-                tls === nothing && return
-                iterate_over_ss_methods(func, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
-                return
+        if func isa Binding
+            for method in func.refs
+                method = get_method(method)
+                method === nothing && continue
+                if method isa EXPR 
+                    if defines_function(method)
+                        get_arg_type_at_position(method, argi, new_possibles)
+                    # elseif CSTParser.defines_struct(method)
+                        # Can we ignore this? Default constructor gives us no type info?
+                    end
+                else # elseif what? 
+                    iterate_over_ss_methods(method, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+                end
             end
+        else
+            iterate_over_ss_methods(func, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
         end
     end
 end
@@ -136,9 +137,9 @@ function get_arg_position_in_call(sig::EXPR, arg)
     end
 end
 
-function get_arg_type_at_position(b::Binding, argi, types)
-    if b.val isa EXPR
-        sig = CSTParser.get_sig(b.val)
+function get_arg_type_at_position(method, argi, types)
+    if method isa EXPR
+        sig = CSTParser.get_sig(method)
         if sig !== nothing && 
             sig.args !== nothing && argi <= length(sig.args) &&
             hasbinding(sig.args[argi]) &&
@@ -147,8 +148,8 @@ function get_arg_type_at_position(b::Binding, argi, types)
             push!(types, argb.type)
             return
         end
-    elseif b.val isa SymbolServer.DataTypeStore || b.val isa SymbolServer.FunctionStore
-        for m in b.val.methods
+    elseif method isa SymbolServer.DataTypeStore || method isa SymbolServer.FunctionStore
+        for m in method.methods
             get_arg_type_at_position(m, argi, types)
         end
     end
@@ -158,17 +159,5 @@ end
 function get_arg_type_at_position(m::SymbolServer.MethodStore, argi, types)
     if length(m.sig) >= argi && m.sig[argi][2] != SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any) && !(m.sig[argi][2] in types)
         push!(types, m.sig[argi][2])
-    end
-end
-
-function get_last_method(b::Binding, server, visited_bindings=Binding[])
-    if b.next === nothing || b == b.next || !(b.next isa Binding) || b in visited_bindings
-        return b
-    end
-    push!(visited_bindings, b)
-    if b.type == b.next.type == CoreTypes.Function
-        return get_last_method(b.next, server, visited_bindings)
-    else
-        return b
     end
 end

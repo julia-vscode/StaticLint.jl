@@ -85,17 +85,11 @@ function get_root_method(b, server)
     return b
 end
 
-function get_root_method(b::Binding, server, b1=nothing, visited_bindings=Binding[])
-    if b.prev === nothing || b == b.prev || !(b.prev isa Binding) || b in visited_bindings
-        return b
-    end
-    push!(visited_bindings, b)
-    if b.type == b.prev.type == CoreTypes.Function
-        return get_root_method(b.prev, server, b, visited_bindings)
-    elseif b.type == CoreTypes.Function && b.prev.type == CoreTypes.DataType
-        return b.prev
+function get_root_method(b::Binding, server)
+    if b.type == CoreTypes.Function && !isempty(b.refs)
+        first(b.refs)
     else
-        return b
+        b
     end
 end
 
@@ -149,8 +143,6 @@ end
 #     return rets, false
 # end
 
-last_method(b::Binding, visited=Binding[]) = b.next isa Binding && b.next.type === CoreTypes.Function && !(b in visited) ? (push!(visited, b);last_method(b.next, visited)) : b
-
 function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
     for i in 1:length(x.args[3].args)
@@ -182,13 +174,16 @@ function _is_in_basedir(path::String)
     return ""
 end
 
+_is_macrocall_to_BaseDIR(arg) = headof(arg) === :macrocall && length(arg.args) == 2 && valof(arg.args[1]) == "@__DIR__"
+
+
 isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && k in m.exportednames
 isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m)
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
 function retrieve_toplevel_scope(x::EXPR)
-    if scopeof(x) !== nothing && (CSTParser.defines_module(x) || headof(x) === :file)
+    if scopeof(x) !== nothing && is_toplevel_scope(x)
         return scopeof(x)
     elseif parentof(x) isa EXPR
         return retrieve_toplevel_scope(parentof(x))
@@ -197,8 +192,11 @@ function retrieve_toplevel_scope(x::EXPR)
         return nothing
     end
 end
-retrieve_toplevel_scope(s::Scope) = (CSTParser.defines_module(s.expr) || headof(s.expr) === :file || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
+retrieve_toplevel_scope(s::Scope) = (is_toplevel_scope(s) || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
+retrieve_toplevel_or_func_scope(s::Scope) = (is_toplevel_scope(s) || defines_function(s.expr) || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_or_func_scope(parentof(s))
 
+is_toplevel_scope(s::Scope) = is_toplevel_scope(s.expr)
+is_toplevel_scope(x::EXPR) = CSTParser.defines_module(x) || headof(x) === :file
 
 # b::SymbolServer.FunctionStore or DataTypeStore
 # tls is a top-level Scope (expected to contain loaded modules)
@@ -296,3 +294,8 @@ function issigoffuncdecl(x::EXPR, p::EXPR)
     end
 end
 issigoffuncdecl(x::EXPR, p) = false
+
+function is_nameof_func(name)
+    f = get_parent_fexpr(name, CSTParser.defines_function)
+    f !== nothing && CSTParser.get_name(f) == name
+end

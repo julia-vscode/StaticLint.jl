@@ -145,6 +145,11 @@ function (state::ResolveOnly)(x::EXPR)
 end
 
 
+"""
+    semantic_pass(file, modified_expr=nothing)
+
+Performs a semantic pass across a project from the entry point `file`. A first pass traverses the top-level scope after which secondary passes handle delayed scopes (e.g. functions). These secondary passes can be, optionally, very light and only seek to resovle references (e.g. link symbols to bindings). This can be done by supplying a list of expressions on which the full secondary pass should be made (`modified_expr`), all others will receive the light-touch version.
+"""
 function semantic_pass(file, modified_expr=nothing)
     server = file.server
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
@@ -260,6 +265,47 @@ function followinclude(x, state::State)
             seterror!(x, MissingFile)
         end
     end
+end
+
+"""
+    get_path(x::EXPR)
+
+Usually called on the argument to `include` calls, and attempts to determine
+the path of the file to be included. Has limited support for `joinpath` calls.
+"""
+function get_path(x::EXPR, state)
+    if CSTParser.iscall(x) && length(x.args) == 2
+        parg = x.args[2]
+        if CSTParser.isstringliteral(parg)
+            path = CSTParser.str_value(parg)
+            path = normpath(path)
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
+        elseif CSTParser.ismacrocall(parg) && valof(parg.args[1]) == "@raw_str" && CSTParser.isstringliteral(parg.args[3])
+            path = normpath(CSTParser.str_value(parg.args[3]))
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
+        elseif CSTParser.iscall(parg) && isidentifier(parg.args[1]) && valofid(parg.args[1]) == "joinpath"
+            path_elements = String[]
+
+            for i = 2:length(parg.args)
+                arg = parg[i]
+                if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
+                    push!(path_elements, dirname(getpath(state.file)))
+                elseif CSTParser.isstringliteral(arg)
+                    push!(path_elements, string(valofid(arg)))
+                else
+                    return ""
+                end
+            end
+            isempty(path_elements) && return ""
+
+            path = normpath(joinpath(path_elements...))
+            Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
+            return path
+        end
+    end
+    return ""
 end
 
 include("server.jl")

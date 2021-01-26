@@ -415,10 +415,9 @@ f(arg) = arg
         cos(x) = 1
         Base.tan(x) = 1
         """)
-
-            @test StaticLint.overwrites_imported_function(bindingof(cst[3]))
-            @test !StaticLint.overwrites_imported_function(bindingof(cst[4]))
-            @test StaticLint.overwrites_imported_function(bindingof(cst[5]))
+            @test StaticLint.overwrites_imported_function(refof(cst[3][1][1]))
+            @test !StaticLint.overwrites_imported_function(refof(cst[4][1][1]))
+            @test StaticLint.overwrites_imported_function(refof(cst[5][1][1][3][1]))
         end
     end
 
@@ -485,20 +484,6 @@ f(arg) = arg
             @test errorof(cst[2]) === StaticLint.NotEqDef
             @test errorof(cst[3]) === StaticLint.NotEqDef
             @test errorof(cst[4]) === StaticLint.NotEqDef
-        end
-    end
-
-    @testset "docs for undescribed variables" begin
-        let cst = parse_and_pass("""
-    \"\"\"
-        somefunc() = true
-    \"\"\"
-    somefunc
-    somefunc() = true
-    """)
-            @test StaticLint.hasref(cst.args[1].args[4])
-            @test StaticLint.hasbinding(cst.args[1].args[4])
-            @test refof(cst[1][3]) == bindingof(cst[1][3])
         end
     end
 
@@ -804,7 +789,7 @@ f(arg) = arg
         end
         let cst = parse_and_pass("function f(arg) arg = 1 end")
             StaticLint.check_farg_unused(cst[1])
-            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
         end
         let cst = parse_and_pass("function f(arg) 1 end")
             StaticLint.check_farg_unused(cst[1])
@@ -825,21 +810,18 @@ f(arg) = arg
         T = 1
         struct T end
         """)
-            StaticLint.check_const_decl(cst[2])
             @test cst[2].meta.error == StaticLint.CannotDeclareConst
         end
         let cst = parse_and_pass("""
         struct T end
         T = 1
         """)
-            StaticLint.check_const_redef(cst[2][1])
-            @test cst[2][1].meta.error == StaticLint.InvalidRedefofConst
+            @test cst[2].meta.error == StaticLint.InvalidRedefofConst
         end
         let cst = parse_and_pass("""
         struct T end
         T() = 1
         """)
-            StaticLint.check_const_redef(cst[2])
             @test cst[2].meta.error === nothing
         end
     end
@@ -851,10 +833,10 @@ f(arg) = arg
             y::Int
             ASDF(x::Int) = new(x, 1)
         end
-        ASDF() = something
+        ASDF(1)
         """)
-            @test bindingof(cst.args[1]) === bindingof(cst.args[1].args[3].args[3]).prev
-            @test bindingof(cst.args[1].args[3].args[3]) === bindingof(cst.args[2]).prev
+            # Check inner constructor is hoisted
+            @test isempty(StaticLint.collect_hints(cst, server)) 
         end
     end
 
@@ -1100,7 +1082,7 @@ f(arg) = arg
         sin()
         """)
                 @test haskey(cst.meta.scope.names, "sin") #
-                @test cst.meta.scope.names["sin"].prev == server.symbolserver[:Base][:sin]
+                @test first(cst.meta.scope.names["sin"].refs) == server.symbolserver[:Base][:sin]
                 StaticLint.check_call(cst[2], server)
                 @test isempty(StaticLint.collect_hints(cst[2], server))
             end
@@ -1131,7 +1113,6 @@ f(arg) = arg
         Base.argtail()
         """)
             @test !haskey(cst.meta.scope.names, "argtail") #
-            StaticLint.check_call(cst[2], server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     # As above but for user defined function
@@ -1152,12 +1133,10 @@ f(arg) = arg
         Base.argtail()
         argtail()
         """)
-
-            @test cst.meta.scope.names["argtail"] === bindingof(cst.args[2])
-            @test bindingof(cst.args[2]).prev == bindingof(cst.args[1].args[1].args[2].args[1])
-            @test refof(cst.args[3].args[1].args[2].args[1]) === bindingof(cst.args[2])
-            @test isempty(StaticLint.collect_hints(cst[3], server))
-            @test isempty(StaticLint.collect_hints(cst[4], server))
+            @test cst.meta.scope.names["argtail"] === bindingof(cst[1][2][3][1])
+            @test StaticLint.get_method(cst.meta.scope.names["argtail"].refs[2]) isa CSTParser.EXPR
+            @test cst[3][1][3][1].meta.ref == cst.meta.scope.names["argtail"]
+            @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
 
@@ -1450,14 +1429,6 @@ f(arg) = arg
             f1(x)
         end""")
         @test bindingof(cst.args[3].args[1].args[2]).type !== nothing
-    end
-    @testset "check for unassigned keyword arguments" begin
-        cst = parse_and_pass("""
-        function func3(x; y) end
-        func3(2; y=3)
-        """)
-        @test StaticLint.haserror(cst.args[1].args[1].args[2].args[1])
-        @test StaticLint.haserror(cst.args[2])
     end
 end
 

@@ -24,7 +24,8 @@ InappropriateUseOfLiteral,
 ShouldBeInALoop,
 TypeDeclOnGlobalVariable,
 UnsupportedConstLocalVariable,
-UnassignedKeywordArgument)
+UnassignedKeywordArgument,
+CannotDefineFuncAlreadyHasValue)
 
 
 
@@ -51,8 +52,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     InappropriateUseOfLiteral => "You really shouldn't be using a literal value here.",
     ShouldBeInALoop => "`break` or `continue` used outside loop.",
     TypeDeclOnGlobalVariable => "Type declarations on global variables are not yet supported.",
-    UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable. ",
-    UnassignedKeywordArgument => "Keyword argument not assigned."
+    UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
+    UnassignedKeywordArgument => "Keyword argument not assigned.",
+    CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value."
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -97,13 +99,10 @@ function check_all(x::EXPR, opts::LintOptions, server)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
     opts.useoffuncargs && check_farg_unused(x)
-    check_const_decl(x)
-    check_const_redef(x)
     check_kw_default(x, server)
     check_use_of_literal(x)
     check_break_continue(x)
     check_const(x)
-    check_kw_is_assigned(x)
 
     if x.args !== nothing
         for i in 1:length(x.args)
@@ -239,9 +238,9 @@ end
 # compare_f_call(m_counts, call_counts) = true # fallback method
 
 function compare_f_call(
-    (ref_minargs, ref_maxargs, ref_kws, kwsplat),
-    (act_minargs, act_maxargs, act_kws),
-)
+        (ref_minargs, ref_maxargs, ref_kws, kwsplat),
+        (act_minargs, act_maxargs, act_kws),
+    )
     # check matching on positional arguments
     if act_maxargs == typemax(Int)
         act_minargs <= act_maxargs < ref_minargs && return false
@@ -261,7 +260,7 @@ end
 
 function is_something_with_methods(x::Binding)
     (x.type == CoreTypes.Function && x.val isa EXPR) ||
-    (x.type == CoreTypes.DataType && x.val isa EXPR && CSTParser.defines_struct(x.val)) ||
+    (x.type == CoreTypes.DataType && x.val isa EXPR && CSTParser.defines_struct(x.val)) || # Todo: Could have abstract type with a constructor...
     (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
@@ -279,55 +278,61 @@ function check_call(x, server)
         else
             return
         end
-
-        if func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)
-            func_ref = last_method(func_ref)
-        elseif func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        
+        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             # intentionally empty
         else
             return
         end
         call_counts = call_nargs(x)
         tls = retrieve_toplevel_scope(x)
-        tls === nothing && return # General check, this means something serious has gone wrong.
+        tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
         !sig_match_any(func_ref, x, call_counts, tls, server) && seterror!(x, IncorrectCallArgs)
-
     end
 end
 
-function sig_match_any(func_ref, x, call_counts, tls, server, visited=[])
-    if func_ref in visited
-        return true
+function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls, server)
+    iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
+end
+
+function sig_match_any(func_ref::Binding, x, call_counts, tls, server)
+    if func_ref.val isa SymbolServer.FunctionStore || func_ref.val isa SymbolServer.DataTypeStore
+        match = sig_match_any(func_ref.val, x, call_counts, tls, server)
+        match && return true
+    end
+    for r in func_ref.refs
+        method = get_method(r)
+        method === nothing && continue
+        sig_match_any(method, x, call_counts, tls, server) && return true
+    end
+    
+    return false
+end
+
+function sig_match_any(func::EXPR, x, call_counts, tls, server)
+    if CSTParser.defines_function(func)
+        m_counts = func_nargs(func)
+    elseif CSTParser.defines_struct(func)
+        m_counts = struct_nargs(func)
     else
-        push!(visited, func_ref)
+        return true # We shouldn't get here
     end
-    if func_ref isa Binding && (func_ref.val isa SymbolServer.FunctionStore || func_ref.val isa SymbolServer.DataTypeStore)
-        func_ref = func_ref.val
-    end
-    if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
-        return iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
-    elseif func_ref isa Binding
-        if func_ref.type == CoreTypes.Function && func_ref.val isa EXPR
-            m_counts = func_nargs(func_ref.val)
-        elseif func_ref.type == CoreTypes.DataType && func_ref.val isa EXPR && CSTParser.defines_struct(func_ref.val)
-            m_counts = struct_nargs(func_ref.val)
-        else
-            # We shouldn't get here
-            return true
-        end
-        if compare_f_call(m_counts, call_counts) || (CSTParser.rem_where_decl(CSTParser.get_sig(func_ref.val)) == x)
-            return true
-        end
-        if is_something_with_methods(func_ref.prev)
-            return sig_match_any(func_ref.prev, x, call_counts, tls, server, visited)
-        elseif func_ref.prev isa Binding && func_ref.prev.type === nothing && func_ref.prev.val isa EXPR && isidentifier(func_ref.prev.val) &&
-            isdocumented(func_ref.prev.val) # && is_something_with_methods(func_ref.prev.prev)
-            # Skip over documented symbols
-            return sig_match_any(func_ref.prev.prev, x, call_counts, tls, server, visited)
-        end
+    if compare_f_call(m_counts, call_counts) || (CSTParser.rem_where_decl(CSTParser.get_sig(func)) == x)
+        return true
     end
     return false
 end
+
+function get_method(name::EXPR)
+    f = maybe_get_parent_fexpr(name, x -> CSTParser.defines_function(x) || CSTParser.defines_struct(x))
+    if f !== nothing && CSTParser.get_name(f) == name
+        return f
+    end
+end
+function get_method(x::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore})
+    x
+end
+get_method(x) = nothing
 
 isdocumented(x::EXPR) = parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x)) && headof(parentof(x).args[1]) === :globalrefdoc
 
@@ -414,25 +419,18 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server, visited=nothing) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server, visited=nothing) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server, visited=nothing)
+is_never_datatype(b, server) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, server)
     !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server, visited=Binding[])
-    if b in visited
-        return false
-    else
-        push!(visited, b)
-    end
+function is_never_datatype(b::Binding, server)
     if b.val isa Binding
-        return is_never_datatype(b.val, server, visited)
+        return is_never_datatype(b.val, server)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
     elseif b.type == CoreTypes.DataType
         return false
-    elseif b.type == CoreTypes.Function && b.prev !== nothing
-        return is_never_datatype(b.prev, server, visited)
     elseif b.type !== nothing
         return true
     end
@@ -481,10 +479,7 @@ function check_farg_unused(x::EXPR)
                     return
                 end
                 b = bindingof(arg)
-                if b === nothing || (
-                       (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name)) &&
-                       b.next === nothing
-                   )
+                if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
                     seterror!(arg, UnusedFunctionArgument)
                 end
             end
@@ -595,25 +590,14 @@ function has_getproperty_method(b::SymbolServer.DataTypeStore, server)
 end
 
 function has_getproperty_method(b::Binding)
-    if b.val isa Binding
-        return has_getproperty_method(b.val)
-    elseif b.val isa SymbolServer.DataTypeStore
+    if b.val isa Binding || b.val isa SymbolServer.DataTypeStore
         return has_getproperty_method(b.val)
     elseif b isa Binding && b.type === CoreTypes.DataType
-        safety_trip = 0
-        while b !== nothing
-            safety_trip += 1
-            if safety_trip > 1000
-                error("Infinite loop.")
+        for ref in b.refs
+            if is_type_of_call_to_getproperty(ref)
+                return true
             end
-            for ref in b.refs
-                if is_type_of_call_to_getproperty(ref)
-                    return true
-                end
-            end
-            b = b.next isa Binding && b.next.type === CoreTypes.Function ? b.next : nothing
         end
-
     end
     return false
 end
@@ -649,9 +633,10 @@ end
 function check_for_pirates(x::EXPR)
     if CSTParser.defines_function(x)
         sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
-        if fname_is_noteq(CSTParser.get_name(sig))
+        fname = CSTParser.get_name(sig)
+        if fname_is_noteq(fname)
             seterror!(x, NotEqDef)
-        elseif iscall(sig) && hasbinding(x) && overwrites_imported_function(bindingof(x))
+        elseif iscall(sig) && hasbinding(x) && overwrites_imported_function(refof(fname))
             for i = 2:length(sig.args)
                 if hasbinding(sig.args[i]) && bindingof(sig.args[i]).type isa Binding
                     return
@@ -694,50 +679,32 @@ function refers_to_nonimported_type(arg::EXPR)
     return false
 end
 
-overwrites_imported_function(b, visited_bindings=Binding[]) = false
-function overwrites_imported_function(b::Binding, visited_bindings=Binding[])
-    if b in visited_bindings
-        return false
-    else
-        push!(visited_bindings, b)
-    end
-
-    if b.prev isa Binding
-        if b.prev.val isa EXPR
-            # overwrites a within source bindig so lets check that
-            return overwrites_imported_function(b.prev, visited_bindings)
-        elseif (b.prev.val isa SymbolServer.FunctionStore || b.prev.val isa SymbolServer.DataTypeStore) && parentof(b.prev.name) isa EXPR && is_in_fexpr(parentof(b.prev.name), x -> headof(x) === :import)
-            # last expr of above condition can be improved on (more restrictive inspection of parent exprs).
-            # explicitly imported, e.g. import ModuleName: somefunction
-            return true
-        end
-    elseif b.prev isa SymbolServer.FunctionStore &&
-        parentof(b.name) isa EXPR && headof(parentof(b.name)) === :quotenode && is_getfield(parentof(parentof(b.name)))
-        fullname = parentof(parentof(b.name))
-        # overwrites imported function by declaring full name, e.g. ModuleName.FunctionName
-        if isidentifier(fullname.args[1]) && refof(fullname.args[1]) isa SymbolServer.ModuleStore
-            return true
-        elseif is_getfield(fullname.args[1]) && headof(fullname.args[1].args[2]) === :quotenode && refof(fullname.args[1].args[2].args[1]) isa SymbolServer.ModuleStore
-            return true
-        end
+overwrites_imported_function(b) = false
+function overwrites_imported_function(b::Binding)
+    if ((b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore) && 
+        (is_in_fexpr(b.name, x -> headof(x) === :import)) || (b.refs isa Vector && length(b.refs) > 0 && (first(b.refs) isa SymbolServer.FunctionStore || first(b.refs) isa SymbolServer.DataTypeStore)))
+        return true
     end
     return false
 end
 
-function check_const_decl(x::EXPR)
-    (bind_prev = get_bind_and_prev(x)) === nothing && return
-    bind, _ = bind_prev
-    if CSTParser.defines_datatype(x) || is_const(bind)
-        seterror!(x, CannotDeclareConst)
-    end
-end
-
-function check_const_redef(x::EXPR)
-    (bind_prev = get_bind_and_prev(x)) === nothing && return
-    bind, prev = bind_prev
-    bind.type === CoreTypes.Function && return
-    if (prev.type === CoreTypes.DataType && !is_mask_binding_of_datatype(prev)) || is_const(prev)
-        seterror!(x, InvalidRedefofConst)
+# Now called from add_binding
+# Should return true/false indicating whether the binding should actually be added?
+function check_const_decl(name::String, b::Binding, scope)
+    # assumes `scopehasbinding(scope, name)`
+    b.val isa Binding && return check_const_decl(name, b.val, scope)
+    if b.val isa EXPR && (CSTParser.defines_datatype(b.val) || is_const(bind))
+        seterror!(b.val, CannotDeclareConst)
+    else
+        prev = scope.names[name]
+        if (prev.type === CoreTypes.DataType && !is_mask_binding_of_datatype(prev)) || is_const(prev)
+            if b.val isa EXPR
+                seterror!(b.val, InvalidRedefofConst)
+            else
+                # TODO check what's going on here
+                seterror!(b.name, InvalidRedefofConst)
+            end
+        end
     end
 end
 
@@ -770,13 +737,6 @@ function find_if_parents(x::EXPR, current=Int[], list=Dict{EXPR,Vector{Int}}())
         end
     end
     return parentof(x) isa EXPR ? find_if_parents(parentof(x), current, list) : list
-end
-
-function get_bind_and_prev(x::EXPR)
-    hasbinding(x) || return nothing
-    (bind = bindingof(x)) isa Binding || return nothing
-    (prev = bind.prev) isa Binding || return nothing
-    return bind, prev
 end
 
 is_const(x) = false
@@ -876,20 +836,6 @@ function check_const(x::EXPR)
             seterror!(x, TypeDeclOnGlobalVariable)
         elseif headof(x.args[1]) === :local
             seterror!(x, UnsupportedConstLocalVariable)
-        end
-    end
-end
-
-function check_kw_is_assigned(x::EXPR)
-    if CSTParser.defines_function(x)
-        sig = CSTParser.get_sig(x)
-        if sig.args !== nothing && length(sig.args) > 1 && headof(sig.args[2]) === :parameters
-            params = sig.args[2]
-            for a in params.args
-                if !(headof(a) == :kw || CSTParser.ismacrocall(a))
-                    seterror!(a, UnassignedKeywordArgument)
-                end
-            end
         end
     end
 end

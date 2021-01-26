@@ -48,7 +48,7 @@ function handle_macro(x::EXPR, state)
             end
         elseif _points_to_Base_macro(x.args[1], Symbol("@goto"), state)
             if length(x.args) == 3 && isidentifier(x.args[3])
-                setref!(x.args[3], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
+                setref!(x.args[3], Binding(noname, nothing, nothing, EXPR[]))
             end
         elseif _points_to_Base_macro(x.args[1], Symbol("@label"), state)
             if length(x.args) == 3 && isidentifier(x.args[3])
@@ -57,7 +57,7 @@ function handle_macro(x::EXPR, state)
         elseif _points_to_Base_macro(x.args[1], Symbol("@NamedTuple"), state) && length(x.args) > 2 && headof(x.args[3]) == :braces
             for a in x.args[3].args
                 if CSTParser.isdeclaration(a) && isidentifier(a.args[1]) && !hasref(a.args[1])
-                    setref!(a.args[1], Binding(noname, nothing, nothing, EXPR[], nothing, nothing))
+                    setref!(a.args[1], Binding(noname, nothing, nothing, EXPR[]))
                 end
             end
         elseif is_nospecialize(x.args[1])
@@ -97,9 +97,6 @@ function handle_macro(x::EXPR, state)
         #         end
         #     end
         end
-    elseif headof(x.args[1]) == :globalrefdoc && length(x.args) == 4 && headof(x.args[3]) === :TRIPLESTRING && isidentifier(x.args[4])
-        mark_binding!(x.args[4])
-        setref!(x.args[4], bindingof(x.args[4]))
     end
 end
 
@@ -204,24 +201,20 @@ function interpret_eval(x::EXPR, state)
             if (ref = refof(variable_name)) isa Binding
                 if isassignment(ref.val) && (rhs = maybeget_quotedsymbol(ref.val.args[2])) !== nothing
                     # `name = :something`
-                    toplevel_binding = Binding(rhs, b.val, b.type, [], nothing, nothing)
+                    toplevel_binding = Binding(rhs, b.val, b.type, [])
                     infer_type(toplevel_binding, tls, state)
                     if scopehasbinding(tls, valofid(toplevel_binding.name))
-                        toplevel_binding.prev = tls.names[valofid(toplevel_binding.name)]
-                        tls.names[valofid(toplevel_binding.name)] = toplevel_binding
-                        toplevel_binding.prev.next = toplevel_binding
+                        tls.names[valofid(toplevel_binding.name)] = toplevel_binding # TODO: do we need to check whether this adds a method?
                     else
                         tls.names[valofid(toplevel_binding.name)] = toplevel_binding
                     end
                 elseif is_loop_iterator(ref.val) && (names = maybe_quoted_list(rhs_of_iterator(ref.val))) !== nothing
                     # name is of a collection of quoted symbols
                     for name in names
-                        toplevel_binding = Binding(name, b.val, b.type, [], nothing, nothing)
+                        toplevel_binding = Binding(name, b.val, b.type, [])
                         infer_type(toplevel_binding, tls, state)
                         if scopehasbinding(tls, valofid(toplevel_binding.name))
-                            toplevel_binding.prev = tls.names[valofid(toplevel_binding.name)]
-                            tls.names[valofid(toplevel_binding.name)] = toplevel_binding
-                            toplevel_binding.prev.next = toplevel_binding
+                            tls.names[valofid(toplevel_binding.name)] = toplevel_binding # TODO: do we need to check whether this adds a method?
                         else
                             tls.names[valofid(toplevel_binding.name)] = toplevel_binding
                         end
