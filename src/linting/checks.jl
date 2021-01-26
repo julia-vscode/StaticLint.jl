@@ -279,7 +279,7 @@ function check_call(x, server)
             return
         end
         
-        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             # intentionally empty
         else
             return
@@ -709,7 +709,7 @@ function check_const_decl(name::String, b::Binding, scope)
 end
 
 function is_mask_binding_of_datatype(b::Binding)
-    b.val isa EXPR && CSTParser.isassignment(b.val) && (rhsref = refof(b.val.args[2])) !== nothing && (rhsref.val isa SymbolServer.DataTypeStore || (rhsref.val isa EXPR && CSTParser.defines_datatype(rhsref.val)))
+    b.val isa EXPR && CSTParser.isassignment(b.val) && (rhsref = refof(b.val.args[2])) !== nothing && (rhsref isa SymbolServer.DataTypeStore || (rhsref.val isa EXPR && rhsref.val isa SymbolServer.DataTypeStore) || (rhsref.val isa EXPR && CSTParser.defines_datatype(rhsref.val)))
 end
 # check whether a and b are in all the same :if blocks and in the same branches
 function in_same_if_branch(a, b)
