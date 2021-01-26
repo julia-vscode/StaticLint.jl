@@ -116,9 +116,9 @@ function infer_type_by_use(b::Binding, env::ExternalEnv)
         elseif type isa SymbolServer.DataTypeStore
             b.type = type
         elseif type isa SymbolServer.VarRef
-            b.type = SymbolServer._lookup(type, getsymbolserver(env)) # could be nothing
+            b.type = SymbolServer._lookup(type, getsymbols(env)) # could be nothing
         elseif type isa SymbolServer.FakeTypeName && isempty(type.parameters)
-            b.type = SymbolServer._lookup(type.name, getsymbolserver(env)) # could be nothing
+            b.type = SymbolServer._lookup(type.name, getsymbols(env)) # could be nothing
         end
     end
 end

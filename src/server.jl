@@ -2,7 +2,7 @@
 Project trees are usually made up of multiple files. An AbstractServer holds the AbstractFiles that represent this tree. FileServer is the basic implementation and assumes files are available and readable from disc. (LanguageServer illustrates another implementaiton). The accompanying functions summarised below are required for making an alternative implementation. 
 
 Interface spec.
-AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
+AbstractServer :-> (has/canload/load/set/get)file, getsymbols, getsymbolextends
 AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, semantic_pass, (get/set)server
 =#
 abstract type AbstractServer end
@@ -38,11 +38,11 @@ function loadfile(server::FileServer, path::String)
     setfile(server, path, f)
     return getfile(server, path)
 end
-getsymbolserver(server::FileServer) = server.symbolserver
+getsymbols(server::FileServer) = server.symbolserver
 getsymbolextendeds(server::FileServer) = server.symbol_extends
-getsymbolserver(state::State) = getsymbolserver(state.env)
+getsymbols(state::State) = getsymbols(state.env)
 getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
-getsymbolserver(env::ExternalEnv) = env.symbols
+getsymbols(env::ExternalEnv) = env.symbols
 getsymbolextendeds(env::ExternalEnv) = env.extended_methods
 
 

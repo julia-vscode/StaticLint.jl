@@ -340,7 +340,7 @@ function check_loop_iter(x::EXPR, env::ExternalEnv)
     if headof(x) === :for
         if length(x.args) > 0 && CSTParser.is_range(x.args[1])
             rng = rhs_of_iterator(x.args[1])
-            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(env)[:Base][:length])
+            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
                 seterror!(x.args[1], IncorrectIterSpec)
             end
         end
@@ -348,7 +348,7 @@ function check_loop_iter(x::EXPR, env::ExternalEnv)
         for i = 2:length(x.args)
             if CSTParser.is_range(x.args[i])
                 rng = rhs_of_iterator(x.args[i])
-                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(env)[:Base][:length])
+                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
                     seterror!(x.args[i], IncorrectIterSpec)
                 end
             end
@@ -358,9 +358,9 @@ end
 
 function check_nothing_equality(x::EXPR, env::ExternalEnv)
     if isbinarycall(x)
-        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(env)[:Core][:nothing]
+        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
             seterror!(x.args[1], NothingEquality)
-        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(env)[:Core][:nothing]
+        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
             seterror!(x.args[1], NothingNotEq)
         end
     end
@@ -422,7 +422,7 @@ end
 is_never_datatype(b, env::ExternalEnv) = false
 is_never_datatype(b::SymbolServer.DataTypeStore, env::ExternalEnv) = false
 function is_never_datatype(b::SymbolServer.FunctionStore, env::ExternalEnv)
-    !(SymbolServer._lookup(b.extends, getsymbolserver(env)) isa SymbolServer.DataTypeStore)
+    !(SymbolServer._lookup(b.extends, getsymbols(env)) isa SymbolServer.DataTypeStore)
 end
 function is_never_datatype(b::Binding, env::ExternalEnv)
     if b.val isa Binding
@@ -575,13 +575,13 @@ function has_getproperty_method(b::SymbolServer.DataTypeStore, server)
     getprop_vr = SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Base), :getproperty)
     if haskey(getsymbolextendeds(server), getprop_vr)
         for ext in getsymbolextendeds(server)[getprop_vr]
-            for m in SymbolServer._lookup(ext, getsymbolserver(server))[:getproperty].methods
+            for m in SymbolServer._lookup(ext, getsymbols(server))[:getproperty].methods
                 t = unwrap_fakeunionall(m.sig[1][2])
                 !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
             end
         end
     else
-        for m in getsymbolserver(server)[:Base][:getproperty].methods
+        for m in getsymbols(server)[:Base][:getproperty].methods
             t = unwrap_fakeunionall(m.sig[1][2])
             !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
         end
@@ -759,25 +759,25 @@ function check_kw_default(x::EXPR, env::ExternalEnv)
         decl_T = refof(x.args[1].args[2])
         rhs = x.args[2]
         rhsval = valof(rhs)
-        if decl_T == getsymbolserver(env)[:Core][:String] && !CSTParser.isstringliteral(rhs)
+        if decl_T == getsymbols(env)[:Core][:String] && !CSTParser.isstringliteral(rhs)
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][:Symbol] && headof(rhs) !== :IDENTIFIER
+        elseif decl_T == getsymbols(env)[:Core][:Symbol] && headof(rhs) !== :IDENTIFIER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][:Int] && headof(rhs) !== :INTEGER
+        elseif decl_T == getsymbols(env)[:Core][:Int] && headof(rhs) !== :INTEGER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && headof(rhs) !== :INTEGER
+        elseif decl_T == getsymbols(env)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && headof(rhs) !== :INTEGER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][:Bool] && !(headof(rhs) === :TRUE || headof(rhs) === :FALSE)
+        elseif decl_T == getsymbols(env)[:Core][:Bool] && !(headof(rhs) === :TRUE || headof(rhs) === :FALSE)
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][:Char] && headof(rhs) !== :CHAR
+        elseif decl_T == getsymbols(env)[:Core][:Char] && headof(rhs) !== :CHAR
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][:Float64] && headof(rhs) !== :FLOAT
+        elseif decl_T == getsymbols(env)[:Core][:Float64] && headof(rhs) !== :FLOAT
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(env)[:Core][:Float32] && !(headof(rhs) === :FLOAT && occursin("f", rhsval))
+        elseif decl_T == getsymbols(env)[:Core][:Float32] && !(headof(rhs) === :FLOAT && occursin("f", rhsval))
             seterror!(rhs, KwDefaultMismatch)
         else
             for T in (UInt8, UInt16, UInt32, UInt64, UInt128)
-                if decl_T == getsymbolserver(env)[:Core][Symbol(T)]
+                if decl_T == getsymbols(env)[:Core][Symbol(T)]
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
@@ -797,7 +797,7 @@ function check_kw_default(x::EXPR, env::ExternalEnv)
             end
             # signed integers of non native size can't be declared as literal
             for T in (Int8, Int16, Sys.WORD_SIZE == 64 ? Int32 : Int64, Int128)
-                if decl_T == getsymbolserver(env)[:Core][Symbol(T)]
+                if decl_T == getsymbols(env)[:Core][Symbol(T)]
                     seterror!(rhs, KwDefaultMismatch)
                 end
             end

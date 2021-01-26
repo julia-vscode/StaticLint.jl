@@ -227,10 +227,10 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state)), state.server)) !== nothing
+    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state.server)) !== nothing
         setref!(x, val)
         resolved = true
-    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state)), state.server)) !== nothing
+    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state.server)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
         # if tls.overloaded !== nothing && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
@@ -267,7 +267,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     if isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
         fi = findfirst(f -> Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
-        val = SymbolServer._lookup(ft, getsymbolserver(state), true)
+        val = SymbolServer._lookup(ft, getsymbols(state), true)
         # TODO: Need to handle the case where we get back a FakeUnion, etc.
         setref!(x, Binding(noname, nothing, val, []))
         resolved = true

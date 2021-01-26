@@ -125,18 +125,18 @@ end
 
 function _points_to_Base_macro(x::EXPR, name, state)
     CSTParser.is_getfield_w_quotenode(x) && return _points_to_Base_macro(x.args[2].args[1], name, state)
-    haskey(getsymbolserver(state)[:Base], name) || return false
-    targetmacro =  maybe_lookup(getsymbolserver(state)[:Base][name], state.server)
+    haskey(getsymbols(state)[:Base], name) || return false
+    targetmacro =  maybe_lookup(getsymbols(state)[:Base][name], state.server)
     isidentifier(x) && Symbol(valofid(x)) == name && (ref = refof(x)) !== nothing &&
     (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
-    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && haskey(getsymbolserver(state), Symbol(module_name)) && haskey(getsymbolserver(state)[Symbol(module_name)], Symbol("@", name)) && (refof(x.args[2]) == maybe_lookup(getsymbolserver(state)[Symbol(module_name)][Symbol("@", name)], state.server) ||
-    (refof(x.args[2]) isa Binding && refof(x.args[2]).val == maybe_lookup(getsymbolserver(state)[Symbol(module_name)][Symbol("@", name)], state.server)))
+    length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && haskey(getsymbols(state), Symbol(module_name)) && haskey(getsymbols(state)[Symbol(module_name)], Symbol("@", name)) && (refof(x.args[2]) == maybe_lookup(getsymbols(state)[Symbol(module_name)][Symbol("@", name)], state.server) ||
+    (refof(x.args[2]) isa Binding && refof(x.args[2]).val == maybe_lookup(getsymbols(state)[Symbol(module_name)][Symbol("@", name)], state.server)))
 end
 
-maybe_lookup(x, server) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, getsymbolserver(server), true) : x
+maybe_lookup(x, server) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, getsymbols(server), true) : x
 
 function maybe_eventually_get_id(x::EXPR)
     if isidentifier(x)

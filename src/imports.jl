@@ -4,7 +4,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
         arg = x.args[i]
         if isoperator(arg) && valof(arg) == "."
             # Leading dots. Can only be leading elements.
-            if root == getsymbolserver(state)
+            if root == getsymbols(state)
                 root = state.scope
             elseif root isa Scope && parentof(root) !== nothing
                 root = parentof(root)
@@ -24,7 +24,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
     end
 end
 
-function resolve_import(x::EXPR, state::State, root=getsymbolserver(state))
+function resolve_import(x::EXPR, state::State, root=getsymbols(state))
     if headof(x) === :using || headof(x) === :import
         usinged = headof(x) === :using
         if length(x.args) > 0 && isoperator(headof(x.args[1])) && valof(headof(x.args[1])) == ":"
@@ -49,7 +49,7 @@ function _mark_import_arg(arg, par, state, usinged)
             push!(par.refs, arg)
         end
         if par isa SymbolServer.VarRef
-            par = SymbolServer._lookup(par, getsymbolserver(state), true)
+            par = SymbolServer._lookup(par, getsymbols(state), true)
             !(par isa SymbolServer.SymStore) && return
         end
         if bindingof(arg) === nothing
@@ -108,7 +108,7 @@ function _get_field(par, arg, state)
         elseif haskey(par, Symbol(arg_str_rep))
             par = par[Symbol(arg_str_rep)]
             if par isa SymbolServer.VarRef # reference to dependency
-                return SymbolServer._lookup(par, getsymbolserver(state), true)
+                return SymbolServer._lookup(par, getsymbols(state), true)
             end
             return par
         end
