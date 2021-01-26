@@ -40,6 +40,23 @@ function loadfile(server::FileServer, path::String)
 end
 getsymbolserver(server::FileServer) = server.symbolserver
 getsymbolextendeds(server::FileServer) = server.symbol_extends
+getsymbolserver(state::State) = getsymbolserver(state.env)
+getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
+getsymbolserver(env::ExternalEnv) = env.symbols
+getsymbolextendeds(env::ExternalEnv) = env.extended_methods
+
+
+"""
+    get_env(file::File, server::FileServer)
+
+Get the relevant `ExternalEnv` for a given file. 
+"""
+function get_env(file::File, server::FileServer)
+    # For FileServer this approach is equivalent to the previous behaviour. Other AbstractServers 
+    # (e.g. LanguageServerInstance) can use this function to associate different files (or trees of 
+    # files) with different environments.
+    ExternalEnv(server.symbolserver, server.symbol_extends, Symbol[])
+end
 
 
 getpath(file::File) = file.path

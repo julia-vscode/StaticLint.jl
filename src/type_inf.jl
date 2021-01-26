@@ -89,14 +89,14 @@ function infer_type_decl(binding, state, scope)
 end
 
 # Work out what type a bound variable has by functions that are called on it.
-function infer_type_by_use(b::Binding, server)
+function infer_type_by_use(b::Binding, env::ExternalEnv)
     b.type !== nothing && return # b already has a type
     possibletypes = []
     visitedmethods = []
     for ref in b.refs
         new_possibles = []
         ref isa EXPR || continue # skip non-EXPR (i.e. used for handling of globals)
-        check_ref_against_calls(ref, visitedmethods, new_possibles, server)
+        check_ref_against_calls(ref, visitedmethods, new_possibles, env)
 
         if isempty(possibletypes)
             possibletypes = new_possibles
@@ -116,14 +116,14 @@ function infer_type_by_use(b::Binding, server)
         elseif type isa SymbolServer.DataTypeStore
             b.type = type
         elseif type isa SymbolServer.VarRef
-            b.type = SymbolServer._lookup(type, getsymbolserver(server)) # could be nothing
+            b.type = SymbolServer._lookup(type, getsymbolserver(env)) # could be nothing
         elseif type isa SymbolServer.FakeTypeName && isempty(type.parameters)
-            b.type = SymbolServer._lookup(type.name, getsymbolserver(server)) # could be nothing
+            b.type = SymbolServer._lookup(type.name, getsymbolserver(env)) # could be nothing
         end
     end
 end
 
-function check_ref_against_calls(x, visitedmethods, new_possibles, server)
+function check_ref_against_calls(x, visitedmethods, new_possibles, env::ExternalEnv)
     if is_arg_of_resolved_call(x)
         sig = parentof(x)
         # x is argument of function call (func) and we know what that function is
@@ -145,11 +145,11 @@ function check_ref_against_calls(x, visitedmethods, new_possibles, server)
                         # Can we ignore this? Default constructor gives us no type info?
                     end
                 else # elseif what? 
-                    iterate_over_ss_methods(method, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+                    iterate_over_ss_methods(method, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
                 end
             end
         else
-            iterate_over_ss_methods(func, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+            iterate_over_ss_methods(func, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
         end
     end
 end

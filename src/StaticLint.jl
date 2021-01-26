@@ -59,6 +59,18 @@ hasscope(m::Meta) = m.scope isa Scope
 scopeof(m::Meta) = m.scope
 bindingof(m::Meta) = m.binding
 
+
+"""
+    ExternalEnv
+
+Holds a representation of an environment cached by SymbolServer. 
+"""
+struct ExternalEnv
+    symbols::SymbolServer.EnvStore
+    extended_methods::Dict
+    project::Vector{Symbol}
+end
+
 abstract type State end
 mutable struct Toplevel{T} <: State
     file::T
@@ -68,6 +80,7 @@ mutable struct Toplevel{T} <: State
     modified_exprs::Union{Nothing,Vector{EXPR}}
     delayed::Vector{EXPR}
     resolveonly::Vector{EXPR}
+    env::ExternalEnv
     server
 end
 
@@ -102,6 +115,7 @@ end
 
 mutable struct Delayed <: State
     scope::Scope
+    env::ExternalEnv
     server
 end
 
@@ -116,7 +130,7 @@ function (state::Delayed)(x::EXPR)
     traverse(x, state)
     if state.scope != s0
         for (k, b) in state.scope.names
-            infer_type_by_use(b, state.server)
+            infer_type_by_use(b, state.env)
         end
         state.scope = s0
     end
@@ -125,6 +139,7 @@ end
 
 mutable struct ResolveOnly <: State
     scope::Scope
+    env::ExternalEnv
     server
 end
 
@@ -152,25 +167,26 @@ Performs a semantic pass across a project from the entry point `file`. A first p
 """
 function semantic_pass(file, modified_expr=nothing)
     server = file.server
-    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
-    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], server)
+    env = get_env(file, server)
+    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => env.symbols[:Base], :Core => env.symbols[:Core]), nothing))
+    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], env, server)
     state(getcst(file))
     for x in state.delayed
         if hasscope(x)
-            traverse(x, Delayed(scopeof(x), server)) 
+            traverse(x, Delayed(scopeof(x), env, server)) 
             for (k, b) in scopeof(x).names
-                infer_type_by_use(b, state.server)
+                infer_type_by_use(b, env)
             end
         else
-            traverse(x, Delayed(retrieve_delayed_scope(x), server))
+            traverse(x, Delayed(retrieve_delayed_scope(x), env, server))
         end
     end
     if state.resolveonly !== nothing
         for x in state.resolveonly
             if hasscope(x)
-                traverse(x, ResolveOnly(scopeof(x), server))
+                traverse(x, ResolveOnly(scopeof(x), env, server))
             else
-                traverse(x, ResolveOnly(retrieve_delayed_scope(x), server))
+                traverse(x, ResolveOnly(retrieve_delayed_scope(x), env, server))
             end
         end
     end

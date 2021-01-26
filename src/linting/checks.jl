@@ -87,26 +87,26 @@ LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
 LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
     LintOptions(something.(options, default_options)...)
 
-function check_all(x::EXPR, opts::LintOptions, server)
+function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
     # Do checks
-    opts.call && check_call(x, server)
-    opts.iter && check_loop_iter(x, server)
-    opts.nothingcomp && check_nothing_equality(x, server)
+    opts.call && check_call(x, env)
+    opts.iter && check_loop_iter(x, env)
+    opts.nothingcomp && check_nothing_equality(x, env)
     opts.constif && check_if_conds(x)
     opts.lazy && check_lazy(x)
-    opts.datadecl && check_datatype_decl(x, server)
+    opts.datadecl && check_datatype_decl(x, env)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
     opts.useoffuncargs && check_farg_unused(x)
-    check_kw_default(x, server)
+    check_kw_default(x, env)
     check_use_of_literal(x)
     check_break_continue(x)
     check_const(x)
 
     if x.args !== nothing
         for i in 1:length(x.args)
-            check_all(x.args[i], opts, server)
+            check_all(x.args[i], opts, env)
         end
     end
 end
@@ -266,7 +266,7 @@ end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
 is_something_with_methods(x) = false
 
-function check_call(x, server)
+function check_call(x, env::ExternalEnv)
     if iscall(x)
         parentof(x) isa EXPR && headof(parentof(x)) === :do && return # TODO: add number of args specified in do block.
         length(x.args) == 0 && return
@@ -287,29 +287,29 @@ function check_call(x, server)
         call_counts = call_nargs(x)
         tls = retrieve_toplevel_scope(x)
         tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
-        !sig_match_any(func_ref, x, call_counts, tls, server) && seterror!(x, IncorrectCallArgs)
+        !sig_match_any(func_ref, x, call_counts, tls, env) && seterror!(x, IncorrectCallArgs)
     end
 end
 
-function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls, server)
-    iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
+function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls::Scope, env::ExternalEnv)
+    iterate_over_ss_methods(func_ref, tls, env, m -> compare_f_call(func_nargs(m), call_counts))
 end
 
-function sig_match_any(func_ref::Binding, x, call_counts, tls, server)
+function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::ExternalEnv)
     if func_ref.val isa SymbolServer.FunctionStore || func_ref.val isa SymbolServer.DataTypeStore
-        match = sig_match_any(func_ref.val, x, call_counts, tls, server)
+        match = sig_match_any(func_ref.val, x, call_counts, tls, env)
         match && return true
     end
     for r in func_ref.refs
         method = get_method(r)
         method === nothing && continue
-        sig_match_any(method, x, call_counts, tls, server) && return true
+        sig_match_any(method, x, call_counts, tls, env) && return true
     end
     
     return false
 end
 
-function sig_match_any(func::EXPR, x, call_counts, tls, server)
+function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     if CSTParser.defines_function(func)
         m_counts = func_nargs(func)
     elseif CSTParser.defines_struct(func)
@@ -336,11 +336,11 @@ get_method(x) = nothing
 
 isdocumented(x::EXPR) = parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x)) && headof(parentof(x).args[1]) === :globalrefdoc
 
-function check_loop_iter(x::EXPR, server)
+function check_loop_iter(x::EXPR, env::ExternalEnv)
     if headof(x) === :for
         if length(x.args) > 0 && CSTParser.is_range(x.args[1])
             rng = rhs_of_iterator(x.args[1])
-            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(server)[:Base][:length])
+            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(env)[:Base][:length])
                 seterror!(x.args[1], IncorrectIterSpec)
             end
         end
@@ -348,7 +348,7 @@ function check_loop_iter(x::EXPR, server)
         for i = 2:length(x.args)
             if CSTParser.is_range(x.args[i])
                 rng = rhs_of_iterator(x.args[i])
-                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(server)[:Base][:length])
+                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(env)[:Base][:length])
                     seterror!(x.args[i], IncorrectIterSpec)
                 end
             end
@@ -356,11 +356,11 @@ function check_loop_iter(x::EXPR, server)
     end
 end
 
-function check_nothing_equality(x::EXPR, server)
+function check_nothing_equality(x::EXPR, env::ExternalEnv)
     if isbinarycall(x)
-        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
+        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(env)[:Core][:nothing]
             seterror!(x.args[1], NothingEquality)
-        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
+        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(env)[:Core][:nothing]
             seterror!(x.args[1], NothingNotEq)
         end
     end
@@ -419,16 +419,16 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server)
-    !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
+is_never_datatype(b, env::ExternalEnv) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, env::ExternalEnv) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, env::ExternalEnv)
+    !(SymbolServer._lookup(b.extends, getsymbolserver(env)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server)
+function is_never_datatype(b::Binding, env::ExternalEnv)
     if b.val isa Binding
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, env)
     elseif b.val isa SymbolServer.FunctionStore
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, env)
     elseif b.type == CoreTypes.DataType
         return false
     elseif b.type !== nothing
@@ -437,11 +437,11 @@ function is_never_datatype(b::Binding, server)
     return false
 end
 
-function check_datatype_decl(x::EXPR, server)
+function check_datatype_decl(x::EXPR, env::ExternalEnv)
     # Only call in function signatures?
     if isdeclaration(x) && parentof(x) isa EXPR && iscall(parentof(x))
         if (dt = refof_maybe_getfield(last(x.args))) !== nothing
-            if is_never_datatype(dt, server)
+            if is_never_datatype(dt, env)
                 seterror!(x, InvalidTypeDeclaration)
             end
         elseif CSTParser.isliteral(last(x.args))
@@ -754,30 +754,30 @@ Check that the default value matches the type for keyword arguments. Following t
 checked: `String, Symbol, Int, Char, Bool, Float32, Float64, UInt8, UInt16, UInt32,
 UInt64, UInt128`.
 """
-function check_kw_default(x::EXPR, server)
+function check_kw_default(x::EXPR, env::ExternalEnv)
     if headof(x) == :kw && isdeclaration(x.args[1]) && CSTParser.isliteral(x.args[2]) && hasref(x.args[1].args[2])
         decl_T = refof(x.args[1].args[2])
         rhs = x.args[2]
         rhsval = valof(rhs)
-        if decl_T == getsymbolserver(server)[:Core][:String] && !CSTParser.isstringliteral(rhs)
+        if decl_T == getsymbolserver(env)[:Core][:String] && !CSTParser.isstringliteral(rhs)
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Symbol] && headof(rhs) !== :IDENTIFIER
+        elseif decl_T == getsymbolserver(env)[:Core][:Symbol] && headof(rhs) !== :IDENTIFIER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Int] && headof(rhs) !== :INTEGER
+        elseif decl_T == getsymbolserver(env)[:Core][:Int] && headof(rhs) !== :INTEGER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && headof(rhs) !== :INTEGER
+        elseif decl_T == getsymbolserver(env)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && headof(rhs) !== :INTEGER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Bool] && !(headof(rhs) === :TRUE || headof(rhs) === :FALSE)
+        elseif decl_T == getsymbolserver(env)[:Core][:Bool] && !(headof(rhs) === :TRUE || headof(rhs) === :FALSE)
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Char] && headof(rhs) !== :CHAR
+        elseif decl_T == getsymbolserver(env)[:Core][:Char] && headof(rhs) !== :CHAR
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Float64] && headof(rhs) !== :FLOAT
+        elseif decl_T == getsymbolserver(env)[:Core][:Float64] && headof(rhs) !== :FLOAT
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Float32] && !(headof(rhs) === :FLOAT && occursin("f", rhsval))
+        elseif decl_T == getsymbolserver(env)[:Core][:Float32] && !(headof(rhs) === :FLOAT && occursin("f", rhsval))
             seterror!(rhs, KwDefaultMismatch)
         else
             for T in (UInt8, UInt16, UInt32, UInt64, UInt128)
-                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                if decl_T == getsymbolserver(env)[:Core][Symbol(T)]
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
@@ -797,7 +797,7 @@ function check_kw_default(x::EXPR, server)
             end
             # signed integers of non native size can't be declared as literal
             for T in (Int8, Int16, Sys.WORD_SIZE == 64 ? Int32 : Int64, Int128)
-                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                if decl_T == getsymbolserver(env)[:Core][Symbol(T)]
                     seterror!(rhs, KwDefaultMismatch)
                 end
             end

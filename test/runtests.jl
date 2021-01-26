@@ -452,10 +452,6 @@ f(arg) = arg
         sin(x::Array{Number}) = 1
         sin(x::Array{<:Number}) = 1
         """)
-            StaticLint.check_for_pirates(cst[3])
-            StaticLint.check_for_pirates(cst[4])
-            StaticLint.check_for_pirates(cst[5])
-            StaticLint.check_for_pirates(cst[6])
             @test errorof(cst[3]) === nothing
             @test errorof(cst[4]) === nothing
             @test errorof(cst[5]) === StaticLint.TypePiracy
@@ -477,9 +473,6 @@ f(arg) = arg
         !=(a::T,b::T) = true
         !=(a::T,b::T) where T= true
         """)
-            StaticLint.check_for_pirates.(cst)
-
-
             @test errorof(cst[1]) === StaticLint.NotEqDef
             @test errorof(cst[2]) === StaticLint.NotEqDef
             @test errorof(cst[3]) === StaticLint.NotEqDef
@@ -492,8 +485,6 @@ f(arg) = arg
         sin(1)
         sin(1,2)
         """)
-            StaticLint.check_call(cst.args[1], server)
-            StaticLint.check_call(cst.args[2], server)
             @test StaticLint.errorof(cst.args[1]) === nothing
             @test StaticLint.errorof(cst.args[2]) == StaticLint.IncorrectCallArgs
         end
@@ -504,9 +495,7 @@ f(arg) = arg
             1
         end
         """)
-            StaticLint.check_call(cst.args[1].args[1], server)
             @test StaticLint.errorof(cst.args[1].args[1]) === nothing
-            StaticLint.check_call(cst.args[2].args[1], server)
             @test StaticLint.errorof(cst.args[2].args[1]) === nothing
         end
 
@@ -514,14 +503,12 @@ f(arg) = arg
         f(x) = 1
         f(1, 2)
         """)
-            StaticLint.check_call(cst.args[2], server)
             @test StaticLint.errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
         end
 
         let cst = parse_and_pass("""
         view([1], 1, 2, 3)
         """)
-            StaticLint.check_call(cst.args[1], server)
             @test StaticLint.errorof(cst.args[1]) === nothing
         end
 
@@ -530,8 +517,6 @@ f(arg) = arg
         f(1)
         f(1, 2)
         """)
-            StaticLint.check_call(cst.args[2], server)
-            StaticLint.check_call(cst.args[3], server)
             @test StaticLint.errorof(cst.args[2]) === nothing
             @test StaticLint.errorof(cst.args[3]) === nothing
         end
@@ -540,7 +525,6 @@ f(arg) = arg
             func(a...)
         end
         """)
-            StaticLint.check_call(cst.args[1].args[2].args[1], server)
             m_counts = StaticLint.func_nargs(cst.args[1])
             call_counts = StaticLint.call_nargs(cst.args[1].args[2].args[1])
             @test StaticLint.errorof(cst.args[1].args[2].args[1]) === nothing
@@ -550,7 +534,6 @@ f(arg) = arg
         func(1, 2)
         """)
             @test StaticLint.func_nargs(cst.args[1]) == (0, typemax(Int), String[], false)
-            StaticLint.check_call(cst.args[2], server)
             @test StaticLint.errorof(cst.args[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -558,7 +541,6 @@ f(arg) = arg
         tail(x::Tuple) = argtail(x...)
         """)
             @test StaticLint.func_nargs(cst[1]) == (1, typemax(Int), String[], false)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -567,14 +549,12 @@ f(arg) = arg
         """)
 
             @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
         function f(a, b; kw = kw) end
         f(1,2, kw = 1)
         """)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -582,7 +562,6 @@ f(arg) = arg
         func(a..., 2)
         """)
             StaticLint.call_nargs(cst[2])
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -591,7 +570,6 @@ f(arg) = arg
         end
         A(x = 5.0)
         """)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -1083,7 +1061,6 @@ f(arg) = arg
         """)
                 @test haskey(cst.meta.scope.names, "sin") #
                 @test first(cst.meta.scope.names["sin"].refs) == server.symbolserver[:Base][:sin]
-                StaticLint.check_call(cst[2], server)
                 @test isempty(StaticLint.collect_hints(cst[2], server))
             end
     # As above but for user defined function
@@ -1095,7 +1072,6 @@ f(arg) = arg
         M.f(1,2)
         """)
                 @test !haskey(cst.meta.scope.names, "f")
-                StaticLint.check_call(cst.args[3], server)
                 @test errorof(cst.args[3]) === nothing
             end
 
@@ -1158,12 +1134,10 @@ f(arg) = arg
     @testset "check kw default definition" begin
         function kw_default_ok(s)
             cst = parse_and_pass(s)
-            StaticLint.check_kw_default(cst.args[1].args[2], server)
             @test errorof(cst.args[1].args[2].args[2]) === nothing
         end
         function kw_default_notok(s)
             cst = parse_and_pass(s)
-            StaticLint.check_kw_default(cst.args[1].args[2], server)
             @test errorof(cst.args[1].args[2].args[2]) == StaticLint.KwDefaultMismatch
         end
 

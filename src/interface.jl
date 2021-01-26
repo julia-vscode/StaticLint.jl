@@ -15,11 +15,12 @@ it is paired with a collected list of errors/hints.
 """
 function lint_string(s::String, server = setup_server(); gethints = false)
     empty!(server.files)
-    f = StaticLint.File("", s, CSTParser.parse(s, true), nothing, server)
-    StaticLint.setroot(f, f)
-    StaticLint.setfile(server, "", f)
-    StaticLint.semantic_pass(f)
-    StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
+    f = File("", s, CSTParser.parse(s, true), nothing, server)
+    env = get_env(f, server)
+    setroot(f, f)
+    setfile(server, "", f)
+    semantic_pass(f)
+    check_all(f.cst, LintOptions(), env)
     if gethints
         return f.cst, [(x, string(haserror(x) ? LintCodeDescriptions[x.meta.error] : "Missing reference", " at offset ", offset)) for (offset, x) in collect_hints(f.cst, server)]
     else
@@ -38,10 +39,10 @@ containing the `File`s of the package.
 """
 function lint_file(rootpath, server = setup_server(); gethints = false)
     empty!(server.files)
-    root = StaticLint.loadfile(server, rootpath)
-    StaticLint.semantic_pass(root)
+    root = loadfile(server, rootpath)
+    semantic_pass(root)
     for (p,f) in server.files
-        StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
+        check_all(f.cst, LintOptions(), get_env(f, server))
     end
     if gethints
         hints = []
