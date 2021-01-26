@@ -279,7 +279,7 @@ function check_call(x, server)
             return
         end
         
-        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             # intentionally empty
         else
             return
