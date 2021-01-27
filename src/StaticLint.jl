@@ -65,9 +65,9 @@ bindingof(m::Meta) = m.binding
 
 Holds a representation of an environment cached by SymbolServer. 
 """
-struct ExternalEnv
+mutable struct ExternalEnv
     symbols::SymbolServer.EnvStore
-    extended_methods::Dict
+    extended_methods::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
     project::Vector{Symbol}
 end
 
