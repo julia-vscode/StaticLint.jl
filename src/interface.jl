@@ -16,7 +16,7 @@ it is paired with a collected list of errors/hints.
 function lint_string(s::String, server = setup_server(); gethints = false)
     empty!(server.files)
     f = File("", s, CSTParser.parse(s, true), nothing, server)
-    env = get_env(f, server)
+    env = getenv(f, server)
     setroot(f, f)
     setfile(server, "", f)
     semantic_pass(f)
@@ -42,7 +42,7 @@ function lint_file(rootpath, server = setup_server(); gethints = false)
     root = loadfile(server, rootpath)
     semantic_pass(root)
     for (p,f) in server.files
-        check_all(f.cst, LintOptions(), get_env(f, server))
+        check_all(f.cst, LintOptions(), getenv(f, server))
     end
     if gethints
         hints = []

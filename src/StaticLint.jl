@@ -167,7 +167,7 @@ Performs a semantic pass across a project from the entry point `file`. A first p
 """
 function semantic_pass(file, modified_expr=nothing)
     server = file.server
-    env = get_env(file, server)
+    env = getenv(file, server)
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => env.symbols[:Base], :Core => env.symbols[:Core]), nothing))
     state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], env, server)
     state(getcst(file))

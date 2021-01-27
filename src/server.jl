@@ -47,11 +47,11 @@ getsymbolextendeds(env::ExternalEnv) = env.extended_methods
 
 
 """
-    get_env(file::File, server::FileServer)
+    getenv(file::File, server::FileServer)
 
 Get the relevant `ExternalEnv` for a given file. 
 """
-function get_env(file::File, server::FileServer)
+function getenv(file::File, server::FileServer)
     # For FileServer this approach is equivalent to the previous behaviour. Other AbstractServers 
     # (e.g. LanguageServerInstance) can use this function to associate different files (or trees of 
     # files) with different environments.
