@@ -68,7 +68,7 @@ Holds a representation of an environment cached by SymbolServer.
 mutable struct ExternalEnv
     symbols::SymbolServer.EnvStore
     extended_methods::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
-    project::Vector{Symbol}
+    project_deps::Vector{Symbol}
 end
 
 abstract type State end

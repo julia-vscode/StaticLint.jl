@@ -19,10 +19,9 @@ end
 mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
-    symbolserver::SymbolServer.EnvStore
-    symbol_extends::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
+    external_env::ExternalEnv
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), ExternalEnv(deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Symbol[]))
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
 canloadfile(server, path) = isfile(path)
@@ -38,8 +37,8 @@ function loadfile(server::FileServer, path::String)
     setfile(server, path, f)
     return getfile(server, path)
 end
-getsymbols(server::FileServer) = server.symbolserver
-getsymbolextendeds(server::FileServer) = server.symbol_extends
+getsymbols(server::FileServer) = server.external_env.symbols
+getsymbolextendeds(server::FileServer) = server.external_env.extended_methods
 getsymbols(state::State) = getsymbols(state.env)
 getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
 getsymbols(env::ExternalEnv) = env.symbols
@@ -55,7 +54,7 @@ function getenv(file::File, server::FileServer)
     # For FileServer this approach is equivalent to the previous behaviour. Other AbstractServers 
     # (e.g. LanguageServerInstance) can use this function to associate different files (or trees of 
     # files) with different environments.
-    ExternalEnv(server.symbolserver, server.symbol_extends, Symbol[])
+    server.external_env
 end
 
 
