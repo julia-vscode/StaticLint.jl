@@ -37,9 +37,6 @@ function resolve_import(x::EXPR, state::State, root=getsymbols(state))
                 resolve_import_block(x.args[i], state, root, usinged)
             end
         end
-        for i = 1:length(x.args)
-            resolve_import_block(x.args[i], state, root, usinged)
-        end
     end
 end
 
