@@ -124,7 +124,7 @@ Does the scope export a variable called `name`?
 """
 function scope_exports(scope::Scope, name::String, state)
     if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
-        initial_pass_on_exports(scope.expr, state.server)
+        # initial_pass_on_exports(scope.expr, state.server)
         for ref in b.refs
             if ref isa EXPR && parentof(ref) isa EXPR && headof(parentof(ref)) === :export
                 return true
@@ -142,9 +142,11 @@ whether a variable is made available by an import statement.
 """
 function initial_pass_on_exports(x::EXPR, server)
     # @assert CSTParser.defines_module(x)
-    for a in x.args[3] # module block expressions
-        if headof(a) === :export
-            traverse(a, Delayed(retrieve_scope(a), server))
+    if CSTParser.defines_module(x)
+        for a in x.args[3] # module block expressions
+            if headof(a) === :export
+                traverse(a, Delayed(scopeof(x), server))
+            end
         end
     end
 end

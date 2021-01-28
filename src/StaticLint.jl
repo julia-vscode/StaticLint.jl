@@ -85,13 +85,17 @@ function (state::Toplevel)(x::EXPR)
     if state.modified_exprs !== nothing && x in state.modified_exprs
         state.in_modified_expr = true
     end
-    if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export
+    dotrav = if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export
         if state.in_modified_expr
             push!(state.delayed, x)
         else
             push!(state.resolveonly, x)
         end
+        headof(x) === :export
     else
+        true
+    end
+    if dotrav
         traverse(x, state)
     end
     
