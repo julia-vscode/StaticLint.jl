@@ -874,8 +874,8 @@ f(arg) = arg
         end
 
         let cst = parse_and_pass("f(x::Module) = x.parent1")
-            @test StaticLint.has_getproperty_method(server.symbolserver[:Core][:Module], server)
-            @test !StaticLint.has_getproperty_method(server.symbolserver[:Core][:DataType], server)
+            @test StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:Module], server)
+            @test !StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:DataType], server)
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("f(x::DataType) = x.sdf")
@@ -1060,7 +1060,7 @@ f(arg) = arg
         sin()
         """)
                 @test haskey(cst.meta.scope.names, "sin") #
-                @test first(cst.meta.scope.names["sin"].refs) == server.symbolserver[:Base][:sin]
+                @test first(cst.meta.scope.names["sin"].refs) == server.external_env.symbols[:Base][:sin]
                 @test isempty(StaticLint.collect_hints(cst[2], server))
             end
     # As above but for user defined function
