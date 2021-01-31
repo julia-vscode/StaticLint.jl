@@ -1465,8 +1465,8 @@ end
 @testset "duplicate function argument" begin
     cst = parse_and_pass("""
     f(a,a) = a
-    """)
-    @test errorof(StaticLint.collect_hints(cst, server)[1][2]) == StaticLint.DuplicateFuncArgName
+    """) 
+    @test errorof(cst[1][1][5]) == StaticLint.DuplicateFuncArgName
 end
 
 @testset "type alias bindings" begin
