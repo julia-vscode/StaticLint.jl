@@ -25,7 +25,8 @@ ShouldBeInALoop,
 TypeDeclOnGlobalVariable,
 UnsupportedConstLocalVariable,
 UnassignedKeywordArgument,
-CannotDefineFuncAlreadyHasValue)
+CannotDefineFuncAlreadyHasValue,
+DuplicateFuncArgName)
 
 
 
@@ -54,7 +55,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     TypeDeclOnGlobalVariable => "Type declarations on global variables are not yet supported.",
     UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
     UnassignedKeywordArgument => "Keyword argument not assigned.",
-    CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value."
+    CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
+    DuplicateFuncArgName => "Function argnument name not unique."
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -468,6 +470,7 @@ function check_farg_unused(x::EXPR)
             return # Allow functions that return constants
         end
         if iscall(sig)
+            arg_names = String[] # TODO: use hash?
             for i = 2:length(sig.args)
                 if hasbinding(sig.args[i])
                     arg = sig.args[i]
@@ -481,6 +484,12 @@ function check_farg_unused(x::EXPR)
                 b = bindingof(arg)
                 if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
                     seterror!(arg, UnusedFunctionArgument)
+                end
+                if valof(b.name) === nothing
+                elseif valof(b.name) in arg_names
+                    seterror!(arg, DuplicateFuncArgName)
+                else
+                    push!(arg_names, valof(b.name))
                 end
             end
         end
@@ -555,7 +564,10 @@ function should_mark_missing_getfield_ref(x, server)
                 lhsref = lhsref.val
             end
             lhsref = get_root_method(lhsref, nothing)
-            if lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
+            if lhsref isa EXPR
+                # Not clear what is happening here.
+                return false
+            elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
                 return true
             elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
                 # We may have infered the lhs type after the semantic pass that was resolving references. Copied from `resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool`.

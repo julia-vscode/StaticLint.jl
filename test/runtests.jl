@@ -1461,3 +1461,18 @@ end
     StaticLint.semantic_pass(server.files[""], CSTParser.EXPR[cst[2]])
     @test StaticLint.hasref(cst.args[2].args[2].args[1])
 end
+
+@testset "duplicate function argument" begin
+    cst = parse_and_pass("""
+    f(a,a) = a
+    """)
+    @test errorof(StaticLint.collect_hints(cst, server)[1][2]) == StaticLint.DuplicateFuncArgName
+end
+
+@testset "type alias bindings" begin
+    cst = parse_and_pass("""
+    T{S} = Vector{S}
+    """)
+    @test haskey(cst.meta.scope.names, "T")
+    @test haskey(cst[1].meta.scope.names, "S")
+end

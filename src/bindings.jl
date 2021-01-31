@@ -203,7 +203,10 @@ function mark_sig_args!(x::EXPR)
 end
 
 function mark_typealias_bindings!(x::EXPR)
-    mark_binding!(x, x)
+    if !hasmeta(x)
+        x.meta = Meta()
+    end
+    x.meta.binding = Binding(CSTParser.get_name(x.args[1]), x, CoreTypes.DataType, [])
     setscope!(x, Scope(x))
     for i = 2:length(x.args[1].args)
         arg = x.args[1].args[i]
