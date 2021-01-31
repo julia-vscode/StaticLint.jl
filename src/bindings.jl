@@ -186,7 +186,7 @@ function mark_sig_args!(x::EXPR)
             end
         end
     elseif CSTParser.iswhere(x)
-        for i in 1:length(x.args)
+        for i in 2:length(x.args)
             mark_binding!(x.args[i])
         end
         mark_sig_args!(x.args[1])
