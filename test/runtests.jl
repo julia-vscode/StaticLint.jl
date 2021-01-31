@@ -1476,3 +1476,12 @@ end
     @test haskey(cst.meta.scope.names, "T")
     @test haskey(cst[1].meta.scope.names, "S")
 end
+
+@testset ":call w/ :parameters traverse order" begin
+    cst = parse_and_pass("""
+    function f(arg; kw = arg)
+        arg * kw
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
