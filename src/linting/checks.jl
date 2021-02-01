@@ -286,7 +286,7 @@ function check_call(x, server)
         
         if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             # intentionally empty
-            if func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
+            if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
                 # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.
                 func_ref = refof(func_ref.val.args[2])
             end
