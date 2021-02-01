@@ -9,7 +9,8 @@ function handle_macro(x::EXPR, state)
                 end
             elseif CSTParser.is_func_call(x.args[4])
                 sig = (x.args[4])
-                if sig isa EXPR
+                if sig isa EXPR 
+                    hasscope(sig) && return # We've already done this, don't repeat
                     setscope!(sig, Scope(sig))
                     mark_sig_args!(sig)                    
                 end
