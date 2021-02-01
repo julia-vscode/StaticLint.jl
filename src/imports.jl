@@ -82,7 +82,7 @@ no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === n
 function get_named_toplevel_module(s::Scope, name::String)
     if CSTParser.defines_module(s.expr) 
         m_name = CSTParser.get_name(s.expr)
-        if CSTParser.isidentifier(m_name) && valofid(m_name) == name && no_modules_above(s)
+        if ((headof(m_name) === :IDENTIFIER && valof(m_name) == name) || headof(m_name) === :NONSTDIDENTIFIER && length(m_name.args) == 2 && valof(m_name.args[2]) == name) && no_modules_above(s)
             return s.expr
         end
     end

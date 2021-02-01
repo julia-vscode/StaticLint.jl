@@ -1435,3 +1435,56 @@ end
     StaticLint.semantic_pass(server.files[""], CSTParser.EXPR[cst[2]])
     @test StaticLint.hasref(cst.args[2].args[2].args[1])
 end
+
+@testset "duplicate function argument" begin
+    cst = parse_and_pass("""
+    f(a,a) = a
+    """) 
+    @test errorof(cst[1][1][5]) == StaticLint.DuplicateFuncArgName
+end
+
+@testset "type alias bindings" begin
+    cst = parse_and_pass("""
+    T{S} = Vector{S}
+    """)
+    @test haskey(cst.meta.scope.names, "T")
+    @test haskey(cst[1].meta.scope.names, "S")
+end
+
+@testset ":call w/ :parameters traverse order" begin
+    cst = parse_and_pass("""
+    function f(arg; kw = arg)
+        arg * kw
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
+
+@testset "handle shadow bindings on method" begin
+    cst = parse_and_pass("""
+    f(x) = 1
+    g = f
+    g(1)
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
+
+@testset "documented symbol resolving" begin
+    cst = parse_and_pass("""
+    \"\"\"
+    doc
+    \"\"\"
+    func
+    func(x) = 1
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    \"\"\"
+    doc
+    \"\"\"
+    func(a,b)::Int
+    func(x, b) = 1
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
