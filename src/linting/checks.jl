@@ -25,7 +25,8 @@ ShouldBeInALoop,
 TypeDeclOnGlobalVariable,
 UnsupportedConstLocalVariable,
 UnassignedKeywordArgument,
-CannotDefineFuncAlreadyHasValue)
+CannotDefineFuncAlreadyHasValue,
+DuplicateFuncArgName)
 
 
 
@@ -54,7 +55,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     TypeDeclOnGlobalVariable => "Type declarations on global variables are not yet supported.",
     UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
     UnassignedKeywordArgument => "Keyword argument not assigned.",
-    CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value."
+    CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
+    DuplicateFuncArgName => "Function argnument name not unique."
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -278,9 +280,16 @@ function check_call(x, server)
         else
             return
         end
+
+        # if func_ref isa Binding && 
+        # end
         
         if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             # intentionally empty
+            if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
+                # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.
+                func_ref = refof(func_ref.val.args[2])
+            end
         else
             return
         end
@@ -468,6 +477,7 @@ function check_farg_unused(x::EXPR)
             return # Allow functions that return constants
         end
         if iscall(sig)
+            arg_names = Set{String}()
             for i = 2:length(sig.args)
                 if hasbinding(sig.args[i])
                     arg = sig.args[i]
@@ -481,6 +491,12 @@ function check_farg_unused(x::EXPR)
                 b = bindingof(arg)
                 if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
                     seterror!(arg, UnusedFunctionArgument)
+                end
+                if valof(b.name) === nothing
+                elseif valof(b.name) in arg_names
+                    seterror!(arg, DuplicateFuncArgName)
+                else
+                    push!(arg_names, valof(b.name))
                 end
             end
         end
@@ -555,7 +571,10 @@ function should_mark_missing_getfield_ref(x, server)
                 lhsref = lhsref.val
             end
             lhsref = get_root_method(lhsref, nothing)
-            if lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
+            if lhsref isa EXPR
+                # Not clear what is happening here.
+                return false
+            elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
                 return true
             elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
                 # We may have infered the lhs type after the semantic pass that was resolving references. Copied from `resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool`.

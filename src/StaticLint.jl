@@ -196,6 +196,12 @@ function traverse(x::EXPR, state)
             state(x.args[i])
         end
         state(x.args[1])
+    elseif headof(x) === :call && length(x.args) > 1 && headof(x.args[2]) === :parameters
+        state(x.args[1])
+        @inbounds for i = 3:length(x.args)
+            state(x.args[i])
+        end
+        state(x.args[2])
     elseif x.args !== nothing && length(x.args) > 0
         @inbounds for i in 1:length(x.args)
             state(x.args[i])
