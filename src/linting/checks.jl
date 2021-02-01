@@ -38,7 +38,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     EqInIfConditional => "Unbracketed assignment in if conditional statements is not allowed, did you mean to use ==?",
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
-    UnusedBinding => "The variable name has been bound but not used.",
+    UnusedBinding => "Variable has been assigned but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
     IncludeLoop => "Loop detected, this file has already been included.",
@@ -855,6 +855,16 @@ function check_const(x::EXPR)
             seterror!(x, TypeDeclOnGlobalVariable)
         elseif headof(x.args[1]) === :local
             seterror!(x, UnsupportedConstLocalVariable)
+        end
+    end
+end
+
+function check_unused_binding(b::Binding)
+    if isempty(b.refs)
+        if b.val isa EXPR
+            seterror!(b.val, UnusedBinding)
+        else
+            seterror!(b.name, UnusedBinding)
         end
     end
 end
