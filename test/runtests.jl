@@ -1485,3 +1485,12 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "handle shadow bindings on method" begin
+    cst = parse_and_pass("""
+    f(x) = 1
+    g = f
+    g(1)
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
