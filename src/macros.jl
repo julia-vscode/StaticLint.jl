@@ -1,7 +1,24 @@
 function handle_macro(@nospecialize(x), state) end
 function handle_macro(x::EXPR, state)
     !CSTParser.ismacrocall(x) && return
-    if CSTParser.ismacroname(x.args[1])
+    if headof(x.args[1]) === :globalrefdoc
+        if length(x.args) == 4
+            if isidentifier(x.args[4]) && !resolve_ref(x.args[4], state)
+                if state isa Toplevel
+                    push!(state.resolveonly, x)
+                end
+            elseif CSTParser.is_func_call(x.args[4])
+                sig = (x.args[4])
+                if sig isa EXPR
+                    setscope!(sig, Scope(sig))
+                    mark_sig_args!(sig)                    
+                end
+                if state isa Toplevel
+                    push!(state.resolveonly, x)
+                end
+            end
+        end
+    elseif CSTParser.ismacroname(x.args[1])
         state(x.args[1])
         if _points_to_Base_macro(x.args[1], Symbol("@deprecate"), state) && length(x.args) == 4
             if bindingof(x.args[3]) !== nothing

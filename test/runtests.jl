@@ -1494,3 +1494,23 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "documented symbol resolving" begin
+    cst = parse_and_pass("""
+    \"\"\"
+    doc
+    \"\"\"
+    func
+    func(x) = 1
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    \"\"\"
+    doc
+    \"\"\"
+    func(a,b)::Int
+    func(x, b) = 1
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
