@@ -860,7 +860,7 @@ function check_const(x::EXPR)
 end
 
 function check_unused_binding(b::Binding)
-    if isempty(b.refs)
+    if isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name
         if b.val isa EXPR
             seterror!(b.val, UnusedBinding)
         else

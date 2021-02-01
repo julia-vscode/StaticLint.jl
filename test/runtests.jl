@@ -1514,3 +1514,13 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "unused bindings" begin
+    cst = parse_and_pass("""
+    function f(arg, arg2)
+        arg*arg2
+        arg3 = 1
+    end
+    """)
+    @test errorof(cst[1][3][2]) !== nothing
+end
