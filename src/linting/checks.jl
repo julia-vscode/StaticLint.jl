@@ -477,7 +477,7 @@ function check_farg_unused(x::EXPR)
             return # Allow functions that return constants
         end
         if iscall(sig)
-            arg_names = String[] # TODO: use hash?
+            arg_names = Set{String}()
             for i = 2:length(sig.args)
                 if hasbinding(sig.args[i])
                     arg = sig.args[i]
