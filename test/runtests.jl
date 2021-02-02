@@ -1514,3 +1514,17 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "unwrap sig" begin
+    cst = parse_and_pass("""
+    function multiply!(x::T, y::Integer) where {T} end
+    multiply!(1, 3)
+    """)
+    @test errorof(cst[2]) === nothing
+
+    cst = parse_and_pass("""
+    function multiply!(x::T, y::Integer)::T where {T} end
+    multiply!(1, 3)
+    """)
+    @test errorof(cst[2]) === nothing
+end

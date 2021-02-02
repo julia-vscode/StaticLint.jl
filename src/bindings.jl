@@ -219,8 +219,6 @@ function mark_typealias_bindings!(x::EXPR)
     return x
 end
 
-rem_wheres_decls(x) = (CSTParser.iswhere(x) || CSTParser.isdeclaration(x)) ? x.args[1] : x
-
 function is_in_funcdef(x)
     if !(parentof(x) isa EXPR)
         return false
@@ -236,7 +234,7 @@ end
 function _in_func_def(x::EXPR)
     # only called in :where
     # check 1st arg contains a call (or op call)
-    ex = rem_wheres_decls(x.args[1])
+    ex = CSTParser.rem_wheres_decls(x.args[1])
 
     !(CSTParser.iscall(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && return false
 
