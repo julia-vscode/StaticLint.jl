@@ -1,27 +1,27 @@
-using StaticLint, SymbolServer
-using CSTParser, Test
-using StaticLint: scopeof, bindingof, refof, errorof, check_all
+    using StaticLint, SymbolServer
+    using CSTParser, Test
+    using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
-server = StaticLint.FileServer();
+    server = StaticLint.FileServer();
 
-function get_ids(x, ids=[])
-    if StaticLint.headof(x) === :IDENTIFIER
-        push!(ids, x)
-    elseif x.args !== nothing
-        for a in x.args
-            get_ids(a, ids)
+    function get_ids(x, ids=[])
+        if StaticLint.headof(x) === :IDENTIFIER
+            push!(ids, x)
+        elseif x.args !== nothing
+            for a in x.args
+                get_ids(a, ids)
+            end
         end
+        ids
     end
-    ids
-end
 
-parse_and_pass(s) = StaticLint.lint_string(s, server)
+    parse_and_pass(s) = StaticLint.lint_string(s, server)
 
-function check_resolved(s)
-    cst = parse_and_pass(s)
-    IDs = get_ids(cst)
-    [(refof(i) !== nothing) for i in IDs]
-end
+    function check_resolved(s)
+        cst = parse_and_pass(s)
+        IDs = get_ids(cst)
+        [(refof(i) !== nothing) for i in IDs]
+    end
 
 @testset "StaticLint" begin
 
@@ -876,7 +876,7 @@ f(arg) = arg
             f1
             f2
         end
-        Base.getproperty(x::T, s) = 1
+        Base.getproperty(x::T, s) = (x,s)
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
@@ -887,7 +887,7 @@ f(arg) = arg
             f1
             f2
         end
-        Base.getproperty(x::T{Int}, s) = 1
+        Base.getproperty(x::T{Int}, s) = (x,s)
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
@@ -1374,7 +1374,7 @@ f(arg) = arg
 
     if VERSION > v"1.5-"
         @testset "issue #210" begin
-            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = ()""")
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
@@ -1523,4 +1523,18 @@ end
     end
     """)
     @test errorof(cst[1][3][2]) !== nothing
+
+    cst = parse_and_pass("""
+    function f()
+        arg = false
+        while true
+            if arg
+            end
+            arg = true
+        end
+    end
+    """)
+    cst[1][3][2][3][2][1]
+    r = cst[1][3][1][1].meta.binding.refs[2]
+    
 end

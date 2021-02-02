@@ -859,12 +859,60 @@ function check_const(x::EXPR)
     end
 end
 
-function check_unused_binding(b::Binding)
-    if isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name
-        if b.val isa EXPR
-            seterror!(b.val, UnusedBinding)
-        else
-            seterror!(b.name, UnusedBinding)
+function check_unused_binding(b::Binding, scope::Scope)
+    if headof(scope.expr) !== :struct
+        if (isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name) && !is_overwritten_in_loop(b.name) && !is_sig_arg(b.name)
+            if b.val isa EXPR
+                seterror!(b.val, UnusedBinding)
+            else
+                seterror!(b.name, UnusedBinding)
+            end
         end
+    end
+end
+
+function is_sig_arg(x)
+    is_in_fexpr(x, CSTParser.iscall)
+end
+
+function is_overwritten_in_loop(x)
+    # Cuts out false positives for check_unused_binding - the linear nature of our 
+    # semantic passes mean a variable declared at the end of a loop's block but used at 
+    # the start won't appear to be referenced.
+
+    # Cheap version:
+    # is_in_fexpr(x, x -> x.head === :while || x.head === :for)
+    
+    # We really want to check whether the enclosing scope(s) of the loop has a binding 
+    # with matching name.
+    # Is this too expensive?
+    loop = maybe_get_parent_fexpr(x, x -> x.head === :while || x.head === :for)
+    if loop !== nothing
+        s = scopeof(loop)
+        if s isa Scope && parentof(s) isa Scope
+            prev_binding = check_parent_scopes_for(parentof(s), valof(x))
+            if prev_binding isa Binding
+                for r in prev_binding.refs
+                    if r isa EXPR && is_in_fexpr(r, x -> x === loop)
+                        return true
+                    end
+                end
+            else
+                return false
+            end
+        else
+            return false
+        end
+    else
+        false
+    end
+    false
+end
+
+function check_parent_scopes_for(s::Scope, name)
+    if haskey(s.names, name)
+        s.names[name]
+    elseif s.expr.head !== :module && s.parent isa Scope 
+        check_parent_scopes_for(parentof(s), name)
     end
 end
