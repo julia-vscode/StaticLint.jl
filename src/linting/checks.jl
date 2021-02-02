@@ -862,11 +862,7 @@ end
 function check_unused_binding(b::Binding, scope::Scope)
     if headof(scope.expr) !== :struct
         if (isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name) && !is_overwritten_in_loop(b.name) && !is_sig_arg(b.name)
-            if b.val isa EXPR
-                seterror!(b.val, UnusedBinding)
-            else
-                seterror!(b.name, UnusedBinding)
-            end
+            seterror!(b.name, UnusedBinding)    
         end
     end
 end
