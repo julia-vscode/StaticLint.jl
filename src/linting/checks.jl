@@ -296,6 +296,7 @@ function check_call(x, server)
         call_counts = call_nargs(x)
         tls = retrieve_toplevel_scope(x)
         tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
+        func_ref === nothing && return 
         !sig_match_any(func_ref, x, call_counts, tls, server) && seterror!(x, IncorrectCallArgs)
     end
 end
