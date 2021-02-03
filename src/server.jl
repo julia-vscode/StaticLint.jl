@@ -37,12 +37,12 @@ function loadfile(server::FileServer, path::String)
     setfile(server, path, f)
     return getfile(server, path)
 end
-getsymbols(server::FileServer) = server.external_env.symbols
-getsymbolextendeds(server::FileServer) = server.external_env.extended_methods
-getsymbols(state::State) = getsymbols(state.env)
-getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
+
 getsymbols(env::ExternalEnv) = env.symbols
+getsymbols(state::State) = getsymbols(state.env)
+
 getsymbolextendeds(env::ExternalEnv) = env.extended_methods
+getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
 
 
 """

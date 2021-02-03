@@ -516,12 +516,12 @@ function is_nospecialize_call(x)
 end
 
 """
-collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+collect_hints(x::EXPR, env, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
 
 Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
 identifiers are marked, the :all option will mark identifiers used in getfield calls."
 """
-function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
+function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -540,12 +540,12 @@ function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=T
             # collect lint hints
             push!(errs, (pos, x))
         end
-    elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, server)
+    elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, env)
         push!(errs, (pos, x))
     end
     
     for i in 1:length(x)
-        collect_hints(x[i], server, missingrefs, isquoted, errs, pos)
+        collect_hints(x[i], env, missingrefs, isquoted, errs, pos)
         pos += x[i].fullspan
     end
 
@@ -560,7 +560,7 @@ function refof_maybe_getfield(x::EXPR)
     end
 end
 
-function should_mark_missing_getfield_ref(x, server)
+function should_mark_missing_getfield_ref(x, env)
     if isidentifier(x) && !hasref(x) && # x has no ref
     parentof(x) isa EXPR && headof(parentof(x)) === :quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x)).args[1])
@@ -575,7 +575,7 @@ function should_mark_missing_getfield_ref(x, server)
             if lhsref isa EXPR
                 # Not clear what is happening here.
                 return false
-            elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
+            elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, env))
                 return true
             elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
                 # We may have infered the lhs type after the semantic pass that was resolving references. Copied from `resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool`.
@@ -591,17 +591,17 @@ function should_mark_missing_getfield_ref(x, server)
 end
 
 unwrap_fakeunionall(x) = x isa SymbolServer.FakeUnionAll ? unwrap_fakeunionall(x.body) : x
-function has_getproperty_method(b::SymbolServer.DataTypeStore, server)
+function has_getproperty_method(b::SymbolServer.DataTypeStore, env)
     getprop_vr = SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Base), :getproperty)
-    if haskey(getsymbolextendeds(server), getprop_vr)
-        for ext in getsymbolextendeds(server)[getprop_vr]
-            for m in SymbolServer._lookup(ext, getsymbols(server))[:getproperty].methods
+    if haskey(getsymbolextendeds(env), getprop_vr)
+        for ext in getsymbolextendeds(env)[getprop_vr]
+            for m in SymbolServer._lookup(ext, getsymbols(env))[:getproperty].methods
                 t = unwrap_fakeunionall(m.sig[1][2])
                 !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
             end
         end
     else
-        for m in getsymbols(server)[:Base][:getproperty].methods
+        for m in getsymbols(env)[:Base][:getproperty].methods
             t = unwrap_fakeunionall(m.sig[1][2])
             !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
         end

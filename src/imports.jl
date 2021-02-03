@@ -12,7 +12,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
                 return
             end
         elseif isidentifier(arg) || (i == n && (CSTParser.ismacroname(arg) || isoperator(arg)))
-            root = maybe_lookup(hasref(arg) ? refof(arg) : _get_field(root, arg, state), state.server)
+            root = maybe_lookup(hasref(arg) ? refof(arg) : _get_field(root, arg, state), state)
             setref!(arg, root)
             if i == n
                 markfinal && _mark_import_arg(arg, root, state, usinged)
@@ -112,7 +112,7 @@ function _get_field(par, arg, state)
             return par
         end
         for used_module_name in par.used_modules
-            used_module = maybe_lookup(par[used_module_name], state.server)
+            used_module = maybe_lookup(par[used_module_name], state)
             if used_module !== nothing && isexportedby(Symbol(arg_str_rep), used_module)
                 return used_module[Symbol(arg_str_rep)]
             end
@@ -123,7 +123,7 @@ function _get_field(par, arg, state)
         elseif par.modules !== nothing
             for used_module in values(par.modules)
                 if used_module isa SymbolServer.ModuleStore && isexportedby(Symbol(arg_str_rep), used_module)
-                    return maybe_lookup(used_module[Symbol(arg_str_rep)], state.server)
+                    return maybe_lookup(used_module[Symbol(arg_str_rep)], state)
                 elseif used_module isa Scope && scope_exports(used_module, arg_str_rep, state)
                     return used_module.names[arg_str_rep]
                 end

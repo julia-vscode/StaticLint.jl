@@ -87,7 +87,7 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
 
         mn = Symbol(valof(x))
         if isexportedby(mn, m)
-            setref!(x, maybe_lookup(m[mn], state.server))
+            setref!(x, maybe_lookup(m[mn], state))
             return true
         end
     elseif isidentifier(x1)
@@ -96,7 +96,7 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, m)
             return true
         elseif isexportedby(x, m)
-            setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
+            setref!(x, maybe_lookup(m[Symbol(valof(x))], state))
             return true
         end
     end
@@ -233,10 +233,10 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state.server)) !== nothing
+    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state)) !== nothing
         setref!(x, val)
         resolved = true
-    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state.server)) !== nothing
+    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
         # if tls.overloaded !== nothing && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))

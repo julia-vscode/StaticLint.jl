@@ -289,7 +289,7 @@ function add_binding(x, state, scope=state.scope)
                 lhs_ref = refof_maybe_getfield(parentof(parentof(b.name)).args[1])
                 if lhs_ref isa SymbolServer.ModuleStore && haskey(lhs_ref.vals, Symbol(name))
                     # Overloading
-                    if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state.server)
+                    if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state)
                         # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.
                         if !hasref(b.name) 
                             setref!(b.name, tls.names[name]) # Add ref to previous overload
@@ -300,7 +300,7 @@ function add_binding(x, state, scope=state.scope)
                         # Name is already available
                         tls.names[name] = b 
                         if !hasref(b.name) # Is this an appropriate indicator that we've not marked the overload?
-                            push!(b.refs, maybe_lookup(lhs_ref[Symbol(name)], state.server))
+                            push!(b.refs, maybe_lookup(lhs_ref[Symbol(name)], state))
                             setref!(b.name, b) # we actually set the rhs of the qualified name to point to this binding
                         end
                     else
@@ -347,13 +347,13 @@ name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && 
 
 
 """
-eventually_overloads(b, x, server)
+eventually_overloads(b, x, state)
 
 
 """
-eventually_overloads(b::Binding, ss::SymbolServer.SymStore, server) = b.val == ss || (b.refs !== nothing && length(b.refs) > 0 && first(b.refs) == ss)
-eventually_overloads(b::Binding, ss::SymbolServer.VarRef, server) = eventually_overloads(b, maybe_lookup(ss, server), server)
-eventually_overloads(b, ss, server) = false
+eventually_overloads(b::Binding, ss::SymbolServer.SymStore, state) = b.val == ss || (b.refs !== nothing && length(b.refs) > 0 && first(b.refs) == ss)
+eventually_overloads(b::Binding, ss::SymbolServer.VarRef, state) = eventually_overloads(b, maybe_lookup(ss, state), state)
+eventually_overloads(b, ss, state) = false
 
 isglobal(name, scope) = false
 isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs

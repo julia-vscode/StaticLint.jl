@@ -1,6 +1,6 @@
 using StaticLint, SymbolServer
 using CSTParser, Test
-using StaticLint: scopeof, bindingof, refof, errorof, check_all
+using StaticLint: scopeof, bindingof, refof, errorof, check_all, getenv
 
 server = StaticLint.FileServer();
 
@@ -582,7 +582,7 @@ f(arg) = arg
         sin(1)
         """)
         # Checks that documented symbols are skipped
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, StaticLint.getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         import Base: sin
@@ -590,13 +590,13 @@ f(arg) = arg
         sin(1)
         """)
         # Checks that documented symbols are skipped
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
             function f(a::F)::Bool where {F} a end
             """)
             # ensure we strip all type decl code from around signature
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
 
@@ -633,7 +633,7 @@ f(arg) = arg
         func
         func1
         """)
-                StaticLint.collect_hints(cst, server)
+                StaticLint.collect_hints(cst, getenv(server.files[""], server))
                 @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
                 @test StaticLint.hasref(cst[4])
                 @test StaticLint.hasref(cst[5])
@@ -657,7 +657,7 @@ f(arg) = arg
     @variable(model, x6 >= some_bound)
     # @variable(model, some_bound >= x7)
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -673,7 +673,7 @@ f(arg) = arg
     @variable model x6 >= some_bound
     # @variable(model, some_bound >= x7)
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -691,7 +691,7 @@ f(arg) = arg
     some_bound = 1
     @expression(model, ex, some_bound >= 1)
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -701,7 +701,7 @@ f(arg) = arg
     @constraint(model, con1, expr)
     @constraint model con2 expr
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
         end
     end
@@ -709,8 +709,8 @@ f(arg) = arg
     @testset "stdcall" begin
         let cst = parse_and_pass("""
         ccall(:GetCurrentProcess, stdcall, Ptr{Cvoid}, ())""")
-            StaticLint.collect_hints(cst, server)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            StaticLint.collect_hints(cst, getenv(server.files[""], server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         stdcall
@@ -814,7 +814,7 @@ f(arg) = arg
         ASDF(1)
         """)
             # Check inner constructor is hoisted
-            @test isempty(StaticLint.collect_hints(cst, server)) 
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server))) 
         end
     end
 
@@ -858,7 +858,7 @@ f(arg) = arg
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         struct T{S}
@@ -870,16 +870,16 @@ f(arg) = arg
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
             @test StaticLint.is_type_of_call_to_getproperty(cst.args[2].args[1].args[2].args[2].args[1])
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
 
         let cst = parse_and_pass("f(x::Module) = x.parent1")
-            @test StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:Module], server)
-            @test !StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:DataType], server)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:Module], getenv(server.files[""], server))
+            @test !StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:DataType], getenv(server.files[""], server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("f(x::DataType) = x.sdf")
-            @test !isempty(StaticLint.collect_hints(cst, server))
+            @test !isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     @testset "using of self" begin # e.g. `using StaticLint: StaticLint`
@@ -1014,12 +1014,12 @@ f(arg) = arg
         function Bool(x) x end
         ^(z::Complex, n::Bool) = n ? z : one(z)
         """)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         (rand(d::Vector{T})::T) where {T}  =  1
         """)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     @testset "Test self" begin
@@ -1033,16 +1033,16 @@ f(arg) = arg
     @irrational ase 0.45343 π
     ase
     """)
-        @test isempty(StaticLint.collect_hints(cst, server))
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
     end
 
     @testset "quoted getfield" begin
         let cst = parse_and_pass("Base.:sin")
-            @test isempty(StaticLint.collect_hints(cst[1], server))
+            @test isempty(StaticLint.collect_hints(cst[1], getenv(server.files[""], server)))
         end
         @testset "quoted getfield" begin
             let cst = parse_and_pass("Base.:sin")
-                @test isempty(StaticLint.collect_hints(cst.args[1], server))
+                @test isempty(StaticLint.collect_hints(cst.args[1], getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -1061,7 +1061,7 @@ f(arg) = arg
         """)
                 @test haskey(cst.meta.scope.names, "sin") #
                 @test first(cst.meta.scope.names["sin"].refs) == server.external_env.symbols[:Base][:sin]
-                @test isempty(StaticLint.collect_hints(cst[2], server))
+                @test isempty(StaticLint.collect_hints(cst[2], getenv(server.files[""], server)))
             end
     # As above but for user defined function
             let cst = parse_and_pass("""
@@ -1089,7 +1089,7 @@ f(arg) = arg
         Base.argtail()
         """)
             @test !haskey(cst.meta.scope.names, "argtail") #
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     # As above but for user defined function
         let cst = parse_and_pass("""
@@ -1100,7 +1100,7 @@ f(arg) = arg
         M.ff()
         """)
             @test !haskey(cst.meta.scope.names, "ff")
-            @test isempty(StaticLint.collect_hints(cst[3], server))
+            @test isempty(StaticLint.collect_hints(cst[3], getenv(server.files[""], server)))
         end
 
         let cst = parse_and_pass("""
@@ -1112,7 +1112,7 @@ f(arg) = arg
             @test cst.meta.scope.names["argtail"] === bindingof(cst[1][2][3][1])
             @test StaticLint.get_method(cst.meta.scope.names["argtail"].refs[2]) isa CSTParser.EXPR
             @test cst[3][1][3][1].meta.ref == cst.meta.scope.names["argtail"]
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
 
@@ -1349,7 +1349,7 @@ f(arg) = arg
     if VERSION > v"1.5-"
         @testset "issue #210" begin
             cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     if isdefined(Base, Symbol("@kwdef"))
@@ -1358,7 +1358,7 @@ f(arg) = arg
             Base.@kwdef struct T
                 arg = 1
             end""")
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     @testset "type inference by use" begin
@@ -1457,7 +1457,7 @@ end
         arg * kw
     end
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 end
 
 @testset "handle shadow bindings on method" begin
@@ -1466,7 +1466,7 @@ end
     g = f
     g(1)
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 end
 
 @testset "documented symbol resolving" begin
@@ -1477,7 +1477,7 @@ end
     func
     func(x) = 1
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 
     cst = parse_and_pass("""
     \"\"\"
@@ -1486,7 +1486,7 @@ end
     func(a,b)::Int
     func(x, b) = 1
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 end
 
 @testset "unwrap sig" begin

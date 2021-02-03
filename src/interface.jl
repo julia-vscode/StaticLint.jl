@@ -22,7 +22,7 @@ function lint_string(s::String, server = setup_server(); gethints = false)
     semantic_pass(f)
     check_all(f.cst, LintOptions(), env)
     if gethints
-        return f.cst, [(x, string(haserror(x) ? LintCodeDescriptions[x.meta.error] : "Missing reference", " at offset ", offset)) for (offset, x) in collect_hints(f.cst, server)]
+        return f.cst, [(x, string(haserror(x) ? LintCodeDescriptions[x.meta.error] : "Missing reference", " at offset ", offset)) for (offset, x) in collect_hints(f.cst, env)]
     else
         return f.cst
     end
@@ -47,7 +47,7 @@ function lint_file(rootpath, server = setup_server(); gethints = false)
     if gethints
         hints = []
         for (p,f) in server.files
-            append!(hints, [(x, string(haserror(x) ? LintCodeDescriptions[x.meta.error] : "Missing reference", " at offset ", offset, " of ", p)) for (offset, x) in collect_hints(f.cst, server)])
+            append!(hints, [(x, string(haserror(x) ? LintCodeDescriptions[x.meta.error] : "Missing reference", " at offset ", offset, " of ", p)) for (offset, x) in collect_hints(f.cst, getenv(f, server))])
         end
         return root, hints
     else

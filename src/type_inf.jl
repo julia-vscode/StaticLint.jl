@@ -45,7 +45,7 @@ function infer_type_assignment_rhs(binding, state, scope)
         if refof_rhs isa Binding
             rhs_bind = refof(rhs)
             if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
-                binding.type = maybe_lookup(refof_rhs.val.typ.name, state.server)
+                binding.type = maybe_lookup(refof_rhs.val.typ.name, state)
             elseif refof_rhs.val isa SymbolServer.FunctionStore
                 binding.type = CoreTypes.Function
             elseif refof_rhs.val isa SymbolServer.DataTypeStore
@@ -54,7 +54,7 @@ function infer_type_assignment_rhs(binding, state, scope)
                 binding.type = refof_rhs.type
             end
         elseif refof_rhs isa SymbolServer.GenericStore && refof_rhs.typ isa SymbolServer.FakeTypeName
-            binding.type = maybe_lookup(refof_rhs.typ.name, state.server)
+            binding.type = maybe_lookup(refof_rhs.typ.name, state)
         elseif refof_rhs isa SymbolServer.FunctionStore
             binding.type = CoreTypes.Function
         elseif refof_rhs isa SymbolServer.DataTypeStore
