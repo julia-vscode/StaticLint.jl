@@ -43,7 +43,6 @@ function infer_type_assignment_rhs(binding, state, scope)
     elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
         refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
         if refof_rhs isa Binding
-            rhs_bind = refof(rhs)
             if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
                 binding.type = maybe_lookup(refof_rhs.val.typ.name, state.server)
             elseif refof_rhs.val isa SymbolServer.FunctionStore

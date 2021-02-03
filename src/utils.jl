@@ -213,7 +213,6 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
         # above should be modified,
         rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, b.extends.name) # check rootmod exists, and that it has the variable
-            rootfunc = rootmod[b.extends.name]
             # find extensoions
             if haskey(getsymbolextendeds(server), b.extends) # method extensions listed
                 for vr in getsymbolextendeds(server)[b.extends] # iterate over packages with extensions
@@ -247,7 +246,6 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
         # above should be modified,
         rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server), true) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
-            rootfunc = rootmod[bname.name]
             # find extensoions
             if haskey(getsymbolextendeds(server), bname) # method extensions listed
                 for vr in getsymbolextendeds(server)[bname] # iterate over packages with extensions

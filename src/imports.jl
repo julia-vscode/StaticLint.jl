@@ -78,7 +78,7 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
     if scope.modules isa Dict
         scope.modules[name] = val
     else
-        modules = Dict(name => val)
+        Dict(name => val)
     end
 end
 no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)

@@ -1,27 +1,27 @@
-    using StaticLint, SymbolServer
-    using CSTParser, Test
-    using StaticLint: scopeof, bindingof, refof, errorof, check_all
+using StaticLint, SymbolServer
+using CSTParser, Test
+using StaticLint: scopeof, bindingof, refof, errorof, check_all
 
-    server = StaticLint.FileServer();
+server = StaticLint.FileServer();
 
-    function get_ids(x, ids=[])
-        if StaticLint.headof(x) === :IDENTIFIER
-            push!(ids, x)
-        elseif x.args !== nothing
-            for a in x.args
-                get_ids(a, ids)
-            end
+function get_ids(x, ids=[])
+    if StaticLint.headof(x) === :IDENTIFIER
+        push!(ids, x)
+    elseif x.args !== nothing
+        for a in x.args
+            get_ids(a, ids)
         end
-        ids
     end
+    ids
+end
 
-    parse_and_pass(s) = StaticLint.lint_string(s, server)
+parse_and_pass(s) = StaticLint.lint_string(s, server)
 
-    function check_resolved(s)
-        cst = parse_and_pass(s)
-        IDs = get_ids(cst)
-        [(refof(i) !== nothing) for i in IDs]
-    end
+function check_resolved(s)
+    cst = parse_and_pass(s)
+    IDs = get_ids(cst)
+    [(refof(i) !== nothing) for i in IDs]
+end
 
 @testset "StaticLint" begin
 
@@ -1368,8 +1368,8 @@ f(arg) = arg
                 ret = "hello"
             end
         end""")
-        @test !StaticLint.haserror(cst.args[2].args[2].args[1].args[3].args[1].args[1])
-        @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
+        @test errorof(cst.args[2].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
+        @test errorof(cst.args[3].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
     end
 
     if VERSION > v"1.5-"
@@ -1522,19 +1522,58 @@ end
         arg3 = 1
     end
     """)
-    @test errorof(cst[1][3][2]) !== nothing
+    @test errorof(cst[1][3][2][1]) !== nothing
 
     cst = parse_and_pass("""
     function f()
         arg = false
-        while true
+        while arg
             if arg
             end
             arg = true
         end
     end
     """)
-    cst[1][3][2][3][2][1]
-    r = cst[1][3][1][1].meta.binding.refs[2]
-    
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f(arg)
+        arg
+        while true
+            arg = 1
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f(arg)
+        arg
+        while true
+            while true
+                arg = 1
+            end
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f()
+        (a = 1, b = 2)
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f()
+        arg = 0
+        if 1
+            while true
+                arg = 1
+            end
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
 end
