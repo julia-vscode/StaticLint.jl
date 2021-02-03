@@ -1527,4 +1527,8 @@ end
     multiply!(1, 3)
     """)
     @test errorof(cst[2]) === nothing
+    
+    @test StaticLint.haserror(parse_and_pass("function f(z::T)::Nothing where T end")[1].args[1].args[1].args[1].args[2])
+    @test StaticLint.haserror(parse_and_pass("function f(z::T) where T end")[1].args[1].args[1].args[2])
+
 end
