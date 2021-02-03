@@ -615,7 +615,7 @@ f(arg) = arg
             @test isempty(StaticLint.collect_hints(cst, server))
         end
         let cst = parse_and_pass("""
-            function f(a::F)::Bool where {F} end
+            function f(a::F)::Bool where {F} a end
             """)
             # ensure we strip all type decl code from around signature
             @test isempty(StaticLint.collect_hints(cst, server))
@@ -1527,4 +1527,8 @@ end
     multiply!(1, 3)
     """)
     @test errorof(cst[2]) === nothing
+    
+    @test StaticLint.haserror(parse_and_pass("function f(z::T)::Nothing where T end")[1].args[1].args[1].args[1].args[2])
+    @test StaticLint.haserror(parse_and_pass("function f(z::T) where T end")[1].args[1].args[1].args[2])
+
 end

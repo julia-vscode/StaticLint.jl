@@ -471,7 +471,7 @@ end
 # Check whether function arguments are unused
 function check_farg_unused(x::EXPR)
     if CSTParser.defines_function(x)
-        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
         if (headof(x) === :function && length(x.args) == 2 && x.args[2] isa EXPR && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1])) ||
             (length(x.args) > 1 && headof(x.args[2]) === :block && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1]))
             return # Allow functions that return constants
