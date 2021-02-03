@@ -148,7 +148,7 @@ end
 
 function func_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
-    sig = rem_wheres_decls(CSTParser.get_sig(x))
+    sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
 
     if sig.args !== nothing
         for i = 2:length(sig.args)
