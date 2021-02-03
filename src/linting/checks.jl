@@ -148,7 +148,7 @@ end
 
 function func_nargs(x::EXPR)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
-    sig = rem_wheres_decls(CSTParser.get_sig(x))
+    sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
 
     if sig.args !== nothing
         for i = 2:length(sig.args)
@@ -296,6 +296,7 @@ function check_call(x, env::ExternalEnv)
         call_counts = call_nargs(x)
         tls = retrieve_toplevel_scope(x)
         tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
+        func_ref === nothing && return 
         !sig_match_any(func_ref, x, call_counts, tls, env) && seterror!(x, IncorrectCallArgs)
     end
 end
@@ -471,7 +472,7 @@ end
 # Check whether function arguments are unused
 function check_farg_unused(x::EXPR)
     if CSTParser.defines_function(x)
-        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
         if (headof(x) === :function && length(x.args) == 2 && x.args[2] isa EXPR && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1])) ||
             (length(x.args) > 1 && headof(x.args[2]) === :block && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1]))
             return # Allow functions that return constants
