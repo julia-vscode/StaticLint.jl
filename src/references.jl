@@ -3,7 +3,7 @@ function setref!(x::EXPR, binding::Binding)
         x.meta = Meta()
     end
     x.meta.ref = binding
-    binding.refs !== nothing && push!(binding.refs, x)
+    push!(binding.refs, x)
 end
 
 function setref!(x::EXPR, binding)

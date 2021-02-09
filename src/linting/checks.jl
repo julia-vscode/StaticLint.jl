@@ -564,7 +564,6 @@ function should_mark_missing_getfield_ref(x, server)
     if isidentifier(x) && !hasref(x) && # x has no ref
     parentof(x) isa EXPR && headof(parentof(x)) === :quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x)).args[1])
-        resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), server))
         hasref(x) && return false # We've resolved
         if lhsref isa SymbolServer.ModuleStore || (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore)
             # a module, we should know this.
@@ -616,7 +615,7 @@ function has_getproperty_method(b::Binding)
         return has_getproperty_method(b.val)
     elseif b isa Binding && b.type === CoreTypes.DataType
         for ref in b.refs
-            if is_type_of_call_to_getproperty(ref)
+            if ref isa EXPR && is_type_of_call_to_getproperty(ref)
                 return true
             end
         end
