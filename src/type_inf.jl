@@ -1,16 +1,25 @@
+function settype!(b::Binding, type::Binding)
+    push!(type.refs, b)
+    b.type = type
+end
+
+function settype!(b::Binding, type)
+    b.type = type
+end
+
 function infer_type(binding::Binding, scope, state)
     if binding isa Binding
         binding.type !== nothing && return
         if binding.val isa EXPR && CSTParser.defines_module(binding.val)
-            binding.type = CoreTypes.Module
+            settype!(binding, CoreTypes.Module)
         elseif binding.val isa EXPR && CSTParser.defines_function(binding.val)
-            binding.type = CoreTypes.Function
+            settype!(binding, CoreTypes.Function)
         elseif binding.val isa EXPR && CSTParser.defines_datatype(binding.val)
-            binding.type = CoreTypes.DataType
+            settype!(binding, CoreTypes.DataType)
         elseif binding.val isa EXPR
             if isassignment(binding.val)
                 if CSTParser.is_func_call(binding.val.args[1])
-                    binding.type = CoreTypes.Function
+                    settype!(binding, CoreTypes.Function)
                 else
                     infer_type_assignment_rhs(binding, state, scope)
                 end
@@ -30,34 +39,34 @@ function infer_type_assignment_rhs(binding, state, scope)
             if hasref(callname)
                 rb = get_root_method(refof(callname), state.server)
                 if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
-                    binding.type = rb
+                    settype!(binding, rb)
                 end
             end
         end
     elseif headof(rhs) === :INTEGER
-        binding.type = CoreTypes.Int
+        settype!(binding, CoreTypes.Int)
     elseif headof(rhs) === :FLOAT
-        binding.type = CoreTypes.Float64
+        settype!(binding, CoreTypes.Float64)
     elseif CSTParser.isstringliteral(rhs)
-        binding.type = CoreTypes.String
+        settype!(binding, CoreTypes.String)
     elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
         refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
         if refof_rhs isa Binding
             if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
-                binding.type = maybe_lookup(refof_rhs.val.typ.name, state.server)
+                settype!(binding, maybe_lookup(refof_rhs.val.typ.name, state.server))
             elseif refof_rhs.val isa SymbolServer.FunctionStore
-                binding.type = CoreTypes.Function
+                settype!(binding, CoreTypes.Function)
             elseif refof_rhs.val isa SymbolServer.DataTypeStore
-                binding.type = CoreTypes.DataType
+                settype!(binding, CoreTypes.DataType)
             else
-                binding.type = refof_rhs.type
+                settype!(binding, refof_rhs.type)
             end
         elseif refof_rhs isa SymbolServer.GenericStore && refof_rhs.typ isa SymbolServer.FakeTypeName
-            binding.type = maybe_lookup(refof_rhs.typ.name, state.server)
+            settype!(binding, maybe_lookup(refof_rhs.typ.name, state.server))
         elseif refof_rhs isa SymbolServer.FunctionStore
-            binding.type = CoreTypes.Function
+            settype!(binding, CoreTypes.Function)
         elseif refof_rhs isa SymbolServer.DataTypeStore
-            binding.type = CoreTypes.DataType
+            settype!(binding, CoreTypes.DataType)
         end
     end
 end
@@ -78,12 +87,12 @@ function infer_type_decl(binding, state, scope)
     if refof(t) isa Binding
         rb = get_root_method(refof(t), state.server)
         if rb isa Binding && rb.type == CoreTypes.DataType
-            binding.type = rb
+            settype!(binding, rb)
         else
-            binding.type = refof(t)
+            settype!(binding, refof(t))
         end
     elseif refof(t) isa SymbolServer.DataTypeStore
-        binding.type = refof(t)
+        settype!(binding, refof(t))
     end
 end
 
@@ -111,13 +120,13 @@ function infer_type_by_use(b::Binding, server)
         type = first(possibletypes)
     
         if type isa Binding
-            b.type = type
+            settype!(b, type)
         elseif type isa SymbolServer.DataTypeStore
-            b.type = type
+            settype!(b, type)
         elseif type isa SymbolServer.VarRef
-            b.type = SymbolServer._lookup(type, getsymbolserver(server)) # could be nothing
+            settype!(b, SymbolServer._lookup(type, getsymbolserver(server))) # could be nothing
         elseif type isa SymbolServer.FakeTypeName && isempty(type.parameters)
-            b.type = SymbolServer._lookup(type.name, getsymbolserver(server)) # could be nothing
+            settype!(b, SymbolServer._lookup(type.name, getsymbolserver(server))) # could be nothing
         end
     end
 end

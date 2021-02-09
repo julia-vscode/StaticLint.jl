@@ -20,7 +20,11 @@ function clear_binding(x::EXPR)
             if r isa EXPR
                 setref!(r, nothing)
             elseif r isa Binding
-                clear_binding(r)
+                if r.type == bindingof(x)
+                    r.type = nothing
+                else
+                    clear_binding(r)
+                end
             end
         end
         x.meta.binding = nothing
