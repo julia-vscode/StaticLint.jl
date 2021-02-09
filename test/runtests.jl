@@ -1532,3 +1532,14 @@ end
     @test StaticLint.haserror(parse_and_pass("function f(z::T) where T end")[1].args[1].args[1].args[2])
 
 end
+
+@testset "clear .type refs" begin
+    cst = parse_and_pass("""
+    struct T end
+    function f(x::T)
+    end
+    """)
+    @test bindingof(cst[2][2][3]).type == bindingof(cst[1])
+    StaticLint.clear_meta(cst[1])
+    @test bindingof(cst[2][2][3]).type === nothing
+end
