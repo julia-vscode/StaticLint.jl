@@ -242,17 +242,14 @@ function is_in_funcdef(x)
     end
 end
 
-function _in_func_def(x::EXPR)
+rem_wheres_subs_decls(x::EXPR) = (iswhere(x) || isdeclaration(x) || CSTParser.issubtypedecl(x)) ? rem_wheres_subs_decls(x.args[1]) : x
+
+function _in_func_or_struct_def(x::EXPR)
     # only called in :where
     # check 1st arg contains a call (or op call)
-    ex = CSTParser.rem_wheres_decls(x.args[1])
-
-    !(CSTParser.iscall(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && return false
-
-    # check parent is func def
-    return is_in_funcdef(x)
+    ex = rem_wheres_subs_decls(x.args[1])
+    is_in_fexpr(x, CSTParser.defines_struct) || ((CSTParser.iscall(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && is_in_funcdef(x))
 end
-
 
 """
     add_binding(x, state, scope=state.scope)
