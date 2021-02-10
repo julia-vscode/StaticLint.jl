@@ -140,15 +140,29 @@ function mark_binding!(x::EXPR, val=x)
     return x
 end
 
-
-function mark_parameters(sig::EXPR)
-    signame = CSTParser.rem_where_subtype(sig)
-    if CSTParser.iscurly(signame)
-        for i = 2:length(signame.args)
-            mark_binding!(signame.args[i])
+function mark_parameters(sig::EXPR, params = String[])
+    if CSTParser.issubtypedecl(sig)
+        mark_parameters(sig.args[1], params)
+    elseif iswhere(sig)
+        for i = 2:length(sig.args)
+            x = mark_binding!(sig.args[i])
+            val = valof(bindingof(x).name)
+            if val isa String
+                push!(params, val)
+            end
+        end
+        mark_parameters(sig.args[1], params)
+    elseif CSTParser.iscurly(sig)
+        for i = 2:length(sig.args)
+            x = mark_binding!(sig.args[i])
+            if valof(bindingof(x).name) in params
+                # Don't mark a new binding if a parameter has already been 
+                # introduced from a :where 
+                x.meta.binding = nothing
+            end
         end
     end
-    return sig
+    sig
 end
 
 
@@ -231,17 +245,14 @@ function is_in_funcdef(x)
     end
 end
 
-function _in_func_def(x::EXPR)
+rem_wheres_subs_decls(x::EXPR) = (iswhere(x) || isdeclaration(x) || CSTParser.issubtypedecl(x)) ? rem_wheres_subs_decls(x.args[1]) : x
+
+function _in_func_or_struct_def(x::EXPR)
     # only called in :where
     # check 1st arg contains a call (or op call)
-    ex = CSTParser.rem_wheres_decls(x.args[1])
-
-    !(CSTParser.iscall(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && return false
-
-    # check parent is func def
-    return is_in_funcdef(x)
+    ex = rem_wheres_subs_decls(x.args[1])
+    is_in_fexpr(x, CSTParser.defines_struct) || ((CSTParser.iscall(ex) || CSTParser.is_getfield(ex) || CSTParser.isunarycall(ex)) && is_in_funcdef(x))
 end
-
 
 """
     add_binding(x, state, scope=state.scope)
