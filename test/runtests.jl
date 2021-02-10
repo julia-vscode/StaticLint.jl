@@ -1605,3 +1605,18 @@ end
     StaticLint.clear_meta(cst[1])
     @test bindingof(cst[2][2][3]).type === nothing
 end
+
+@testset "clear .type refs" begin
+    cst = parse_and_pass("""
+    struct T{S,R} where S <: Number where R <: Number
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    struct T{S,R} <: Number where S <: Number
+        x::S
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
