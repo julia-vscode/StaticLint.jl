@@ -140,15 +140,26 @@ function mark_binding!(x::EXPR, val=x)
     return x
 end
 
-
-function mark_parameters(sig::EXPR)
-    signame = CSTParser.rem_where_subtype(sig)
-    if CSTParser.iscurly(signame)
-        for i = 2:length(signame.args)
-            mark_binding!(signame.args[i])
+function mark_parameters(sig::EXPR, params = String[])
+    if CSTParser.issubtypedecl(sig)
+        mark_parameters(sig.args[1], params)
+    elseif iswhere(sig)
+        for i = 2:length(sig.args)
+            x = mark_binding!(sig.args[i])
+            push!(params, valof(bindingof(x).name))
+        end
+        mark_parameters(sig.args[1], params)
+    elseif CSTParser.iscurly(sig)
+        for i = 2:length(sig.args)
+            x = mark_binding!(sig.args[i])
+            if valof(bindingof(x).name) in params
+                # Don't mark a new binding if a parameter has already been 
+                # introduced from a :where 
+                x.meta.binding = nothing
+            end
         end
     end
-    return sig
+    sig
 end
 
 
