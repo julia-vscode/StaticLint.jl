@@ -146,7 +146,10 @@ function mark_parameters(sig::EXPR, params = String[])
     elseif iswhere(sig)
         for i = 2:length(sig.args)
             x = mark_binding!(sig.args[i])
-            push!(params, valof(bindingof(x).name))
+            val = valof(bindingof(x).name)
+            if val isa String
+                push!(params, val)
+            end
         end
         mark_parameters(sig.args[1], params)
     elseif CSTParser.iscurly(sig)
