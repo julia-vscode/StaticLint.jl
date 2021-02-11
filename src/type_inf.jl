@@ -32,42 +32,46 @@ end
 
 function infer_type_assignment_rhs(binding, state, scope)
     rhs = binding.val.args[2]
-    if CSTParser.is_func_call(rhs)
-        callname = CSTParser.get_name(rhs)
-        if isidentifier(callname)
-            resolve_ref(callname, scope, state)
-            if hasref(callname)
-                rb = get_root_method(refof(callname), state.server)
-                if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
-                    settype!(binding, rb)
+    if is_loop_iter_assignment(binding.val)
+        settype!(binding, infer_eltype(rhs))
+    else
+        if CSTParser.is_func_call(rhs)
+            callname = CSTParser.get_name(rhs)
+            if isidentifier(callname)
+                resolve_ref(callname, scope, state)
+                if hasref(callname)
+                    rb = get_root_method(refof(callname), state.server)
+                    if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
+                        settype!(binding, rb)
+                    end
                 end
             end
-        end
-    elseif headof(rhs) === :INTEGER
-        settype!(binding, CoreTypes.Int)
-    elseif headof(rhs) === :FLOAT
-        settype!(binding, CoreTypes.Float64)
-    elseif CSTParser.isstringliteral(rhs)
-        settype!(binding, CoreTypes.String)
-    elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
-        refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
-        if refof_rhs isa Binding
-            rhs_bind = refof(rhs)
-            if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
-                settype!(binding, maybe_lookup(refof_rhs.val.typ.name, state.server))
-            elseif refof_rhs.val isa SymbolServer.FunctionStore
+        elseif headof(rhs) === :INTEGER
+            settype!(binding, CoreTypes.Int)
+        elseif headof(rhs) === :FLOAT
+            settype!(binding, CoreTypes.Float64)
+        elseif CSTParser.isstringliteral(rhs)
+            settype!(binding, CoreTypes.String)
+        elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
+            refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
+            if refof_rhs isa Binding
+                rhs_bind = refof(rhs)
+                if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
+                    settype!(binding, maybe_lookup(refof_rhs.val.typ.name, state.server))
+                elseif refof_rhs.val isa SymbolServer.FunctionStore
+                    settype!(binding, CoreTypes.Function)
+                elseif refof_rhs.val isa SymbolServer.DataTypeStore
+                    settype!(binding, CoreTypes.DataType)
+                else
+                    settype!(binding, refof_rhs.type)
+                end
+            elseif refof_rhs isa SymbolServer.GenericStore && refof_rhs.typ isa SymbolServer.FakeTypeName
+                settype!(binding, maybe_lookup(refof_rhs.typ.name, state.server))
+            elseif refof_rhs isa SymbolServer.FunctionStore
                 settype!(binding, CoreTypes.Function)
-            elseif refof_rhs.val isa SymbolServer.DataTypeStore
+            elseif refof_rhs isa SymbolServer.DataTypeStore
                 settype!(binding, CoreTypes.DataType)
-            else
-                settype!(binding, refof_rhs.type)
             end
-        elseif refof_rhs isa SymbolServer.GenericStore && refof_rhs.typ isa SymbolServer.FakeTypeName
-            settype!(binding, maybe_lookup(refof_rhs.typ.name, state.server))
-        elseif refof_rhs isa SymbolServer.FunctionStore
-            settype!(binding, CoreTypes.Function)
-        elseif refof_rhs isa SymbolServer.DataTypeStore
-            settype!(binding, CoreTypes.DataType)
         end
     end
 end
@@ -208,5 +212,35 @@ end
 function get_arg_type_at_position(m::SymbolServer.MethodStore, argi, types)
     if length(m.sig) >= argi && m.sig[argi][2] != SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any) && !(m.sig[argi][2] in types)
         push!(types, m.sig[argi][2])
+    end
+end
+
+# Assumes x.head.val == "="
+is_loop_iter_assignment(x::EXPR) = x.parent isa EXPR && ((x.parent.head == :for || x.parent.head == :generator) || (x.parent.head == :block && x.parent.parent isa EXPR && (x.parent.parent.head == :for || x.parent.parent.head == :generator)))
+
+function infer_eltype(x::EXPR)
+    if hasref(x) # assume is IDENT
+        r = refof(x)
+        if r isa Binding && r.val isa EXPR
+            if isassignment(r.val)
+                return infer_eltype(r.val.args[2])
+            end
+        end
+    elseif headof(x) === :ref && hasref(x.args[1])
+        r = refof(x.args[1]) 
+        if r isa SymbolServer.DataTypeStore ||
+            r isa Binding && r.type == CoreTypes.DataType
+            r
+        end
+    elseif headof(x) === :STRING
+        return CoreTypes.Char
+    elseif headof(x) === :call && length(x.args) > 2 && CSTParser.is_colon(x.args[1])
+        if headof(x.args[2]) === :INTEGER && headof(x.args[3]) === :INTEGER
+            return CoreTypes.Int
+        elseif headof(x.args[2]) === :FLOAT && headof(x.args[3]) === :FLOAT
+            return CoreTypes.Float64
+        elseif headof(x.args[2]) === :CHAR && headof(x.args[3]) === :CHAR
+            return CoreTypes.Char
+        end
     end
 end

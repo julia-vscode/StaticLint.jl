@@ -22,7 +22,7 @@ mutable struct FileServer <: AbstractServer
     symbolserver::SymbolServer.EnvStore
     symbol_extends::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), Dict{Symbol,SymbolServer.ModuleStore}(:Base => SymbolServer.stdlibs[:Base], :Core => SymbolServer.stdlibs[:Core]), SymbolServer.collect_extended_methods(SymbolServer.stdlibs))
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
 canloadfile(server, path) = isfile(path)

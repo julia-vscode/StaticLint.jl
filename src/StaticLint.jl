@@ -19,6 +19,7 @@ const DataType = SymbolServer.stdlibs[:Core][:DataType]
 const Function = SymbolServer.stdlibs[:Core][:Function]
 const Module = SymbolServer.stdlibs[:Core][:Module]
 const String = SymbolServer.stdlibs[:Core][:String]
+const Char = SymbolServer.stdlibs[:Core][:Char]
 const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
 const Int = SymbolServer.stdlibs[:Core][:Int]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
@@ -34,6 +35,8 @@ else
     isva(x) = x isa SymbolServer.FakeTypeofVararg
 end
 end
+
+const _DataType = SymbolServer.stdlibs[:Core][:DataType]
 
 include("bindings.jl")
 include("scope.jl")

@@ -62,3 +62,23 @@ S = cst.meta.scope.names["S"]
 @test cst.meta.scope.names["ex6"].val.meta.scope.names["y"].type === T
 end
 
+
+@testset "loop iterator inference" begin
+cst = parse_and_pass("""
+begin
+X = Int[]
+end
+
+for x in 1 end
+for x in "abc" end
+for x in 1:10 end
+for x in 1.0:10.0 end
+for x in Int[1,2,3] end
+""");
+@test cst.args[2].meta.scope.names["x"].type === nothing
+@test cst.args[3].meta.scope.names["x"].type === StaticLint.CoreTypes.Char
+@test cst.args[4].meta.scope.names["x"].type === StaticLint.CoreTypes.Int
+@test cst.args[5].meta.scope.names["x"].type === StaticLint.CoreTypes.Float64
+@test cst.args[6].meta.scope.names["x"].type === StaticLint.CoreTypes.Int
+
+end
