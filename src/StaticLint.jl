@@ -34,7 +34,11 @@ ismodule(x) = iscoretype(x, :Module)
 isstring(x) = iscoretype(x, :String)
 ischar(x) = iscoretype(x, :Char)
 issymbol(x) = iscoretype(x, :Symbol)
-isint(x) = iscoretype(x, :Int64)
+@static if Int === Int64
+    isint(x) = iscoretype(x, :Int64)
+else
+    isint(x) = iscoretype(x, :Int32)
+end
 isfloat(x) = iscoretype(x, :Float64)
 isvector(x) = iscoretype(x, :Vector)
 isarray(x) = iscoretype(x, :Array)
