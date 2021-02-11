@@ -261,8 +261,8 @@ function compare_f_call(
 end
 
 function is_something_with_methods(x::Binding)
-    (x.type == CoreTypes.Function && x.val isa EXPR) ||
-    (x.type == CoreTypes.DataType && x.val isa EXPR && CSTParser.defines_struct(x.val)) || # Todo: Could have abstract type with a constructor...
+    (CoreTypes.isfunction(x.type) && x.val isa EXPR) ||
+    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) || # Todo: Could have abstract type with a constructor...
     (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
@@ -284,7 +284,7 @@ function check_call(x, server)
         # if func_ref isa Binding && 
         # end
         
-        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        if (func_ref isa Binding && (CoreTypes.isfunction(func_ref.type) || CoreTypes.isdatatype(func_ref.type)) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
             # intentionally empty
             if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
                 # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.
@@ -439,7 +439,7 @@ function is_never_datatype(b::Binding, server)
         return is_never_datatype(b.val, server)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
-    elseif b.type == CoreTypes.DataType
+    elseif CoreTypes.isdatatype(b.type)
         return false
     elseif b.type !== nothing
         return true
@@ -613,7 +613,7 @@ end
 function has_getproperty_method(b::Binding)
     if b.val isa Binding || b.val isa SymbolServer.DataTypeStore
         return has_getproperty_method(b.val)
-    elseif b isa Binding && b.type === CoreTypes.DataType
+    elseif b isa Binding && CoreTypes.isdatatype(b.type)
         for ref in b.refs
             if ref isa EXPR && is_type_of_call_to_getproperty(ref)
                 return true
@@ -718,7 +718,7 @@ function check_const_decl(name::String, b::Binding, scope)
         seterror!(b.val, CannotDeclareConst)
     else
         prev = scope.names[name]
-        if (prev.type === CoreTypes.DataType && !is_mask_binding_of_datatype(prev)) || is_const(prev)
+        if (CoreTypes.isdatatype(prev.type) && !is_mask_binding_of_datatype(prev)) || is_const(prev)
             if b.val isa EXPR
                 seterror!(b.val, InvalidRedefofConst)
             else

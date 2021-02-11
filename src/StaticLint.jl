@@ -25,6 +25,17 @@ const Int = SymbolServer.stdlibs[:Core][:Int]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
 const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
 
+iscoretype(x, name) = false
+iscoretype(x::SymbolServer.VarRef, name) = x isa SymbolServer.DataTypeStore && x.name.name == name && x.name isa SymbolServer.VarRef && x.name.parent.name == :Core
+iscoretype(x::SymbolServer.DataTypeStore, name) = x isa SymbolServer.DataTypeStore && x.name.name.name == name && x.name.name isa SymbolServer.VarRef && x.name.name.parent.name == :Core
+isdatatype(x) = iscoretype(x, :DataType)
+isfunction(x) = iscoretype(x, :Function)
+ismodule(x) = iscoretype(x, :Module)
+isstring(x) = iscoretype(x, :String)
+ischar(x) = iscoretype(x, :Char)
+issymbol(x) = iscoretype(x, :Symbol)
+isint(x) = iscoretype(x, :Int64)
+isfloat(x) = iscoretype(x, :Float64)
 isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
 @static if Core.Vararg isa Core.Type
     function isva(x)

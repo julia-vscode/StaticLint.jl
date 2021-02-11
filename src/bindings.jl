@@ -318,14 +318,14 @@ function add_binding(x, state, scope=state.scope)
                         # Mark as overloaded so that calls to `M.f()` resolve properly.
                         overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name))) # Add to overloaded list but not scope.
                     end
-                elseif lhs_ref isa Binding && lhs_ref.type == CoreTypes.Module
+                elseif lhs_ref isa Binding && CoreTypes.ismodule(lhs_ref.type)
                     if hasscope(lhs_ref.val) && haskey(scopeof(lhs_ref.val).names, name)
                         # Don't need to do anything, name will resolve
                     end
                 end
             else
                 if scopehasbinding(tls, name)
-                    if tls.names[name] isa Binding && ((tls.names[name].type == CoreTypes.Function || tls.names[name].type == CoreTypes.DataType) || tls.names[name] isa SymbolServer.FunctionStore || tls.names[name] isa SymbolServer.DataTypeStore)
+                    if tls.names[name] isa Binding && ((CoreTypes.isfunction(tls.names[name].type) || CoreTypes.isdatatype(tls.names[name].type)) || tls.names[name] isa SymbolServer.FunctionStore || tls.names[name] isa SymbolServer.DataTypeStore)
                         # do nothing name of `x` will resolve to the root method
                     else
                         seterror!(x, CannotDefineFuncAlreadyHasValue)
@@ -383,7 +383,7 @@ function mark_globals(x::EXPR, state)
 end
 
 function name_extends_imported_method(b::Binding)
-    if b.type == CoreTypes.Function && CSTParser.hasparent(b.name) && CSTParser.is_getfield(parentof(b.name))
+    if CoreTypes.isfunction(b.type) && CSTParser.hasparent(b.name) && CSTParser.is_getfield(parentof(b.name))
         if refof_maybe_getfield(parentof(b.name)[1]) !== nothing
 
         end

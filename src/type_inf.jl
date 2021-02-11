@@ -41,7 +41,7 @@ function infer_type_assignment_rhs(binding, state, scope)
                 resolve_ref(callname, scope, state)
                 if hasref(callname)
                     rb = get_root_method(refof(callname), state.server)
-                    if (rb isa Binding && (rb.type == CoreTypes.DataType || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
+                    if (rb isa Binding && (CoreTypes.isdatatype(rb.type) || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
                         settype!(binding, rb)
                     end
                 end
@@ -91,7 +91,7 @@ function infer_type_decl(binding, state, scope)
     end
     if refof(t) isa Binding
         rb = get_root_method(refof(t), state.server)
-        if rb isa Binding && rb.type == CoreTypes.DataType
+        if rb isa Binding && CoreTypes.isdatatype(rb.type)
             settype!(binding, rb)
         else
             settype!(binding, refof(t))
@@ -229,7 +229,7 @@ function infer_eltype(x::EXPR)
     elseif headof(x) === :ref && hasref(x.args[1])
         r = refof(x.args[1]) 
         if r isa SymbolServer.DataTypeStore ||
-            r isa Binding && r.type == CoreTypes.DataType
+            r isa Binding && CoreTypes.isdatatype(r.type)
             r
         end
     elseif headof(x) === :STRING

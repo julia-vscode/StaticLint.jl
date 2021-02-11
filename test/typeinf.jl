@@ -76,9 +76,9 @@ for x in 1.0:10.0 end
 for x in Int[1,2,3] end
 """);
 @test cst.args[2].meta.scope.names["x"].type === nothing
-@test cst.args[3].meta.scope.names["x"].type === StaticLint.CoreTypes.Char
-@test cst.args[4].meta.scope.names["x"].type === StaticLint.CoreTypes.Int
-@test cst.args[5].meta.scope.names["x"].type === StaticLint.CoreTypes.Float64
-@test cst.args[6].meta.scope.names["x"].type === StaticLint.CoreTypes.Int
+@test StaticLint.CoreTypes.ischar(cst.args[3].meta.scope.names["x"].type)
+@test StaticLint.CoreTypes.isint(cst.args[4].meta.scope.names["x"].type)
+@test StaticLint.CoreTypes.isfloat(cst.args[5].meta.scope.names["x"].type)
+@test StaticLint.CoreTypes.isint(cst.args[6].meta.scope.names["x"].type)
 
 end
