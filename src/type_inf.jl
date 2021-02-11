@@ -102,15 +102,27 @@ function infer_type_by_use(b::Binding, server)
     b.type !== nothing && return # b already has a type
     possibletypes = []
     visitedmethods = []
+    ifbranch = nothing
     for ref in b.refs
         new_possibles = []
         ref isa EXPR || continue # skip non-EXPR (i.e. used for handling of globals)
+        # Some simple handling for :if blocks
+        if ifbranch === nothing
+            ifbranch = find_if_parents(ref)
+        else
+            newbranch = find_if_parents(ref)
+            if !in_same_if_branch(ifbranch, newbranch)
+                return
+            end
+            ifbranch = newbranch
+        end
         check_ref_against_calls(ref, visitedmethods, new_possibles, server)
-
-        if isempty(possibletypes)
-            possibletypes = new_possibles
-        elseif !isempty(new_possibles)
-            possibletypes = intersect(possibletypes, new_possibles)
+        if !isempty(new_possibles)
+            if isempty(possibletypes)
+                possibletypes = new_possibles
+            else
+                possibletypes = intersect(possibletypes, new_possibles)
+            end
             if isempty(possibletypes)
                 return
             end
@@ -119,7 +131,6 @@ function infer_type_by_use(b::Binding, server)
     # Only do something if we're left with a singleton set at the end.
     if length(possibletypes) == 1
         type = first(possibletypes)
-    
         if type isa Binding
             settype!(b, type)
         elseif type isa SymbolServer.DataTypeStore

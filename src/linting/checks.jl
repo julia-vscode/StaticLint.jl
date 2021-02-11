@@ -732,12 +732,12 @@ end
 function is_mask_binding_of_datatype(b::Binding)
     b.val isa EXPR && CSTParser.isassignment(b.val) && (rhsref = refof(b.val.args[2])) !== nothing && (rhsref isa SymbolServer.DataTypeStore || (rhsref.val isa EXPR && rhsref.val isa SymbolServer.DataTypeStore) || (rhsref.val isa EXPR && CSTParser.defines_datatype(rhsref.val)))
 end
+
 # check whether a and b are in all the same :if blocks and in the same branches
-function in_same_if_branch(a, b)
-    a_branches = find_if_parents(a)
-    b_branches = find_if_parents(b)
-    
-    return length(a_branches) == length(b_branches) && all(k in keys(b_branches) for k in keys(a_branches)) && all(a_branches[k] == b_branches[k] for k in keys(a_branches))
+in_same_if_branch(a::EXPR, b::EXPR) = in_same_if_branch(find_if_parents(a), find_if_parents(b))
+in_same_if_branch(a::Dict, b::EXPR) = in_same_if_branch(a, find_if_parents(b))
+function in_same_if_branch(a::Dict, b::Dict)
+    return length(a) == length(b) && all(k in keys(b) for k in keys(a)) && all(a[k] == b[k] for k in keys(a))
 end
 
 # find any parent nodes that are :if blocks and a pseudo-index of which branch
