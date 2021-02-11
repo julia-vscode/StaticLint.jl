@@ -1558,3 +1558,5 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+include("typeinf.jl")
