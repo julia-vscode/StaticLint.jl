@@ -34,7 +34,7 @@ ismodule(x) = iscoretype(x, :Module)
 isstring(x) = iscoretype(x, :String)
 ischar(x) = iscoretype(x, :Char)
 issymbol(x) = iscoretype(x, :Symbol)
-@static if Int === Int64
+@static if Core.Int == Core.Int64
     isint(x) = iscoretype(x, :Int64)
 else
     isint(x) = iscoretype(x, :Int32)
