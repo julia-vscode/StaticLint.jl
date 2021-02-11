@@ -66,7 +66,9 @@ end
 @testset "loop iterator inference" begin
 cst = parse_and_pass("""
 begin
+abstract type T end
 X = Int[]
+Y = T[]
 end
 
 for x in 1 end
@@ -74,11 +76,16 @@ for x in "abc" end
 for x in 1:10 end
 for x in 1.0:10.0 end
 for x in Int[1,2,3] end
+for x in X end
+for y in Y end
 """);
+
 @test cst.args[2].meta.scope.names["x"].type === nothing
 @test StaticLint.CoreTypes.ischar(cst.args[3].meta.scope.names["x"].type)
 @test StaticLint.CoreTypes.isint(cst.args[4].meta.scope.names["x"].type)
 @test StaticLint.CoreTypes.isfloat(cst.args[5].meta.scope.names["x"].type)
 @test StaticLint.CoreTypes.isint(cst.args[6].meta.scope.names["x"].type)
-
+@test StaticLint.CoreTypes.isint(cst.args[7].meta.scope.names["x"].type)
+@test StaticLint.CoreTypes.isint(cst.args[7].meta.scope.names["x"].type)
+@test cst.args[8].meta.scope.names["y"].type == cst.meta.scope.names["T"]
 end
