@@ -34,6 +34,11 @@ function infer_type_assignment_rhs(binding, state, scope)
     rhs = binding.val.args[2]
     if is_loop_iter_assignment(binding.val)
         settype!(binding, infer_eltype(rhs))
+    elseif headof(rhs) === :ref && length(rhs.args) > 1
+        ref = refof_maybe_getfield(rhs.args[1])
+        if ref isa Binding && ref.val isa EXPR
+            settype!(binding, infer_eltype(ref.val))
+        end
     else
         if CSTParser.is_func_call(rhs)
             callname = CSTParser.get_name(rhs)
@@ -241,6 +246,17 @@ function infer_eltype(x::EXPR)
             return CoreTypes.Float64
         elseif headof(x.args[2]) === :CHAR && headof(x.args[3]) === :CHAR
             return CoreTypes.Char
+        end
+    elseif hasbinding(x) && isdeclaration(x) && length(x.args) == 2
+        return maybe_get_vec_eltype(x.args[2])
+    end
+end
+
+function maybe_get_vec_eltype(t)
+    if iscurly(t)
+        lhs_ref = refof_maybe_getfield(t.args[1])
+        if lhs_ref isa SymbolServer.DataTypeStore && CoreTypes.isarray(lhs_ref) && length(t.args) > 1 
+            refof(t.args[2])
         end
     end
 end

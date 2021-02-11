@@ -89,3 +89,21 @@ for y in Y end
 @test StaticLint.CoreTypes.isint(cst.args[7].meta.scope.names["x"].type)
 @test cst.args[8].meta.scope.names["y"].type == cst.meta.scope.names["T"]
 end
+
+@testset "Vector{T} infer" begin
+cst = parse_and_pass("""
+struct T 
+    t1
+end
+struct S
+    s1::Vector{T}
+end
+
+function f(s::S)
+    t = s.s1[1]
+    t # This should be inferred as T
+end
+""")
+
+@test cst[3].meta.scope.names["t"].type == cst.meta.scope.names["T"]
+end

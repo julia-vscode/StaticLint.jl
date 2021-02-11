@@ -36,6 +36,8 @@ ischar(x) = iscoretype(x, :Char)
 issymbol(x) = iscoretype(x, :Symbol)
 isint(x) = iscoretype(x, :Int64)
 isfloat(x) = iscoretype(x, :Float64)
+isvector(x) = iscoretype(x, :Vector)
+isarray(x) = iscoretype(x, :Array)
 isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
 @static if Core.Vararg isa Core.Type
     function isva(x)
