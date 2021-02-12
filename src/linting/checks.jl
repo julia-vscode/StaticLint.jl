@@ -367,7 +367,7 @@ function check_loop_iter(x::EXPR, server)
 end
 
 function check_nothing_equality(x::EXPR, server)
-    if isbinarycall(x)
+    if isbinarycall(x) && length(x.args) == 3
         if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
             seterror!(x.args[1], NothingEquality)
         elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
