@@ -57,7 +57,7 @@ function infer_type_assignment_rhs(binding, state, scope)
             settype!(binding, CoreTypes.Float64)
         elseif CSTParser.isstringliteral(rhs)
             settype!(binding, CoreTypes.String)
-        elseif headof(rhs) === :TRUE || headof(rhs) === :false
+        elseif headof(rhs) === :TRUE || headof(rhs) === :FALSE
             settype!(binding, CoreTypes.Bool)
         elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
             refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
