@@ -21,6 +21,7 @@ const Module = SymbolServer.stdlibs[:Core][:Module]
 const String = SymbolServer.stdlibs[:Core][:String]
 const Char = SymbolServer.stdlibs[:Core][:Char]
 const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
+const Bool = SymbolServer.stdlibs[:Core][:Bool]
 const Int = SymbolServer.stdlibs[:Core][:Int]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
 const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
