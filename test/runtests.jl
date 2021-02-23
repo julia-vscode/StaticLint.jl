@@ -1570,3 +1570,15 @@ end
     @test cst[2].meta.scope.names["T"].type isa SymbolServer.DataTypeStore
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "where type param infer" begin
+    cst = parse_and_pass("""
+    bar(u::Union) = 1
+    foo(x::T, y::S, q::V) where {T, S <: V} where {V <: Integer} = x + y + q + bar(S) + bar(T) + bar(V)
+    """)
+
+    @test cst[2].meta.scope.names["T"].type isa SymbolServer.DataTypeStore
+    @test cst[2].meta.scope.names["S"].type isa SymbolServer.DataTypeStore
+    @test cst[2].meta.scope.names["V"].type isa SymbolServer.DataTypeStore
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
