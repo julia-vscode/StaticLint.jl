@@ -1558,3 +1558,15 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "where type param infer" begin
+    cst = parse_and_pass("""
+    foo(u::Union) = 1
+    function foo(x::T) where {T}
+        x + foo(T)
+    end
+    """)
+
+    @test cst[2].meta.scope.names["T"].type isa SymbolServer.DataTypeStore
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
