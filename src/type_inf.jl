@@ -25,6 +25,8 @@ function infer_type(binding::Binding, scope, state)
                 end
             elseif binding.val.head isa EXPR && valof(binding.val.head) == "::"
                 infer_type_decl(binding, state, scope)
+            elseif iswhere(parentof(binding.val))
+                settype!(binding, CoreTypes.DataType)
             end
         end
     end

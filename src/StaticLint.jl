@@ -284,12 +284,21 @@ the path of the file to be included. Has limited support for `joinpath` calls.
 function get_path(x::EXPR, state)
     if CSTParser.iscall(x) && length(x.args) == 2
         parg = x.args[2]
+        
         if CSTParser.isstringliteral(parg)
+            if occursin("\0", valof(parg))
+                seterror!(parg, IncludePathContainsNULL)
+                return ""
+            end
             path = CSTParser.str_value(parg)
             path = normpath(path)
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
         elseif CSTParser.ismacrocall(parg) && valof(parg.args[1]) == "@raw_str" && CSTParser.isstringliteral(parg.args[3])
+            if occursin("\0", valof(parg.args[3]))
+                seterror!(parg.args[3], IncludePathContainsNULL)
+                return ""
+            end
             path = normpath(CSTParser.str_value(parg.args[3]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
@@ -301,6 +310,10 @@ function get_path(x::EXPR, state)
                 if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.isstringliteral(arg)
+                    if occursin("\0", valof(arg))
+                        seterror!(arg, IncludePathContainsNULL)
+                        return ""
+                    end
                     push!(path_elements, string(valofid(arg)))
                 else
                     return ""

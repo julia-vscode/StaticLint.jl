@@ -26,7 +26,8 @@ TypeDeclOnGlobalVariable,
 UnsupportedConstLocalVariable,
 UnassignedKeywordArgument,
 CannotDefineFuncAlreadyHasValue,
-DuplicateFuncArgName)
+DuplicateFuncArgName,
+IncludePathContainsNULL)
 
 
 
@@ -56,7 +57,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
-    DuplicateFuncArgName => "Function argnument name not unique."
+    DuplicateFuncArgName => "Function argnument name not unique.",
+    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters."
     )
 
 haserror(m::Meta) = m.error !== nothing
