@@ -344,7 +344,11 @@ function add_binding(x, state, scope=state.scope)
         elseif scopehasbinding(scope, name)
             # TODO: some checks about rebinding of consts
             check_const_decl(name, b, scope)
-            scope.names[name] = b
+
+            # only clobber existing bindings when in a struct scope
+            if headof(scope.expr) == :struct || headof(scope.expr) == :abstract || headof(scope.expr) == :primitive
+                scope.names[name] = b
+            end
         else
             scope.names[name] = b
         end
