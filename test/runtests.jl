@@ -789,7 +789,15 @@ f(arg) = arg
         end
         let cst = parse_and_pass("function f(arg) arg = 1 end")
             StaticLint.check_farg_unused(cst[1])
-            @test_broken StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
+            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
+        end
+        let cst = parse_and_pass(
+             """function f(arg)
+                    x = arg
+                    arg = x
+                end""")
+            StaticLint.check_farg_unused(cst[1])
+            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
         end
         let cst = parse_and_pass("function f(arg) 1 end")
             StaticLint.check_farg_unused(cst[1])

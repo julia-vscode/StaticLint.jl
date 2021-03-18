@@ -492,9 +492,16 @@ function check_farg_unused(x::EXPR)
                     return
                 end
                 b = bindingof(arg)
-                if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
+                if b === nothing ||
+                    # no refs:
+                   isempty(b.refs) ||
+                    # only self ref:
+                   (length(b.refs) == 1 && first(b.refs) == b.name) ||
+                    # first usage is assignment:
+                   (length(b.refs) > 1 && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
                     seterror!(arg, UnusedFunctionArgument)
                 end
+
                 if valof(b.name) === nothing
                 elseif valof(b.name) in arg_names
                     seterror!(arg, DuplicateFuncArgName)
