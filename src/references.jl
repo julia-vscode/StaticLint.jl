@@ -282,24 +282,6 @@ end
 
 resolvable_macroname(x::EXPR) = isidentifier(x) && CSTParser.ismacroname(x) && refof(x) === nothing
 
-"""
-    module_safety_trip(scope::Scope,  visited_scopes)
-
-Checks whether the scope is a module and we've visited it before, 
-otherwise adds the module to the list.
-"""
-function module_safety_trip(scope::Scope,  visited_scopes)
-    if CSTParser.defines_module(scope.expr) && length(scope.expr.args) > 1 && isidentifier(scope.expr.args[2])
-        s_m_name = valofid(scope.expr.args[2])
-        if s_m_name in visited_scopes
-            return true
-        else
-            push!(visited_scopes, s_m_name)
-        end
-    end
-    return false
-end
-
 nameof_expr_to_resolve(x) = isidentifier(x) ? valofid(x) : nothing
 
 """
