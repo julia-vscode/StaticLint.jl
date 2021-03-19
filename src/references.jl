@@ -144,10 +144,8 @@ function initial_pass_on_exports(x::EXPR, name, server)
     for a in x.args[3] # module block expressions
         if headof(a) === :export
             for i = 1:length(a.args)
-                if isidentifier(a.args[i]) && valof(a.args[i]) == name
-                    if !hasref(a.args[i])
-                        Delayed(scopeof(x), server)(a.args[i])
-                    end
+                if isidentifier(a.args[i]) && valof(a.args[i]) == name && !hasref(a.args[i])
+                    Delayed(scopeof(x), server)(a.args[i])
                 end
             end
         end
@@ -220,12 +218,11 @@ function resolve_getfield(x::EXPR, b::Binding, state::State)::Bool
 end
 
 function resolve_getfield(x::EXPR, parent_type, state::State)::Bool
-    hasref(x) && return true
-    return false
+    hasref(x)
 end
 
 function is_overloaded(val::SymbolServer.SymStore, scope::Scope)
-    (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name)
+    vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name
     haskey(scope.overloaded, vr)
 end
 
@@ -256,15 +253,6 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     end
     return resolved
 end
-
-# function is_overloaded1(x, tls, val)
-#     vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name
-#     if haskey(tls.names, valof(x)) && tls.names[valof(x)] isa Binding && first(tls.names[valof(x)]) isa SymbolServer.FunctionStore
-
-#     end
-#     haskey(tls.overloaded, vr)
-    
-# end
 
 function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::State)::Bool
     hasref(x) && return true
