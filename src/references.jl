@@ -55,11 +55,11 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
         setref!(x, Binding(noname, nothing, nothing, []))
         return true
     end
-    x1, mn = nameof_expr_to_resolve(x)
-    mn == true && return true
+    mn = nameof_expr_to_resolve(x)
+    mn === nothing && return true
     
     if scopehasbinding(scope, mn)
-        setref!(x1, scope.names[mn])
+        setref!(x, scope.names[mn])
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
         for m in values(scope.modules)
@@ -107,11 +107,11 @@ function resolve_ref_from_module(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
 
-    x1, mn = nameof_expr_to_resolve(x)
-    mn == true && return true
+    mn = nameof_expr_to_resolve(x)
+    mn === nothing && return true
 
     if scope_exports(scope, mn, state)
-        setref!(x1, scope.names[mn])
+        setref!(x, scope.names[mn])
         resolved = true
     end
     return resolved
@@ -300,15 +300,7 @@ function module_safety_trip(scope::Scope,  visited_scopes)
     return false
 end
 
-
-function nameof_expr_to_resolve(x)
-    if isidentifier(x)
-        mn = valofid(x)
-    else
-        return x, true
-    end
-    x, mn
-end
+nameof_expr_to_resolve(x) = isidentifier(x) ? valofid(x) : nothing
 
 """
     valofid(x)
