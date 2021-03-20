@@ -1595,18 +1595,50 @@ end
     cst = parse_and_pass("""
     function foo()
         x = 1
+        x
         if rand(Bool)
             x = 2
         end
+        x
         while rand(Bool)
-            x = 2
+            x = 3
         end
+        x
         for _ in 1:2
-            x = 2
+            x = 4
+            y = 1
         end
         x
     end
     """)
-    @test length(cst[1].meta.scope.names["x"].refs) == 5
-    @test isempty(StaticLint.collect_hints(cst, server))
+    
+    # check soft-scope bindings are lifted to parent scope
+    @test refof(cst[1][3][2]) == bindingof(cst[1][3][1][1])
+    @test refof(cst[1][3][4]) == bindingof(cst[1][3][3][3][1][1])
+    @test refof(cst[1][3][6]) == bindingof(cst[1][3][5][3][1][1])
+    @test refof(cst[1][3][8]) == bindingof(cst[1][3][7][3][1][1])
+
+    # check binding made in soft-scope with no matching binidng in parent scope isn't lifted
+    @test !haskey(scopeof(cst[1]).names, "y")
+    @test haskey(scopeof(cst[1][3][7]).names, "y")
+    
+
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][1]))) == 8
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][3][1][1]))) == 8
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][5][3][1][1]))) == 8
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][7][3][1][1]))) == 8
+
+    cst = parse_and_pass("""
+    function foo()
+        for _ in 1:2
+            x = 1
+            x
+        end
+        x
+        x = 1
+        x
+    end
+    """)
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][3][1][1]))) == 2
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 2
 end
