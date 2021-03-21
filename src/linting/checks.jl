@@ -39,7 +39,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     EqInIfConditional => "Unbracketed assignment in if conditional statements is not allowed, did you mean to use ==?",
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
-    UnusedBinding => "The variable name has been bound but not used.",
+    UnusedBinding => "Variable has been assigned but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
     IncludeLoop => "Loop detected, this file has already been included.",
@@ -571,6 +571,9 @@ function should_mark_missing_getfield_ref(x, server)
             # a module, we should know this.
             return true
         elseif lhsref isa Binding
+            # by-use type inference runs after we've resolved references so we may not have known lhsref's type first time round, lets try and find `x` again
+            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), server))
+            hasref(x) && return false # We've resolved
             if lhsref.val isa Binding
                 lhsref = lhsref.val
             end
@@ -861,4 +864,133 @@ function check_const(x::EXPR)
             seterror!(x, UnsupportedConstLocalVariable)
         end
     end
+end
+
+function check_unused_binding(b::Binding, scope::Scope)
+    if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
+        if (isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
+            seterror!(b.name, UnusedBinding)    
+        end
+    end
+end
+
+all_underscore(s) = false
+all_underscore(s::String) = all(==(0x5f), codeunits(s))
+
+function is_sig_arg(x)
+    is_in_fexpr(x, CSTParser.iscall)
+end
+
+function is_overwritten_in_loop(x)
+    # Cuts out false positives for check_unused_binding - the linear nature of our 
+    # semantic passes mean a variable declared at the end of a loop's block but used at 
+    # the start won't appear to be referenced.
+
+    # Cheap version:
+    # is_in_fexpr(x, x -> x.head === :while || x.head === :for)
+    
+    # We really want to check whether the enclosing scope(s) of the loop has a binding 
+    # with matching name.
+    # Is this too expensive?
+    loop = maybe_get_parent_fexpr(x, x -> x.head === :while || x.head === :for)
+    if loop !== nothing
+        s = scopeof(loop)
+        if s isa Scope && parentof(s) isa Scope
+            s2 = check_parent_scopes_for(s, valof(x))
+            if s2 isa Scope
+                prev_binding = parentof(s2).names[valof(x)]
+                if prev_binding isa Binding
+                    s = ComesBefore(prev_binding.name, s2.expr, 0)
+                    traverse(parentof(s2).expr, s)
+                    return s.result == 1
+                    # for r in prev_binding.refs
+                    #     if r isa EXPR && is_in_fexpr(r, x -> x === loop)
+                    #         return true
+                    #     end
+                    # end
+                else
+                    return false
+                end
+            end
+        else
+            return false
+        end
+    else
+        false
+    end
+    false
+end
+
+"""
+    ComesBefore
+
+Check whether x1 comes before x2
+"""
+mutable struct ComesBefore
+    x1::EXPR
+    x2::EXPR
+    result::Int
+end
+
+function (state::ComesBefore)(x::EXPR)
+    state.result > 0 && return
+    if x == state.x1
+        state.result = 1
+        return 
+    elseif x == state.x2
+        state.result = 2
+        return
+    end
+    if !hasscope(x)
+        traverse(x, state)
+        state.result > 0 && return
+    end
+end
+
+"""
+    check_parent_scopes_for(s::Scope, name)
+
+Checks whether the parent scope of `s` has the name `name`.
+"""
+function check_parent_scopes_for(s::Scope, name)
+    # This returns `s` rather than the parent so that s.expr can be used in the linear
+    # search (e.g. `bound_before`)
+    if s.expr.head !== :module && parentof(s) isa Scope && haskey(parentof(s).names, name)
+        s
+    elseif s.parent isa Scope 
+        check_parent_scopes_for(parentof(s), name)
+    end
+end
+
+
+
+function is_overwritten_subsequently(b::Binding, scope::Scope)
+    valof(b.name) === nothing && return false
+    s = BoundAfter(b.name, valof(b.name), 0)
+    traverse(scope.expr, s)
+    return s.result == 2
+end
+
+"""
+    ComesBefore
+
+Check whether x1 comes before x2
+"""
+mutable struct BoundAfter
+    x1::EXPR
+    name::String
+    result::Int
+end
+
+function (state::BoundAfter)(x::EXPR)
+    state.result > 1 && return
+    if x == state.x1
+        state.result = 1
+        return 
+    end
+    if scopeof(x) isa Scope && haskey(scopeof(x).names, state.name)
+        state.result = 2
+        return
+    end
+    traverse(x, state)
 end
