@@ -20,7 +20,7 @@ end
 # run over the entire top-level scope.
 function resolve_ref(x, state)
     if !(parentof(x) isa EXPR && headof(parentof(x)) === :quotenode)
-        resolved = resolve_ref(x, state.scope, state)
+        resolve_ref(x, state.scope, state)
     end
 end
 

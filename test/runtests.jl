@@ -884,7 +884,7 @@ f(arg) = arg
             f1
             f2
         end
-        Base.getproperty(x::T, s) = 1
+        Base.getproperty(x::T, s) = (x,s)
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
@@ -895,7 +895,7 @@ f(arg) = arg
             f1
             f2
         end
-        Base.getproperty(x::T{Int}, s) = 1
+        Base.getproperty(x::T{Int}, s) = (x,s)
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
@@ -1376,13 +1376,13 @@ f(arg) = arg
                 ret = "hello"
             end
         end""")
-        @test !StaticLint.haserror(cst.args[2].args[2].args[1].args[3].args[1].args[1])
-        @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
+        @test errorof(cst.args[2].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
+        @test errorof(cst.args[3].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
     end
 
     if VERSION > v"1.5-"
         @testset "issue #210" begin
-            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = ()""")
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
@@ -1523,6 +1523,69 @@ end
     @test isempty(StaticLint.collect_hints(cst, server))
 end
 
+@testset "unused bindings" begin
+    cst = parse_and_pass("""
+    function f(arg, arg2)
+        arg*arg2
+        arg3 = 1
+    end
+    """)
+    @test errorof(cst[1][3][2][1]) !== nothing
+
+    cst = parse_and_pass("""
+    function f()
+        arg = false
+        while arg
+            if arg
+            end
+            arg = true
+        end
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f(arg)
+        arg
+        while true
+            arg = 1
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f(arg)
+        arg
+        while true
+            while true
+                arg = 1
+            end
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f()
+        (a = 1, b = 2)
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f()
+        arg = 0
+        if 1
+            while true
+                arg = 1
+            end
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
+                                                
 @testset "unwrap sig" begin
     cst = parse_and_pass("""
     function multiply!(x::T, y::Integer) where {T} end
@@ -1538,7 +1601,6 @@ end
 
     @test StaticLint.haserror(parse_and_pass("function f(z::T)::Nothing where T end")[1].args[1].args[1].args[1].args[2])
     @test StaticLint.haserror(parse_and_pass("function f(z::T) where T end")[1].args[1].args[1].args[2])
-
 end
 
 @testset "clear .type refs" begin
