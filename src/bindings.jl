@@ -155,7 +155,7 @@ function mark_parameters(sig::EXPR, params = String[])
     elseif CSTParser.iscurly(sig)
         for i = 2:length(sig.args)
             x = mark_binding!(sig.args[i])
-            if valof(bindingof(x).name) in params
+            if bindingof(x) isa Binding && valof(bindingof(x).name) in params
                 # Don't mark a new binding if a parameter has already been 
                 # introduced from a :where 
                 x.meta.binding = nothing
