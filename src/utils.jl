@@ -323,8 +323,11 @@ mutable struct LooseRefs
 end
 
 function (state::LooseRefs)(x::EXPR)
-    if hasbinding(x) && valofid(bindingof(x).name) == state.name
-        push!(state.result, bindingof(x))    
+    if hasbinding(x)
+        ex = bindingof(x).name
+        if isidentifier(ex) && valofid(ex) == state.name
+            push!(state.result, bindingof(x))
+        end
     end
     if !hasscope(x) || (hasscope(x) && ((is_soft_scope(scopeof(x)) && !scopehasbinding(scopeof(x), state.name)) || scopeof(x) == state.scope))
         traverse(x, state)

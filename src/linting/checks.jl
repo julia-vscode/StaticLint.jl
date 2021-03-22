@@ -875,8 +875,9 @@ end
 
 function check_unused_binding(b::Binding, scope::Scope)
     if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
-        if (isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
-            seterror!(b.name, UnusedBinding)    
+        refs = loose_refs(b)
+        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
+            seterror!(b.name, UnusedBinding)
         end
     end
 end
