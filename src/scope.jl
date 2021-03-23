@@ -56,6 +56,8 @@ Checks whether s has a binding for variable named `n`.
 """
 scopehasbinding(s::Scope, n::String) = haskey(s.names, n)
 
+is_soft_scope(scope::Scope) = scope.expr.head == :for || scope.expr.head == :while || scope.expr.head == :try
+
 """
     introduces_scope(x::EXPR, state)
 

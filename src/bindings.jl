@@ -344,7 +344,10 @@ function add_binding(x, state, scope=state.scope)
         elseif scopehasbinding(scope, name)
             # TODO: some checks about rebinding of consts
             check_const_decl(name, b, scope)
+
             scope.names[name] = b
+        elseif is_soft_scope(scope) && parentof(scope) isa Scope && scopehasbinding(parentof(scope), valofid(b.name))
+            add_binding(x, state, scope.parent)
         else
             scope.names[name] = b
         end

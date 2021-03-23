@@ -301,3 +301,35 @@ function is_nameof_func(name)
     f = get_parent_fexpr(name, CSTParser.defines_function)
     f !== nothing && CSTParser.get_name(f) == name
 end
+
+function loose_refs(b::Binding)
+    scope = retrieve_scope(b.val)
+    name_str = valofid(b.name)
+    name_str isa String || return b.refs
+
+    if is_soft_scope(scope) && parentof(scope) isa Scope && scopehasbinding(parentof(scope), name_str) && !scopehasbinding(scope, name_str)
+        scope = parentof(scope)
+    end
+    state = LooseRefs(scope.expr, name_str, scope, [])
+    state(scope.expr)
+    vcat([r.refs for r in state.result]...)
+end
+
+mutable struct LooseRefs
+    x::EXPR
+    name::String
+    scope::Scope
+    result::Vector{Binding}
+end
+
+function (state::LooseRefs)(x::EXPR)
+    if hasbinding(x)
+        ex = bindingof(x).name
+        if isidentifier(ex) && valofid(ex) == state.name
+            push!(state.result, bindingof(x))
+        end
+    end
+    if !hasscope(x) || (hasscope(x) && ((is_soft_scope(scopeof(x)) && !scopehasbinding(scopeof(x), state.name)) || scopeof(x) == state.scope))
+        traverse(x, state)
+    end
+end

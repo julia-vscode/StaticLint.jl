@@ -38,6 +38,12 @@ end
 # can't be resolved.
 
 function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
+    # if the current scope is a soft scope we should check the parent scope first
+    # before trying to resolve the ref locally
+    if is_soft_scope(scope) && parentof(scope) isa Scope
+        resolve_ref(x, parentof(scope), state) && return true
+    end
+
     hasref(x) && return true
     resolved = false
 
