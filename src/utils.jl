@@ -305,7 +305,7 @@ end
 function loose_refs(b::Binding)
     b.val isa Expr || return b.refs # to account for `#global` binding which doesn't have a val
     scope = retrieve_scope(b.val)
-    scope isa Scope || return b.refs
+    scope isa Scope && isidentifier(b.name) || return b.refs
     name_str = valofid(b.name)
     name_str isa String || return b.refs
 
