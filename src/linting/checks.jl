@@ -492,9 +492,16 @@ function check_farg_unused(x::EXPR)
                     return
                 end
                 b = bindingof(arg)
-                if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
+                if b === nothing ||
+                    # no refs:
+                   isempty(b.refs) ||
+                    # only self ref:
+                   (length(b.refs) == 1 && first(b.refs) == b.name) ||
+                    # first usage is assignment:
+                   (length(b.refs) > 1 && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
                     seterror!(arg, UnusedFunctionArgument)
                 end
+
                 if valof(b.name) === nothing
                 elseif valof(b.name) in arg_names
                     seterror!(arg, DuplicateFuncArgName)
@@ -868,8 +875,9 @@ end
 
 function check_unused_binding(b::Binding, scope::Scope)
     if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
-        if (isempty(b.refs) || length(b.refs) == 1 && b.refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
-            seterror!(b.name, UnusedBinding)    
+        refs = loose_refs(b)
+        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
+            seterror!(b.name, UnusedBinding)
         end
     end
 end
