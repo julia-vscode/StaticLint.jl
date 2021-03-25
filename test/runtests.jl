@@ -1708,6 +1708,6 @@ end
 @testset "#1218" begin 
     cst = parse_and_pass("""function foo(a; p) end
     foo(1, p = true)""")
-    StaticLint.collect_hints(cst, server)
+    @test isempty(StaticLint.collect_hints(cst, server))
 end
     
