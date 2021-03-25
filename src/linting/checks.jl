@@ -154,17 +154,14 @@ function func_nargs(x::EXPR)
 
     if sig.args !== nothing
         for i = 2:length(sig.args)
-            # arg = sig.args[i]
-            # if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
-            #     arg = arg.args[3]
-            # end
-            
             arg = unwrap_nospecialize(sig.args[i])
             if isparameters(arg)
                 for j = 1:length(arg.args)
                     arg1 = arg.args[j]
                     if iskwarg(arg1)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
+                    elseif isidentifier(arg1)
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1))))
                     elseif issplat(arg1)
                         kwsplat = true
                     end
@@ -482,35 +479,46 @@ function check_farg_unused(x::EXPR)
         if iscall(sig)
             arg_names = Set{String}()
             for i = 2:length(sig.args)
-                if hasbinding(sig.args[i])
-                    arg = sig.args[i]
-                elseif iskwarg(sig.args[i]) && hasbinding(sig.args[i].args[1])
-                    arg = sig.args[i].args[1]
-                elseif is_nospecialize_call(sig.args[i]) && hasbinding(unwrap_nospecialize(sig.args[i]))
-                    arg = unwrap_nospecialize(sig.args[i])
+                arg = sig.args[i]
+                if arg.head === :parameters
+                    for arg2 in arg.args
+                        !check_farg_unused_(arg2, arg_names) && return
+                    end
                 else
-                    return
-                end
-                b = bindingof(arg)
-                if b === nothing ||
-                    # no refs:
-                   isempty(b.refs) ||
-                    # only self ref:
-                   (length(b.refs) == 1 && first(b.refs) == b.name) ||
-                    # first usage is assignment:
-                   (length(b.refs) > 1 && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
-                    seterror!(arg, UnusedFunctionArgument)
-                end
-
-                if valof(b.name) === nothing
-                elseif valof(b.name) in arg_names
-                    seterror!(arg, DuplicateFuncArgName)
-                else
-                    push!(arg_names, valof(b.name))
+                    !check_farg_unused_(arg, arg_names) && return
                 end
             end
         end
     end
+end
+
+function check_farg_unused_(arg, arg_names)
+    if hasbinding(arg)
+    elseif iskwarg(arg) && hasbinding(arg.args[1])
+        arg = arg.args[1]
+    elseif is_nospecialize_call(arg) && hasbinding(unwrap_nospecialize(arg))
+        arg = unwrap_nospecialize(arg)
+    else
+        return false
+    end
+    b = bindingof(arg)
+    if b === nothing ||
+        # no refs:
+       isempty(b.refs) ||
+        # only self ref:
+       (length(b.refs) == 1 && first(b.refs) == b.name) ||
+        # first usage is assignment:
+       (length(b.refs) > 1 && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
+        seterror!(arg, UnusedFunctionArgument)
+    end
+
+    if valof(b.name) === nothing
+    elseif valof(b.name) in arg_names
+        seterror!(arg, DuplicateFuncArgName)
+    else
+        push!(arg_names, valof(b.name))
+    end
+    true
 end
 
 function unwrap_nospecialize(x)
