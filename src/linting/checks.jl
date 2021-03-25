@@ -154,17 +154,14 @@ function func_nargs(x::EXPR)
 
     if sig.args !== nothing
         for i = 2:length(sig.args)
-            # arg = sig.args[i]
-            # if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
-            #     arg = arg.args[3]
-            # end
-            
             arg = unwrap_nospecialize(sig.args[i])
             if isparameters(arg)
                 for j = 1:length(arg.args)
                     arg1 = arg.args[j]
                     if iskwarg(arg1)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
+                    elseif isidentifier(arg1)
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1))))
                     elseif issplat(arg1)
                         kwsplat = true
                     end
