@@ -264,7 +264,7 @@ end
 
 function is_something_with_methods(x::Binding)
     (CoreTypes.isfunction(x.type) && x.val isa EXPR) ||
-    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) || # Todo: Could have abstract type with a constructor...
+    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) || 
     (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
@@ -275,18 +275,10 @@ function check_call(x, server)
         parentof(x) isa EXPR && headof(parentof(x)) === :do && return # TODO: add number of args specified in do block.
         length(x.args) == 0 && return
         # find the function we're dealing with
-        if isidentifier(first(x.args)) && hasref(first(x.args))
-            func_ref = refof(first(x.args))
-        elseif is_getfield_w_quotenode(x.args[1]) && (rhs = rhs_of_getfield(x.args[1])) !== nothing && hasref(rhs)
-            func_ref = refof(rhs)
-        else
-            return
-        end
+        func_ref = refof_call_func(x)
+        func_ref === nothing && return
 
-        # if func_ref isa Binding && 
-        # end
-        
-        if (func_ref isa Binding && (CoreTypes.isfunction(func_ref.type) || CoreTypes.isdatatype(func_ref.type)) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        if is_something_with_methods(func_ref) && !(func_ref isa Binding && func_ref.val isa EXPR && func_ref.val.head === :macro)
             # intentionally empty
             if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
                 # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.

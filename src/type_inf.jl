@@ -55,6 +55,16 @@ function infer_type_assignment_rhs(binding, state, scope)
             end
         elseif headof(rhs) === :INTEGER
             settype!(binding, CoreTypes.Int)
+        elseif headof(rhs) === :HEXINT
+            if length(rhs.val) < 5
+                settype!(binding, CoreTypes.UInt8)
+            elseif length(rhs.val) < 7
+                settype!(binding, CoreTypes.UInt16)
+            elseif length(rhs.val) < 11
+                settype!(binding, CoreTypes.UInt32)
+            else
+                settype!(binding, CoreTypes.UInt64)
+            end
         elseif headof(rhs) === :FLOAT
             settype!(binding, CoreTypes.Float64)
         elseif CSTParser.isstringliteral(rhs)

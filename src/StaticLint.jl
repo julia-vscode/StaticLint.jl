@@ -15,6 +15,7 @@ include("coretypes.jl")
 include("bindings.jl")
 include("scope.jl")
 include("subtypes.jl")
+include("methodmatching.jl")
 
 mutable struct Meta
     binding::Union{Nothing,Binding}

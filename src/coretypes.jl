@@ -11,6 +11,10 @@ const Char = SymbolServer.stdlibs[:Core][:Char]
 const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
 const Bool = SymbolServer.stdlibs[:Core][:Bool]
 const Int = SymbolServer.stdlibs[:Core][:Int]
+const UInt8 = SymbolServer.stdlibs[:Core][:UInt8]
+const UInt16 = SymbolServer.stdlibs[:Core][:UInt16]
+const UInt32 = SymbolServer.stdlibs[:Core][:UInt32]
+const UInt64 = SymbolServer.stdlibs[:Core][:UInt64]
 const Float64 = SymbolServer.stdlibs[:Core][:Float64]
 const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
 
