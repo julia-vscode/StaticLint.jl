@@ -31,7 +31,9 @@ _super(a::SymbolServer.DataTypeStore, store) = SymbolServer._lookup(a.super.name
 _super(a::SymbolServer.FakeTypeVar, store) = a.ub
 _super(a::SymbolServer.FakeUnionAll, store) = a.body
 _super(a::SymbolServer.FakeTypeName, store) = _super(SymbolServer._lookup(a.name, store), store)
-_super(a::SymbolServer.FakeTypeofVararg, store) = CoreTypes.Any
+@static if !(Vararg isa Type)
+    _super(a::SymbolServer.FakeTypeofVararg, store) = CoreTypes.Any
+end
 
 function _super(b::Binding, store)
     StaticLint.CoreTypes.isdatatype(b.type) || error()
