@@ -346,7 +346,7 @@ function add_binding(x, state, scope=state.scope)
             check_const_decl(name, b, scope)
 
             scope.names[name] = b
-        elseif is_soft_scope(scope) && parentof(scope) isa Scope && scopehasbinding(parentof(scope), valofid(b.name))
+        elseif is_soft_scope(scope) && parentof(scope) isa Scope && scopehasbinding(parentof(scope), valofid(b.name)) && !enforce_hard_scope(x, scope)
             add_binding(x, state, scope.parent)
         else
             scope.names[name] = b
@@ -355,6 +355,10 @@ function add_binding(x, state, scope=state.scope)
     elseif bindingof(x) isa SymbolServer.SymStore
         scope.names[valofid(x)] = bindingof(x)
     end
+end
+
+function enforce_hard_scope(x::EXPR, scope)
+    scope.expr.head === :for && is_in_fexpr(x, x-> x == scope.expr.args[1])
 end
 
 name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && CSTParser.is_getfield_w_quotenode(parentof(parentof(x)))

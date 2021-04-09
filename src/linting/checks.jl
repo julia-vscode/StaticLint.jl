@@ -57,7 +57,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
-    DuplicateFuncArgName => "Function argnument name not unique.",
+    DuplicateFuncArgName => "Function argument name not unique.",
     IncludePathContainsNULL => "Cannot include file, path cotains NULL characters."
     )
 
@@ -494,6 +494,10 @@ function check_farg_unused_(arg, arg_names)
         return false
     end
     b = bindingof(arg)
+    
+    # We don't care about these
+    valof(b.name) isa String && all_underscore(valof(b.name)) && return
+
     if b === nothing ||
         # no refs:
        isempty(b.refs) ||
