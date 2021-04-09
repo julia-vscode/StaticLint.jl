@@ -731,7 +731,7 @@ function check_const_decl(name::String, b::Binding, scope)
     else
         prev = scope.names[name]
         if (CoreTypes.isdatatype(prev.type) && !is_mask_binding_of_datatype(prev)) || is_const(prev)
-            if !in_same_if_branch(b.val, prev.val)
+            if b.val isa EXPR && prev.val isa EXPR && !in_same_if_branch(b.val, prev.val)
                 return
             end
             if b.val isa EXPR
