@@ -167,7 +167,7 @@ function infer_type_by_use(b::Binding, server)
 end
 
 function check_ref_against_calls(x, visitedmethods, new_possibles, server)
-    if is_arg_of_resolved_call(x)
+    if is_arg_of_resolved_call(x) && !call_is_func_sig(x.parent)
         sig = parentof(x)
         # x is argument of function call (func) and we know what that function is
         if CSTParser.isidentifier(sig.args[1])
@@ -194,6 +194,21 @@ function check_ref_against_calls(x, visitedmethods, new_possibles, server)
         else
             iterate_over_ss_methods(func, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
         end
+    end
+end
+
+function call_is_func_sig(call::EXPR)
+    # assume initially called on a :call
+    if call.parent isa EXPR
+        if call.parent.head === :function || CSTParser.is_eq(call.parent.head)
+            true
+        elseif isdeclaration(call.parent) || iswhere(call.parent)
+            call_is_func_sig(call.parent)
+        else
+            false
+        end
+    else
+        false
     end
 end
 
