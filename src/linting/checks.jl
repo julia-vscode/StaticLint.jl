@@ -496,7 +496,7 @@ function check_farg_unused_(arg, arg_names)
     b = bindingof(arg)
     
     # We don't care about these
-    valof(b.name) isa String && all_underscore(valof(b.name)) && return
+    valof(b.name) isa String && all_underscore(valof(b.name)) && return false
 
     if b === nothing ||
         # no refs:
