@@ -1,4 +1,17 @@
 function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=true)
+    if x.head == :as
+        resolve_import_block(x.args[1], state, root, usinged, markfinal)
+        if x.args[2].meta === nothing
+            x.args[2].meta = Meta()
+        end
+        if hasbinding(last(x.args[1].args))
+            lhsbinding = bindingof(last(x.args[1].args))
+            x.args[2].meta.binding = Binding(x.args[2], lhsbinding.val, lhsbinding.type, lhsbinding.refs)
+            setref!(x.args[2], bindingof(x.args[2]))
+            last(x.args[1].args).meta.binding = nothing
+        end
+        return
+    end
     n = length(x.args)
     for i = 1:length(x.args)
         arg = x.args[i]
