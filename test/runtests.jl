@@ -1715,3 +1715,12 @@ end
     @test cst[1][2][4][1].meta.error != false
 end
     
+
+if Meta.parse("import a as b", raise = false).head !== :error
+    @testset "import as ..." begin 
+        cst = parse_and_pass("""import Base as base""")
+        @test StaticLint.hasbinding(cst[1][2][3])
+        @test !StaticLint.hasbinding(cst[1][2][1][1])
+    end
+end
+    
