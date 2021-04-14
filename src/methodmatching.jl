@@ -143,7 +143,6 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::SymbolServer.
         if length(args) == nmargs - 1
             nmargs -= 1
             # vararg can be zero length
-            droplast = true
         elseif length(args) >= nmargs
             # set aside the type param of the Vararg for later use
             varargval = last(method.sig)[2].T
@@ -197,7 +196,7 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)
             push!(margs, mopts[i])
         end
         if vararg
-            for i in 1:length(args) - length(margs)
+            for _ in 1:length(args) - length(margs)
                 push!(margs, CoreTypes.Any)
             end
         end

@@ -94,7 +94,7 @@ function (state::Delayed)(x::EXPR)
 
     traverse(x, state)
     if state.scope != s0
-        for (k, b) in state.scope.names
+        for b in values(state.scope.names)
             infer_type_by_use(b, state.server)
             check_unused_binding(b, state.scope)    
         end
@@ -138,7 +138,7 @@ function semantic_pass(file, modified_expr=nothing)
     for x in state.delayed
         if hasscope(x)
             traverse(x, Delayed(scopeof(x), server)) 
-            for (k, b) in scopeof(x).names
+            for b in values(scopeof(x).names)
                 infer_type_by_use(b, state.server)
                 check_unused_binding(b, scopeof(x))
             end
