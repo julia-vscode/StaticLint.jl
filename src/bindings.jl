@@ -325,7 +325,14 @@ function add_binding(x, state, scope=state.scope)
                 end
             else
                 if scopehasbinding(tls, name)
-                    if tls.names[name] isa Binding && ((tls.names[name].type == CoreTypes.Function || tls.names[name].type == CoreTypes.DataType) || tls.names[name] isa SymbolServer.FunctionStore || tls.names[name] isa SymbolServer.DataTypeStore)
+                    existing_binding = tls.names[name]
+                    if existing_binding isa Binding && (existing_binding.val isa Binding || existing_binding.val isa SymbolServer.FunctionStore || existing_binding.val isa SymbolServer.DataTypeStore)
+                        # Should possibly be a while statement
+                        # If the .val is as above the Binding likely won't have a proper type attached
+                        # so lets use the .val instead.
+                        existing_binding = existing_binding.val
+                    end
+                    if (existing_binding isa Binding && ((existing_binding.type == CoreTypes.Function || existing_binding.type == CoreTypes.DataType)) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
                         # do nothing name of `x` will resolve to the root method
                     else
                         seterror!(x, CannotDefineFuncAlreadyHasValue)
