@@ -162,7 +162,12 @@ function semantic_pass(file, modified_expr=nothing)
                 infer_type_by_use(b, state.server)
             end
         else
-            traverse(x, Delayed(retrieve_delayed_scope(x), server))
+            scope = retrieve_delayed_scope(x)
+            if scope isa Scope
+                traverse(x, Delayed(scope, server))
+            else
+                @warn "no delayed scope found for $(headof(x))"
+            end
         end
     end
     if state.resolveonly !== nothing
@@ -170,7 +175,12 @@ function semantic_pass(file, modified_expr=nothing)
             if hasscope(x)
                 traverse(x, ResolveOnly(scopeof(x), server))
             else
-                traverse(x, ResolveOnly(retrieve_delayed_scope(x), server))
+                scope = retrieve_delayed_scope(x)
+                if scope isa Scope
+                    traverse(x, Delayed(scope, server))
+                else
+                    @warn "no delayed scope found for $(headof(x))"
+                end
             end
         end
     end
