@@ -333,7 +333,7 @@ function add_binding(x, state, scope=state.scope)
                         # so lets use the .val instead.
                         existing_binding = existing_binding.val
                     end
-                if existing_binding isa Binding && ((CoreTypes.isfunction(existing_binding.type) || CoreTypes.isdatatype(existing_binding.type)) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
+                    if (existing_binding isa Binding && ((CoreTypes.isfunction(existing_binding.type) || CoreTypes.isdatatype(existing_binding.type))) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
                         # do nothing name of `x` will resolve to the root method
                     else
                         seterror!(x, CannotDefineFuncAlreadyHasValue)
