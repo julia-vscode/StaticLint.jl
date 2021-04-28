@@ -1726,3 +1726,20 @@ if Meta.parse("import a as b", raise = false).head !== :error
     end
 end
     
+
+@testset "#1218" begin 
+    cst = parse_and_pass("""
+    module Sup
+    function myfunc end
+    module SubA
+    import ..myfunc
+    myfunc(x::Int) = println("hello Int: ", x) # Cannot define function ; it already has a value.
+    end # module
+
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+end
+    
+
