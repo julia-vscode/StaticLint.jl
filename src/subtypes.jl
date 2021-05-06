@@ -57,3 +57,14 @@ function _super(x::EXPR, store)::Union{EXPR,Nothing}
         _super(x.args[1], store)
     end
 end
+
+function subtypes(T::Binding)
+    @assert CSTParser.defines_abstract(T.val)
+    subTs = []
+    for r in T.refs
+        if r isa EXPR && r.parent isa EXPR && CSTParser.issubtypedecl(r.parent) && r.parent.parent isa EXPR && CSTParser.defines_datatype(r.parent.parent)
+            push!(subTs, r.parent.parent)
+        end
+    end
+    subTs
+end
