@@ -39,7 +39,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     EqInIfConditional => "Unbracketed assignment in if conditional statements is not allowed, did you mean to use ==?",
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
-    UnusedBinding => "The variable name has been bound but not used.",
+    UnusedBinding => "Variable has been assigned but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
     IncludeLoop => "Loop detected, this file has already been included.",
@@ -154,17 +154,14 @@ function func_nargs(x::EXPR)
 
     if sig.args !== nothing
         for i = 2:length(sig.args)
-            # arg = sig.args[i]
-            # if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
-            #     arg = arg.args[3]
-            # end
-            
             arg = unwrap_nospecialize(sig.args[i])
             if isparameters(arg)
                 for j = 1:length(arg.args)
                     arg1 = arg.args[j]
                     if iskwarg(arg1)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
+                    elseif isidentifier(arg1)
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1))))
                     elseif issplat(arg1)
                         kwsplat = true
                     end
@@ -482,28 +479,46 @@ function check_farg_unused(x::EXPR)
         if iscall(sig)
             arg_names = Set{String}()
             for i = 2:length(sig.args)
-                if hasbinding(sig.args[i])
-                    arg = sig.args[i]
-                elseif iskwarg(sig.args[i]) && hasbinding(sig.args[i].args[1])
-                    arg = sig.args[i].args[1]
-                elseif is_nospecialize_call(sig.args[i]) && hasbinding(unwrap_nospecialize(sig.args[i]))
-                    arg = unwrap_nospecialize(sig.args[i])
+                arg = sig.args[i]
+                if arg.head === :parameters
+                    for arg2 in arg.args
+                        !check_farg_unused_(arg2, arg_names) && return
+                    end
                 else
-                    return
-                end
-                b = bindingof(arg)
-                if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
-                    seterror!(arg, UnusedFunctionArgument)
-                end
-                if valof(b.name) === nothing
-                elseif valof(b.name) in arg_names
-                    seterror!(arg, DuplicateFuncArgName)
-                else
-                    push!(arg_names, valof(b.name))
+                    !check_farg_unused_(arg, arg_names) && return
                 end
             end
         end
     end
+end
+
+function check_farg_unused_(arg, arg_names)
+    if hasbinding(arg)
+    elseif iskwarg(arg) && hasbinding(arg.args[1])
+        arg = arg.args[1]
+    elseif is_nospecialize_call(arg) && hasbinding(unwrap_nospecialize(arg))
+        arg = unwrap_nospecialize(arg)
+    else
+        return false
+    end
+    b = bindingof(arg)
+    if b === nothing ||
+        # no refs:
+       isempty(b.refs) ||
+        # only self ref:
+       (length(b.refs) == 1 && first(b.refs) == b.name) ||
+        # first usage is assignment:
+       (length(b.refs) > 1 && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
+        seterror!(arg, UnusedFunctionArgument)
+    end
+
+    if valof(b.name) === nothing
+    elseif valof(b.name) in arg_names
+        seterror!(arg, DuplicateFuncArgName)
+    else
+        push!(arg_names, valof(b.name))
+    end
+    true
 end
 
 function unwrap_nospecialize(x)
@@ -571,6 +586,9 @@ function should_mark_missing_getfield_ref(x, server)
             # a module, we should know this.
             return true
         elseif lhsref isa Binding
+            # by-use type inference runs after we've resolved references so we may not have known lhsref's type first time round, lets try and find `x` again
+            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), server))
+            hasref(x) && return false # We've resolved
             if lhsref.val isa Binding
                 lhsref = lhsref.val
             end
@@ -861,4 +879,134 @@ function check_const(x::EXPR)
             seterror!(x, UnsupportedConstLocalVariable)
         end
     end
+end
+
+function check_unused_binding(b::Binding, scope::Scope)
+    if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
+        refs = loose_refs(b)
+        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
+            seterror!(b.name, UnusedBinding)
+        end
+    end
+end
+
+all_underscore(s) = false
+all_underscore(s::String) = all(==(0x5f), codeunits(s))
+
+function is_sig_arg(x)
+    is_in_fexpr(x, CSTParser.iscall)
+end
+
+function is_overwritten_in_loop(x)
+    # Cuts out false positives for check_unused_binding - the linear nature of our 
+    # semantic passes mean a variable declared at the end of a loop's block but used at 
+    # the start won't appear to be referenced.
+
+    # Cheap version:
+    # is_in_fexpr(x, x -> x.head === :while || x.head === :for)
+    
+    # We really want to check whether the enclosing scope(s) of the loop has a binding 
+    # with matching name.
+    # Is this too expensive?
+    loop = maybe_get_parent_fexpr(x, x -> x.head === :while || x.head === :for)
+    if loop !== nothing
+        s = scopeof(loop)
+        if s isa Scope && parentof(s) isa Scope
+            s2 = check_parent_scopes_for(s, valof(x))
+            if s2 isa Scope
+                prev_binding = parentof(s2).names[valof(x)]
+                if prev_binding isa Binding
+                    s = ComesBefore(prev_binding.name, s2.expr, 0)
+                    traverse(parentof(s2).expr, s)
+                    return s.result == 1
+                    # for r in prev_binding.refs
+                    #     if r isa EXPR && is_in_fexpr(r, x -> x === loop)
+                    #         return true
+                    #     end
+                    # end
+                else
+                    return false
+                end
+            end
+        else
+            return false
+        end
+    else
+        false
+    end
+    false
+end
+
+"""
+    ComesBefore
+
+Check whether x1 comes before x2
+"""
+mutable struct ComesBefore
+    x1::EXPR
+    x2::EXPR
+    result::Int
+end
+
+function (state::ComesBefore)(x::EXPR)
+    state.result > 0 && return
+    if x == state.x1
+        state.result = 1
+        return 
+    elseif x == state.x2
+        state.result = 2
+        return
+    end
+    if !hasscope(x)
+        traverse(x, state)
+        state.result > 0 && return
+    end
+end
+
+"""
+    check_parent_scopes_for(s::Scope, name)
+
+Checks whether the parent scope of `s` has the name `name`.
+"""
+function check_parent_scopes_for(s::Scope, name)
+    # This returns `s` rather than the parent so that s.expr can be used in the linear
+    # search (e.g. `bound_before`)
+    if s.expr.head !== :module && parentof(s) isa Scope && haskey(parentof(s).names, name)
+        s
+    elseif s.parent isa Scope 
+        check_parent_scopes_for(parentof(s), name)
+    end
+end
+
+
+
+function is_overwritten_subsequently(b::Binding, scope::Scope)
+    valof(b.name) === nothing && return false
+    s = BoundAfter(b.name, valof(b.name), 0)
+    traverse(scope.expr, s)
+    return s.result == 2
+end
+
+"""
+    ComesBefore
+
+Check whether x1 comes before x2
+"""
+mutable struct BoundAfter
+    x1::EXPR
+    name::String
+    result::Int
+end
+
+function (state::BoundAfter)(x::EXPR)
+    state.result > 1 && return
+    if x == state.x1
+        state.result = 1
+        return 
+    end
+    if scopeof(x) isa Scope && haskey(scopeof(x).names, state.name)
+        state.result = 2
+        return
+    end
+    traverse(x, state)
 end

@@ -791,6 +791,14 @@ f(arg) = arg
             StaticLint.check_farg_unused(cst[1])
             @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
         end
+        let cst = parse_and_pass(
+             """function f(arg)
+                    x = arg
+                    arg = x
+                end""")
+            StaticLint.check_farg_unused(cst[1])
+            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+        end
         let cst = parse_and_pass("function f(arg) 1 end")
             StaticLint.check_farg_unused(cst[1])
             @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
@@ -836,7 +844,7 @@ f(arg) = arg
         ASDF(1)
         """)
             # Check inner constructor is hoisted
-            @test isempty(StaticLint.collect_hints(cst, server)) 
+            @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
 
@@ -876,7 +884,7 @@ f(arg) = arg
             f1
             f2
         end
-        Base.getproperty(x::T, s) = 1
+        Base.getproperty(x::T, s) = (x,s)
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
@@ -887,7 +895,7 @@ f(arg) = arg
             f1
             f2
         end
-        Base.getproperty(x::T{Int}, s) = 1
+        Base.getproperty(x::T{Int}, s) = (x,s)
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
@@ -1368,13 +1376,13 @@ f(arg) = arg
                 ret = "hello"
             end
         end""")
-        @test !StaticLint.haserror(cst.args[2].args[2].args[1].args[3].args[1].args[1])
-        @test !StaticLint.haserror(cst.args[3].args[2].args[1].args[3].args[1].args[1])
+        @test errorof(cst.args[2].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
+        @test errorof(cst.args[3].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
     end
 
     if VERSION > v"1.5-"
         @testset "issue #210" begin
-            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = ()""")
             @test isempty(StaticLint.collect_hints(cst, server))
         end
     end
@@ -1411,7 +1419,7 @@ f(arg) = arg
             f1(x)
         end""")
         @test bindingof(cst.args[3].args[1].args[2]).type !== nothing
-        
+
         cst = parse_and_pass("""
         f(x::String) = true
         f1(x::Char) = true
@@ -1465,7 +1473,7 @@ end
 @testset "duplicate function argument" begin
     cst = parse_and_pass("""
     f(a,a) = a
-    """) 
+    """)
     @test errorof(cst[1][1][5]) == StaticLint.DuplicateFuncArgName
 end
 
@@ -1515,6 +1523,69 @@ end
     @test isempty(StaticLint.collect_hints(cst, server))
 end
 
+@testset "unused bindings" begin
+    cst = parse_and_pass("""
+    function f(arg, arg2)
+        arg*arg2
+        arg3 = 1
+    end
+    """)
+    @test errorof(cst[1][3][2][1]) !== nothing
+
+    cst = parse_and_pass("""
+    function f()
+        arg = false
+        while arg
+            if arg
+            end
+            arg = true
+        end
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f(arg)
+        arg
+        while true
+            arg = 1
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f(arg)
+        arg
+        while true
+            while true
+                arg = 1
+            end
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f()
+        (a = 1, b = 2)
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""
+    function f()
+        arg = 0
+        if 1
+            while true
+                arg = 1
+            end
+        end
+    end 
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
+                                                
 @testset "unwrap sig" begin
     cst = parse_and_pass("""
     function multiply!(x::T, y::Integer) where {T} end
@@ -1527,10 +1598,9 @@ end
     multiply!(1, 3)
     """)
     @test errorof(cst[2]) === nothing
-    
+
     @test StaticLint.haserror(parse_and_pass("function f(z::T)::Nothing where T end")[1].args[1].args[1].args[1].args[2])
     @test StaticLint.haserror(parse_and_pass("function f(z::T) where T end")[1].args[1].args[1].args[2])
-
 end
 
 @testset "clear .type refs" begin
@@ -1582,3 +1652,92 @@ end
     @test cst[2].meta.scope.names["V"].type isa SymbolServer.DataTypeStore
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "softscope" begin
+    cst = parse_and_pass("""
+    function foo()
+        x = 1
+        x
+        if rand(Bool)
+            x = 2
+        end
+        x
+        while rand(Bool)
+            x = 3
+        end
+        x
+        for _ in 1:2
+            x = 4
+            y = 1
+        end
+        x
+    end
+    """)
+    
+    # check soft-scope bindings are lifted to parent scope
+    @test refof(cst[1][3][2]) == bindingof(cst[1][3][1][1])
+    @test refof(cst[1][3][4]) == bindingof(cst[1][3][3][3][1][1])
+    @test refof(cst[1][3][6]) == bindingof(cst[1][3][5][3][1][1])
+    @test refof(cst[1][3][8]) == bindingof(cst[1][3][7][3][1][1])
+
+    # check binding made in soft-scope with no matching binidng in parent scope isn't lifted
+    @test !haskey(scopeof(cst[1]).names, "y")
+    @test haskey(scopeof(cst[1][3][7]).names, "y")
+    
+
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][1]))) == 8
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][3][1][1]))) == 8
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][5][3][1][1]))) == 8
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][7][3][1][1]))) == 8
+
+    cst = parse_and_pass("""
+    function foo()
+        for _ in 1:2
+            x = 1
+            x
+        end
+        x
+        x = 1
+        x
+    end
+    """)
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][3][1][1]))) == 2
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 2
+end
+
+@testset "#1218" begin 
+    cst = parse_and_pass("""function foo(a; p) a+p end
+    foo(1, p = true)""")
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""function foo(a; p) a end
+    foo(1, p = true)""")
+    @test cst[1][2][4][1].meta.error != false
+end
+    
+
+if Meta.parse("import a as b", raise = false).head !== :error
+    @testset "import as ..." begin 
+        cst = parse_and_pass("""import Base as base""")
+        @test StaticLint.hasbinding(cst[1][2][3])
+        @test !StaticLint.hasbinding(cst[1][2][1][1])
+    end
+end
+    
+
+@testset "#1218" begin 
+    cst = parse_and_pass("""
+    module Sup
+    function myfunc end
+    module SubA
+    import ..myfunc
+    myfunc(x::Int) = println("hello Int: ", x) # Cannot define function ; it already has a value.
+    end # module
+
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+end
+    
+
