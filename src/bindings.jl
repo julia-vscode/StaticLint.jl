@@ -353,7 +353,7 @@ function add_binding(x, state, scope=state.scope)
             check_const_decl(name, b, scope)
 
             scope.names[name] = b
-        elseif is_soft_scope(scope) && parentof(scope) isa Scope && scopehasbinding(parentof(scope), valofid(b.name))
+        elseif is_soft_scope(scope) && parentof(scope) isa Scope && isidentifier(b.name) && scopehasbinding(parentof(scope), valofid(b.name))
             add_binding(x, state, scope.parent)
         else
             scope.names[name] = b
