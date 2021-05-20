@@ -164,24 +164,24 @@ f(arg) = arg
         @test check_resolved("[k * j for j in 1:10 for k in 1:10]") == [1, 1, 1, 1]
 
         @testset "inference" begin
-            @test bindingof(parse_and_pass("f(arg) = arg").args[1]).type == StaticLint.CoreTypes.Function
-            @test bindingof(parse_and_pass("function f end").args[1]).type == StaticLint.CoreTypes.Function
-            @test bindingof(parse_and_pass("struct T end").args[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("mutable struct T end").args[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("abstract type T end").args[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("primitive type T 8 end").args[1]).type == StaticLint.CoreTypes.DataType
-            @test bindingof(parse_and_pass("x = 1").args[1].args[1]).type == StaticLint.CoreTypes.Int
-            @test bindingof(parse_and_pass("x = 1.0").args[1].args[1]).type == StaticLint.CoreTypes.Float64
-            @test bindingof(parse_and_pass("x = \"text\"").args[1].args[1]).type == StaticLint.CoreTypes.String
-            @test bindingof(parse_and_pass("module A end").args[1]).type == StaticLint.CoreTypes.Module
-            @test bindingof(parse_and_pass("baremodule A end").args[1]).type == StaticLint.CoreTypes.Module
+            @test StaticLint.CoreTypes.isfunction(bindingof(parse_and_pass("f(arg) = arg").args[1]).type)
+            @test StaticLint.CoreTypes.isfunction(bindingof(parse_and_pass("function f end").args[1]).type)
+            @test StaticLint.CoreTypes.isdatatype(bindingof(parse_and_pass("struct T end").args[1]).type)
+            @test StaticLint.CoreTypes.isdatatype(bindingof(parse_and_pass("mutable struct T end").args[1]).type)
+            @test StaticLint.CoreTypes.isdatatype(bindingof(parse_and_pass("abstract type T end").args[1]).type)
+            @test StaticLint.CoreTypes.isdatatype(bindingof(parse_and_pass("primitive type T 8 end").args[1]).type)
+            @test StaticLint.CoreTypes.isint(bindingof(parse_and_pass("x = 1").args[1].args[1]).type)
+            @test StaticLint.CoreTypes.isfloat(bindingof(parse_and_pass("x = 1.0").args[1].args[1]).type)
+            @test StaticLint.CoreTypes.isstring(bindingof(parse_and_pass("x = \"text\"").args[1].args[1]).type)
+            @test StaticLint.CoreTypes.ismodule(bindingof(parse_and_pass("module A end").args[1]).type)
+            @test StaticLint.CoreTypes.ismodule(bindingof(parse_and_pass("baremodule A end").args[1]).type)
 
     # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
             let cst = parse_and_pass("""
         struct T end
         function f(x::T) x end""")
-                @test bindingof(cst.args[1]).type == StaticLint.CoreTypes.DataType
-                @test bindingof(cst.args[2]).type == StaticLint.CoreTypes.Function
+                @test StaticLint.CoreTypes.isdatatype(bindingof(cst.args[1]).type)
+                @test StaticLint.CoreTypes.isfunction(bindingof(cst.args[2]).type)
                 @test bindingof(cst.args[2].args[1].args[2]).type == bindingof(cst.args[1])
                 @test refof(cst.args[2].args[2].args[1]) == bindingof(cst.args[2].args[1].args[2])
             end
@@ -189,8 +189,8 @@ f(arg) = arg
         struct T end
         T() = 1
         function f(x::T) x end""")
-                @test bindingof(cst.args[1]).type == StaticLint.CoreTypes.DataType
-                @test bindingof(cst.args[3]).type == StaticLint.CoreTypes.Function
+                @test StaticLint.CoreTypes.isdatatype(bindingof(cst.args[1]).type)
+                @test StaticLint.CoreTypes.isfunction(bindingof(cst.args[3]).type)
                 @test bindingof(cst.args[3].args[1].args[2]).type == bindingof(cst.args[1])
                 @test refof(cst.args[3].args[2].args[1]) == bindingof(cst.args[3].args[1].args[2])
             end
@@ -198,7 +198,7 @@ f(arg) = arg
             let cst = parse_and_pass("""
         struct T end
         t = T()""")
-                @test bindingof(cst.args[1]).type == StaticLint.CoreTypes.DataType
+                @test StaticLint.CoreTypes.isdatatype(bindingof(cst.args[1]).type)
                 @test bindingof(cst.args[2].args[1]).type == bindingof(cst.args[1])
             end
 
@@ -1628,6 +1628,8 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+include("typeinf.jl")
 
 @testset "where type param infer" begin
     cst = parse_and_pass("""

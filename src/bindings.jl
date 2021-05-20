@@ -318,13 +318,14 @@ function add_binding(x, state, scope=state.scope)
                         # Mark as overloaded so that calls to `M.f()` resolve properly.
                         overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name))) # Add to overloaded list but not scope.
                     end
-                elseif lhs_ref isa Binding && lhs_ref.type == CoreTypes.Module
+                elseif lhs_ref isa Binding && CoreTypes.ismodule(lhs_ref.type)
                     if hasscope(lhs_ref.val) && haskey(scopeof(lhs_ref.val).names, name)
                         # Don't need to do anything, name will resolve
                     end
                 end
             else
                 if scopehasbinding(tls, name)
+
                     existing_binding = tls.names[name]
                     if existing_binding isa Binding && (existing_binding.val isa Binding || existing_binding.val isa SymbolServer.FunctionStore || existing_binding.val isa SymbolServer.DataTypeStore)
                         # Should possibly be a while statement
@@ -332,7 +333,7 @@ function add_binding(x, state, scope=state.scope)
                         # so lets use the .val instead.
                         existing_binding = existing_binding.val
                     end
-                    if (existing_binding isa Binding && ((existing_binding.type == CoreTypes.Function || existing_binding.type == CoreTypes.DataType)) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
+                    if (existing_binding isa Binding && ((CoreTypes.isfunction(existing_binding.type) || CoreTypes.isdatatype(existing_binding.type))) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
                         # do nothing name of `x` will resolve to the root method
                     else
                         seterror!(x, CannotDefineFuncAlreadyHasValue)
@@ -353,7 +354,7 @@ function add_binding(x, state, scope=state.scope)
             check_const_decl(name, b, scope)
 
             scope.names[name] = b
-        elseif is_soft_scope(scope) && parentof(scope) isa Scope && isidentifier(b.name) && scopehasbinding(parentof(scope), valofid(b.name))
+        elseif is_soft_scope(scope) && parentof(scope) isa Scope && isidentifier(b.name) && scopehasbinding(parentof(scope), valofid(b.name)) && !enforce_hard_scope(x, scope)
             add_binding(x, state, scope.parent)
         else
             scope.names[name] = b
@@ -362,6 +363,10 @@ function add_binding(x, state, scope=state.scope)
     elseif bindingof(x) isa SymbolServer.SymStore
         scope.names[valofid(x)] = bindingof(x)
     end
+end
+
+function enforce_hard_scope(x::EXPR, scope)
+    scope.expr.head === :for && is_in_fexpr(x, x-> x == scope.expr.args[1])
 end
 
 name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && CSTParser.is_getfield_w_quotenode(parentof(parentof(x)))
@@ -393,7 +398,7 @@ function mark_globals(x::EXPR, state)
 end
 
 function name_extends_imported_method(b::Binding)
-    if b.type == CoreTypes.Function && CSTParser.hasparent(b.name) && CSTParser.is_getfield(parentof(b.name))
+    if CoreTypes.isfunction(b.type) && CSTParser.hasparent(b.name) && CSTParser.is_getfield(parentof(b.name))
         if refof_maybe_getfield(parentof(b.name)[1]) !== nothing
 
         end

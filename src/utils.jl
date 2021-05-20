@@ -90,7 +90,7 @@ function get_root_method(b, server)
 end
 
 function get_root_method(b::Binding, server)
-    if b.type == CoreTypes.Function && !isempty(b.refs)
+    if CoreTypes.isfunction(b.type) && !isempty(b.refs)
         first(b.refs)
     else
         b

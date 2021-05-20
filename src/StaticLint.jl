@@ -11,32 +11,11 @@ using SymbolServer: VarRef
 
 const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
 
-baremodule CoreTypes # Convenience
-using ..SymbolServer
-using Base: ==, @static
-
-const DataType = SymbolServer.stdlibs[:Core][:DataType]
-const Function = SymbolServer.stdlibs[:Core][:Function]
-const Module = SymbolServer.stdlibs[:Core][:Module]
-const String = SymbolServer.stdlibs[:Core][:String]
-const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
-const Int = SymbolServer.stdlibs[:Core][:Int]
-const Float64 = SymbolServer.stdlibs[:Core][:Float64]
-const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
-
-isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
-@static if Core.Vararg isa Core.Type
-    function isva(x)
-        return (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg &&
-            x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core)
-    end
-else
-    isva(x) = x isa SymbolServer.FakeTypeofVararg
-end
-end
-
+include("coretypes.jl")
 include("bindings.jl")
 include("scope.jl")
+include("subtypes.jl")
+include("methodmatching.jl")
 
 mutable struct Meta
     binding::Union{Nothing,Binding}
@@ -115,7 +94,7 @@ function (state::Delayed)(x::EXPR)
 
     traverse(x, state)
     if state.scope != s0
-        for (k, b) in state.scope.names
+        for b in values(state.scope.names)
             infer_type_by_use(b, state.server)
             check_unused_binding(b, state.scope)    
         end
@@ -159,7 +138,7 @@ function semantic_pass(file, modified_expr=nothing)
     for x in state.delayed
         if hasscope(x)
             traverse(x, Delayed(scopeof(x), server)) 
-            for (k, b) in scopeof(x).names
+            for b in values(scopeof(x).names)
                 infer_type_by_use(b, state.server)
                 check_unused_binding(b, scopeof(x))
             end

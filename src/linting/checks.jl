@@ -57,7 +57,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
-    DuplicateFuncArgName => "Function argnument name not unique.",
+    DuplicateFuncArgName => "Function argument name not unique.",
     IncludePathContainsNULL => "Cannot include file, path cotains NULL characters."
     )
 
@@ -260,8 +260,8 @@ function compare_f_call(
 end
 
 function is_something_with_methods(x::Binding)
-    (x.type == CoreTypes.Function && x.val isa EXPR) ||
-    (x.type == CoreTypes.DataType && x.val isa EXPR && CSTParser.defines_struct(x.val)) || # Todo: Could have abstract type with a constructor...
+    (CoreTypes.isfunction(x.type) && x.val isa EXPR) ||
+    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) || 
     (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
@@ -272,18 +272,10 @@ function check_call(x, server)
         parentof(x) isa EXPR && headof(parentof(x)) === :do && return # TODO: add number of args specified in do block.
         length(x.args) == 0 && return
         # find the function we're dealing with
-        if isidentifier(first(x.args)) && hasref(first(x.args))
-            func_ref = refof(first(x.args))
-        elseif is_getfield_w_quotenode(x.args[1]) && (rhs = rhs_of_getfield(x.args[1])) !== nothing && hasref(rhs)
-            func_ref = refof(rhs)
-        else
-            return
-        end
+        func_ref = refof_call_func(x)
+        func_ref === nothing && return
 
-        # if func_ref isa Binding && 
-        # end
-        
-        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        if is_something_with_methods(func_ref) && !(func_ref isa Binding && func_ref.val isa EXPR && func_ref.val.head === :macro)
             # intentionally empty
             if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
                 # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.
@@ -438,7 +430,7 @@ function is_never_datatype(b::Binding, server)
         return is_never_datatype(b.val, server)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, server)
-    elseif b.type == CoreTypes.DataType
+    elseif CoreTypes.isdatatype(b.type)
         return false
     elseif b.type !== nothing
         return true
@@ -502,6 +494,10 @@ function check_farg_unused_(arg, arg_names)
         return false
     end
     b = bindingof(arg)
+    
+    # We don't care about these
+    valof(b.name) isa String && all_underscore(valof(b.name)) && return false
+
     if b === nothing ||
         # no refs:
        isempty(b.refs) ||
@@ -633,7 +629,7 @@ end
 function has_getproperty_method(b::Binding)
     if b.val isa Binding || b.val isa SymbolServer.DataTypeStore
         return has_getproperty_method(b.val)
-    elseif b isa Binding && b.type === CoreTypes.DataType
+    elseif b isa Binding && CoreTypes.isdatatype(b.type)
         for ref in b.refs
             if ref isa EXPR && is_type_of_call_to_getproperty(ref)
                 return true
@@ -738,7 +734,10 @@ function check_const_decl(name::String, b::Binding, scope)
         seterror!(b.val, CannotDeclareConst)
     else
         prev = scope.names[name]
-        if (prev.type === CoreTypes.DataType && !is_mask_binding_of_datatype(prev)) || is_const(prev)
+        if (CoreTypes.isdatatype(prev.type) && !is_mask_binding_of_datatype(prev)) || is_const(prev)
+            if b.val isa EXPR && prev.val isa EXPR && !in_same_if_branch(b.val, prev.val)
+                return
+            end
             if b.val isa EXPR
                 seterror!(b.val, InvalidRedefofConst)
             else
@@ -752,12 +751,12 @@ end
 function is_mask_binding_of_datatype(b::Binding)
     b.val isa EXPR && CSTParser.isassignment(b.val) && (rhsref = refof(b.val.args[2])) !== nothing && (rhsref isa SymbolServer.DataTypeStore || (rhsref.val isa EXPR && rhsref.val isa SymbolServer.DataTypeStore) || (rhsref.val isa EXPR && CSTParser.defines_datatype(rhsref.val)))
 end
+
 # check whether a and b are in all the same :if blocks and in the same branches
-function in_same_if_branch(a, b)
-    a_branches = find_if_parents(a)
-    b_branches = find_if_parents(b)
-    
-    return length(a_branches) == length(b_branches) && all(k in keys(b_branches) for k in keys(a_branches)) && all(a_branches[k] == b_branches[k] for k in keys(a_branches))
+in_same_if_branch(a::EXPR, b::EXPR) = in_same_if_branch(find_if_parents(a), find_if_parents(b))
+in_same_if_branch(a::Dict, b::EXPR) = in_same_if_branch(a, find_if_parents(b))
+function in_same_if_branch(a::Dict, b::Dict)
+    return length(a) == length(b) && all(k in keys(b) for k in keys(a)) && all(a[k] == b[k] for k in keys(a))
 end
 
 # find any parent nodes that are :if blocks and a pseudo-index of which branch

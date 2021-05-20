@@ -40,7 +40,7 @@ function lint_file(rootpath, server = setup_server(); gethints = false)
     empty!(server.files)
     root = StaticLint.loadfile(server, rootpath)
     StaticLint.semantic_pass(root)
-    for (p,f) in server.files
+    for f in values(server.files)
         StaticLint.check_all(f.cst, StaticLint.LintOptions(), server)
     end
     if gethints
