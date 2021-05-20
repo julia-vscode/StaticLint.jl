@@ -293,7 +293,7 @@ function get_path(x::EXPR, state)
                         seterror!(arg, IncludePathContainsNULL)
                         return ""
                     end
-                    push!(path_elements, string(valofid(arg)))
+                    push!(path_elements, string(valof(arg)))
                 else
                     return ""
                 end
