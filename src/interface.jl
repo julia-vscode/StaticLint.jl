@@ -31,17 +31,17 @@ end
 """
     lint_file(rootpath, server)
 
-Read a file from disc, parse and run a semantic pass over it. The file should be the 
+Read a file from disc, parse and run a semantic pass over it. The file should be the
 root of a project, e.g. for this package that file is `src/StaticLint.jl`. Other files
 in the project will be loaded automatically (calls to `include` with complicated arguments
-are not handled, see `followinclude` for details). A `FileServer` will be returned 
+are not handled, see `followinclude` for details). A `FileServer` will be returned
 containing the `File`s of the package.
 """
 function lint_file(rootpath, server = setup_server(); gethints = false)
     empty!(server.files)
     root = loadfile(server, rootpath)
     semantic_pass(root)
-    for (p,f) in server.files
+    for f in values(server.files)
         check_all(f.cst, LintOptions(), getenv(f, server))
     end
     if gethints

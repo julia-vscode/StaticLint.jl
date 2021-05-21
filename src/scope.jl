@@ -56,6 +56,8 @@ Checks whether s has a binding for variable named `n`.
 """
 scopehasbinding(s::Scope, n::String) = haskey(s.names, n)
 
+is_soft_scope(scope::Scope) = scope.expr.head == :for || scope.expr.head == :while || scope.expr.head == :try
+
 """
     introduces_scope(x::EXPR, state)
 
@@ -69,7 +71,7 @@ function introduces_scope(x::EXPR, state)
         return true
     elseif CSTParser.iswhere(x) 
         # unless in func def signature
-        return !_in_func_def(x)
+        return !_in_func_or_struct_def(x)
     elseif CSTParser.istuple(x) && CSTParser.hastrivia(x) && ispunctuation(x.trivia[1]) && length(x.args) > 0 && isassignment(x.args[1])
         # named tuple
         return true

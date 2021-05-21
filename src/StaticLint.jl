@@ -11,32 +11,11 @@ using SymbolServer: VarRef
 
 const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
 
-baremodule CoreTypes # Convenience
-using ..SymbolServer
-using Base: ==, @static
-
-const DataType = SymbolServer.stdlibs[:Core][:DataType]
-const Function = SymbolServer.stdlibs[:Core][:Function]
-const Module = SymbolServer.stdlibs[:Core][:Module]
-const String = SymbolServer.stdlibs[:Core][:String]
-const Symbol = SymbolServer.stdlibs[:Core][:Symbol]
-const Int = SymbolServer.stdlibs[:Core][:Int]
-const Float64 = SymbolServer.stdlibs[:Core][:Float64]
-const Vararg = SymbolServer.FakeTypeName(Core.Vararg)
-
-isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
-@static if Core.Vararg isa Core.Type
-    function isva(x)
-        return (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg &&
-            x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core)
-    end
-else
-    isva(x) = x isa SymbolServer.FakeTypeofVararg
-end
-end
-
+include("coretypes.jl")
 include("bindings.jl")
 include("scope.jl")
+include("subtypes.jl")
+include("methodmatching.jl")
 
 mutable struct Meta
     binding::Union{Nothing,Binding}
@@ -63,7 +42,7 @@ bindingof(m::Meta) = m.binding
 """
     ExternalEnv
 
-Holds a representation of an environment cached by SymbolServer. 
+Holds a representation of an environment cached by SymbolServer.
 """
 mutable struct ExternalEnv
     symbols::SymbolServer.EnvStore
@@ -93,7 +72,7 @@ function (state::Toplevel)(x::EXPR)
     s0 = scopes(x, state)
     resolve_ref(x, state)
     followinclude(x, state)
-    
+
     old_in_modified_expr = state.in_modified_expr
     if state.modified_exprs !== nothing && x in state.modified_exprs
         state.in_modified_expr = true
@@ -107,7 +86,7 @@ function (state::Toplevel)(x::EXPR)
     else
         traverse(x, state)
     end
-    
+
     state.in_modified_expr = old_in_modified_expr
     state.scope != s0 && (state.scope = s0)
     return state.scope
@@ -129,8 +108,9 @@ function (state::Delayed)(x::EXPR)
 
     traverse(x, state)
     if state.scope != s0
-        for (k, b) in state.scope.names
+        for b in values(state.scope.names)
             infer_type_by_use(b, state.env)
+            check_unused_binding(b, state.scope)
         end
         state.scope = s0
     end
@@ -173,9 +153,10 @@ function semantic_pass(file, modified_expr=nothing)
     state(getcst(file))
     for x in state.delayed
         if hasscope(x)
-            traverse(x, Delayed(scopeof(x), env, server)) 
+            traverse(x, Delayed(scopeof(x), env, server))
             for (k, b) in scopeof(x).names
                 infer_type_by_use(b, env)
+                check_unused_binding(b, scopeof(x))
             end
         else
             traverse(x, Delayed(retrieve_delayed_scope(x), env, server))
@@ -298,12 +279,21 @@ the path of the file to be included. Has limited support for `joinpath` calls.
 function get_path(x::EXPR, state)
     if CSTParser.iscall(x) && length(x.args) == 2
         parg = x.args[2]
+
         if CSTParser.isstringliteral(parg)
+            if occursin("\0", valof(parg))
+                seterror!(parg, IncludePathContainsNULL)
+                return ""
+            end
             path = CSTParser.str_value(parg)
             path = normpath(path)
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
         elseif CSTParser.ismacrocall(parg) && valof(parg.args[1]) == "@raw_str" && CSTParser.isstringliteral(parg.args[3])
+            if occursin("\0", valof(parg.args[3]))
+                seterror!(parg.args[3], IncludePathContainsNULL)
+                return ""
+            end
             path = normpath(CSTParser.str_value(parg.args[3]))
             Base.containsnul(path) && throw(SLInvalidPath("Couldn't convert '$x' into a valid path. Got '$path'"))
             return path
@@ -315,7 +305,11 @@ function get_path(x::EXPR, state)
                 if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.isstringliteral(arg)
-                    push!(path_elements, string(valofid(arg)))
+                    if occursin("\0", valof(arg))
+                        seterror!(arg, IncludePathContainsNULL)
+                        return ""
+                    end
+                    push!(path_elements, string(valof(arg)))
                 else
                     return ""
                 end

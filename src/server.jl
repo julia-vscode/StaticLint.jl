@@ -1,5 +1,5 @@
 #=
-Project trees are usually made up of multiple files. An AbstractServer holds the AbstractFiles that represent this tree. FileServer is the basic implementation and assumes files are available and readable from disc. (LanguageServer illustrates another implementaiton). The accompanying functions summarised below are required for making an alternative implementation. 
+Project trees are usually made up of multiple files. An AbstractServer holds the AbstractFiles that represent this tree. FileServer is the basic implementation and assumes files are available and readable from disc. (LanguageServer illustrates another implementaiton). The accompanying functions summarised below are required for making an alternative implementation.
 
 Interface spec.
 AbstractServer :-> (has/canload/load/set/get)file, getsymbols, getsymbolextends
@@ -21,7 +21,7 @@ mutable struct FileServer <: AbstractServer
     roots::Set{File}
     external_env::ExternalEnv
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), ExternalEnv(deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Symbol[]))
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), ExternalEnv(Dict{Symbol,SymbolServer.ModuleStore}(:Base => SymbolServer.stdlibs[:Base], :Core => SymbolServer.stdlibs[:Core]), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Symbol[]))
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
 canloadfile(server, path) = isfile(path)
@@ -48,11 +48,11 @@ getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
 """
     getenv(file::File, server::FileServer)
 
-Get the relevant `ExternalEnv` for a given file. 
+Get the relevant `ExternalEnv` for a given file.
 """
 function getenv(file::File, server::FileServer)
-    # For FileServer this approach is equivalent to the previous behaviour. Other AbstractServers 
-    # (e.g. LanguageServerInstance) can use this function to associate different files (or trees of 
+    # For FileServer this approach is equivalent to the previous behaviour. Other AbstractServers
+    # (e.g. LanguageServerInstance) can use this function to associate different files (or trees of
     # files) with different environments.
     server.external_env
 end
@@ -86,7 +86,7 @@ function Base.display(s::FileServer)
     n = length(s.files)
     println(n, "-file Server")
     cnt = 0
-    for (p, f) in s.files
+    for p in keys(s.files)
         cnt += 1
         println(" ", p)
         cnt > 10 && break

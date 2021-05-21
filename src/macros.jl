@@ -220,7 +220,8 @@ function interpret_eval(x::EXPR, state)
             if (ref = refof(variable_name)) isa Binding
                 if isassignment(ref.val) && (rhs = maybeget_quotedsymbol(ref.val.args[2])) !== nothing
                     # `name = :something`
-                    toplevel_binding = Binding(rhs, b.val, b.type, [])
+                    toplevel_binding = Binding(rhs, b.val, nothing, [])
+                    settype!(toplevel_binding, b.type)
                     infer_type(toplevel_binding, tls, state)
                     if scopehasbinding(tls, valofid(toplevel_binding.name))
                         tls.names[valofid(toplevel_binding.name)] = toplevel_binding # TODO: do we need to check whether this adds a method?
@@ -230,7 +231,8 @@ function interpret_eval(x::EXPR, state)
                 elseif is_loop_iterator(ref.val) && (names = maybe_quoted_list(rhs_of_iterator(ref.val))) !== nothing
                     # name is of a collection of quoted symbols
                     for name in names
-                        toplevel_binding = Binding(name, b.val, b.type, [])
+                        toplevel_binding = Binding(name, b.val, nothing, [])
+                        settype!(toplevel_binding, b.type)
                         infer_type(toplevel_binding, tls, state)
                         if scopehasbinding(tls, valofid(toplevel_binding.name))
                             tls.names[valofid(toplevel_binding.name)] = toplevel_binding # TODO: do we need to check whether this adds a method?

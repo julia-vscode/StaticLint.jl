@@ -26,7 +26,8 @@ TypeDeclOnGlobalVariable,
 UnsupportedConstLocalVariable,
 UnassignedKeywordArgument,
 CannotDefineFuncAlreadyHasValue,
-DuplicateFuncArgName)
+DuplicateFuncArgName,
+IncludePathContainsNULL)
 
 
 
@@ -38,7 +39,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     EqInIfConditional => "Unbracketed assignment in if conditional statements is not allowed, did you mean to use ==?",
     PointlessOR => "The first argument of a `||` call is a boolean literal.",
     PointlessAND => "The first argument of a `&&` call is `false`.",
-    UnusedBinding => "The variable name has been bound but not used.",
+    UnusedBinding => "Variable has been assigned but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
     IncludeLoop => "Loop detected, this file has already been included.",
@@ -56,7 +57,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnsupportedConstLocalVariable => "Unsupported `const` declaration on local variable.",
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
-    DuplicateFuncArgName => "Function argnument name not unique."
+    DuplicateFuncArgName => "Function argument name not unique.",
+    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters."
     )
 
 haserror(m::Meta) = m.error !== nothing
@@ -152,17 +154,14 @@ function func_nargs(x::EXPR)
 
     if sig.args !== nothing
         for i = 2:length(sig.args)
-            # arg = sig.args[i]
-            # if CSTParser.ismacrocall(arg) && length(arg.args) == 3 && CSTParser.ismacroname(arg.args[1]) && isidentifier(arg.args[1]) && valofid(arg.args[1]) == "@nospecialize"
-            #     arg = arg.args[3]
-            # end
-            
             arg = unwrap_nospecialize(sig.args[i])
             if isparameters(arg)
                 for j = 1:length(arg.args)
                     arg1 = arg.args[j]
                     if iskwarg(arg1)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
+                    elseif isidentifier(arg1)
+                        push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1))))
                     elseif issplat(arg1)
                         kwsplat = true
                     end
@@ -261,8 +260,8 @@ function compare_f_call(
 end
 
 function is_something_with_methods(x::Binding)
-    (x.type == CoreTypes.Function && x.val isa EXPR) ||
-    (x.type == CoreTypes.DataType && x.val isa EXPR && CSTParser.defines_struct(x.val)) || # Todo: Could have abstract type with a constructor...
+    (CoreTypes.isfunction(x.type) && x.val isa EXPR) ||
+    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) ||
     (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
@@ -273,18 +272,10 @@ function check_call(x, env::ExternalEnv)
         parentof(x) isa EXPR && headof(parentof(x)) === :do && return # TODO: add number of args specified in do block.
         length(x.args) == 0 && return
         # find the function we're dealing with
-        if isidentifier(first(x.args)) && hasref(first(x.args))
-            func_ref = refof(first(x.args))
-        elseif is_getfield_w_quotenode(x.args[1]) && (rhs = rhs_of_getfield(x.args[1])) !== nothing && hasref(rhs)
-            func_ref = refof(rhs)
-        else
-            return
-        end
+        func_ref = refof_call_func(x)
+        func_ref === nothing && return
 
-        # if func_ref isa Binding && 
-        # end
-        
-        if (func_ref isa Binding && (func_ref.type === CoreTypes.Function || func_ref.type === CoreTypes.DataType) && !(func_ref.val isa EXPR && func_ref.val.head === :macro)) || func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
+        if is_something_with_methods(func_ref) && !(func_ref isa Binding && func_ref.val isa EXPR && func_ref.val.head === :macro)
             # intentionally empty
             if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
                 # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.
@@ -296,7 +287,7 @@ function check_call(x, env::ExternalEnv)
         call_counts = call_nargs(x)
         tls = retrieve_toplevel_scope(x)
         tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
-        func_ref === nothing && return 
+        func_ref === nothing && return
         !sig_match_any(func_ref, x, call_counts, tls, env) && seterror!(x, IncorrectCallArgs)
     end
 end
@@ -315,7 +306,7 @@ function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::Exter
         method === nothing && continue
         sig_match_any(method, x, call_counts, tls, env) && return true
     end
-    
+
     return false
 end
 
@@ -367,7 +358,7 @@ function check_loop_iter(x::EXPR, env::ExternalEnv)
 end
 
 function check_nothing_equality(x::EXPR, env::ExternalEnv)
-    if isbinarycall(x)
+    if isbinarycall(x) && length(x.args) == 3
         if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
             seterror!(x.args[1], NothingEquality)
         elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
@@ -439,7 +430,7 @@ function is_never_datatype(b::Binding, env::ExternalEnv)
         return is_never_datatype(b.val, env)
     elseif b.val isa SymbolServer.FunctionStore
         return is_never_datatype(b.val, env)
-    elseif b.type == CoreTypes.DataType
+    elseif CoreTypes.isdatatype(b.type)
         return false
     elseif b.type !== nothing
         return true
@@ -480,28 +471,50 @@ function check_farg_unused(x::EXPR)
         if iscall(sig)
             arg_names = Set{String}()
             for i = 2:length(sig.args)
-                if hasbinding(sig.args[i])
-                    arg = sig.args[i]
-                elseif iskwarg(sig.args[i]) && hasbinding(sig.args[i].args[1])
-                    arg = sig.args[i].args[1]
-                elseif is_nospecialize_call(sig.args[i]) && hasbinding(unwrap_nospecialize(sig.args[i]))
-                    arg = unwrap_nospecialize(sig.args[i])
+                arg = sig.args[i]
+                if arg.head === :parameters
+                    for arg2 in arg.args
+                        !check_farg_unused_(arg2, arg_names) && return
+                    end
                 else
-                    return
-                end
-                b = bindingof(arg)
-                if b === nothing || (isempty(b.refs) || (length(b.refs) == 1 && first(b.refs) == b.name))
-                    seterror!(arg, UnusedFunctionArgument)
-                end
-                if valof(b.name) === nothing
-                elseif valof(b.name) in arg_names
-                    seterror!(arg, DuplicateFuncArgName)
-                else
-                    push!(arg_names, valof(b.name))
+                    !check_farg_unused_(arg, arg_names) && return
                 end
             end
         end
     end
+end
+
+function check_farg_unused_(arg, arg_names)
+    if hasbinding(arg)
+    elseif iskwarg(arg) && hasbinding(arg.args[1])
+        arg = arg.args[1]
+    elseif is_nospecialize_call(arg) && hasbinding(unwrap_nospecialize(arg))
+        arg = unwrap_nospecialize(arg)
+    else
+        return false
+    end
+    b = bindingof(arg)
+
+    # We don't care about these
+    valof(b.name) isa String && all_underscore(valof(b.name)) && return false
+
+    if b === nothing ||
+        # no refs:
+       isempty(b.refs) ||
+        # only self ref:
+       (length(b.refs) == 1 && first(b.refs) == b.name) ||
+        # first usage is assignment:
+       (length(b.refs) > 1 && b.refs[2] isa EXPR && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
+        seterror!(arg, UnusedFunctionArgument)
+    end
+
+    if valof(b.name) === nothing
+    elseif valof(b.name) in arg_names
+        seterror!(arg, DuplicateFuncArgName)
+    else
+        push!(arg_names, valof(b.name))
+    end
+    true
 end
 
 function unwrap_nospecialize(x)
@@ -510,8 +523,8 @@ function unwrap_nospecialize(x)
 end
 
 function is_nospecialize_call(x)
-    CSTParser.ismacrocall(x) && 
-    CSTParser.ismacroname(x.args[1]) && 
+    CSTParser.ismacrocall(x) &&
+    CSTParser.ismacroname(x.args[1]) &&
     is_nospecialize(x.args[1])
 end
 
@@ -543,7 +556,7 @@ function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tupl
     elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, env)
         push!(errs, (pos, x))
     end
-    
+
     for i in 1:length(x)
         collect_hints(x[i], env, missingrefs, isquoted, errs, pos)
         pos += x[i].fullspan
@@ -564,10 +577,14 @@ function should_mark_missing_getfield_ref(x, env)
     if isidentifier(x) && !hasref(x) && # x has no ref
     parentof(x) isa EXPR && headof(parentof(x)) === :quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x)).args[1])
+        hasref(x) && return false # We've resolved
         if lhsref isa SymbolServer.ModuleStore || (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore)
             # a module, we should know this.
             return true
         elseif lhsref isa Binding
+            # by-use type inference runs after we've resolved references so we may not have known lhsref's type first time round, lets try and find `x` again
+            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), server))
+            hasref(x) && return false # We've resolved
             if lhsref.val isa Binding
                 lhsref = lhsref.val
             end
@@ -612,9 +629,9 @@ end
 function has_getproperty_method(b::Binding)
     if b.val isa Binding || b.val isa SymbolServer.DataTypeStore
         return has_getproperty_method(b.val)
-    elseif b isa Binding && b.type === CoreTypes.DataType
+    elseif b isa Binding && CoreTypes.isdatatype(b.type)
         for ref in b.refs
-            if is_type_of_call_to_getproperty(ref)
+            if ref isa EXPR && is_type_of_call_to_getproperty(ref)
                 return true
             end
         end
@@ -701,7 +718,7 @@ end
 
 overwrites_imported_function(b) = false
 function overwrites_imported_function(b::Binding)
-    if ((b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore) && 
+    if ((b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore) &&
         (is_in_fexpr(b.name, x -> headof(x) === :import)) || (b.refs isa Vector && length(b.refs) > 0 && (first(b.refs) isa SymbolServer.FunctionStore || first(b.refs) isa SymbolServer.DataTypeStore)))
         return true
     end
@@ -717,7 +734,10 @@ function check_const_decl(name::String, b::Binding, scope)
         seterror!(b.val, CannotDeclareConst)
     else
         prev = scope.names[name]
-        if (prev.type === CoreTypes.DataType && !is_mask_binding_of_datatype(prev)) || is_const(prev)
+        if (CoreTypes.isdatatype(prev.type) && !is_mask_binding_of_datatype(prev)) || is_const(prev)
+            if b.val isa EXPR && prev.val isa EXPR && !in_same_if_branch(b.val, prev.val)
+                return
+            end
             if b.val isa EXPR
                 seterror!(b.val, InvalidRedefofConst)
             else
@@ -731,12 +751,12 @@ end
 function is_mask_binding_of_datatype(b::Binding)
     b.val isa EXPR && CSTParser.isassignment(b.val) && (rhsref = refof(b.val.args[2])) !== nothing && (rhsref isa SymbolServer.DataTypeStore || (rhsref.val isa EXPR && rhsref.val isa SymbolServer.DataTypeStore) || (rhsref.val isa EXPR && CSTParser.defines_datatype(rhsref.val)))
 end
+
 # check whether a and b are in all the same :if blocks and in the same branches
-function in_same_if_branch(a, b)
-    a_branches = find_if_parents(a)
-    b_branches = find_if_parents(b)
-    
-    return length(a_branches) == length(b_branches) && all(k in keys(b_branches) for k in keys(a_branches)) && all(a_branches[k] == b_branches[k] for k in keys(a_branches))
+in_same_if_branch(a::EXPR, b::EXPR) = in_same_if_branch(find_if_parents(a), find_if_parents(b))
+in_same_if_branch(a::Dict, b::EXPR) = in_same_if_branch(a, find_if_parents(b))
+function in_same_if_branch(a::Dict, b::Dict)
+    return length(a) == length(b) && all(k in keys(b) for k in keys(a)) && all(a[k] == b[k] for k in keys(a))
 end
 
 # find any parent nodes that are :if blocks and a pseudo-index of which branch
@@ -751,7 +771,7 @@ function find_if_parents(x::EXPR, current=Int[], list=Dict{EXPR,Vector{Int}}())
             end
             i += 1
         end
-        if headof(parentof(x)) == :if 
+        if headof(parentof(x)) == :if
             list[parentof(x)] = current
             current = []
         end
@@ -851,11 +871,141 @@ function check_break_continue(x::EXPR)
 end
 
 function check_const(x::EXPR)
-    if headof(x) === :const 
+    if headof(x) === :const
         if CSTParser.isassignment(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
             seterror!(x, TypeDeclOnGlobalVariable)
         elseif headof(x.args[1]) === :local
             seterror!(x, UnsupportedConstLocalVariable)
         end
     end
+end
+
+function check_unused_binding(b::Binding, scope::Scope)
+    if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
+        refs = loose_refs(b)
+        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
+            seterror!(b.name, UnusedBinding)
+        end
+    end
+end
+
+all_underscore(s) = false
+all_underscore(s::String) = all(==(0x5f), codeunits(s))
+
+function is_sig_arg(x)
+    is_in_fexpr(x, CSTParser.iscall)
+end
+
+function is_overwritten_in_loop(x)
+    # Cuts out false positives for check_unused_binding - the linear nature of our
+    # semantic passes mean a variable declared at the end of a loop's block but used at
+    # the start won't appear to be referenced.
+
+    # Cheap version:
+    # is_in_fexpr(x, x -> x.head === :while || x.head === :for)
+
+    # We really want to check whether the enclosing scope(s) of the loop has a binding
+    # with matching name.
+    # Is this too expensive?
+    loop = maybe_get_parent_fexpr(x, x -> x.head === :while || x.head === :for)
+    if loop !== nothing
+        s = scopeof(loop)
+        if s isa Scope && parentof(s) isa Scope
+            s2 = check_parent_scopes_for(s, valof(x))
+            if s2 isa Scope
+                prev_binding = parentof(s2).names[valof(x)]
+                if prev_binding isa Binding
+                    s = ComesBefore(prev_binding.name, s2.expr, 0)
+                    traverse(parentof(s2).expr, s)
+                    return s.result == 1
+                    # for r in prev_binding.refs
+                    #     if r isa EXPR && is_in_fexpr(r, x -> x === loop)
+                    #         return true
+                    #     end
+                    # end
+                else
+                    return false
+                end
+            end
+        else
+            return false
+        end
+    else
+        false
+    end
+    false
+end
+
+"""
+    ComesBefore
+
+Check whether x1 comes before x2
+"""
+mutable struct ComesBefore
+    x1::EXPR
+    x2::EXPR
+    result::Int
+end
+
+function (state::ComesBefore)(x::EXPR)
+    state.result > 0 && return
+    if x == state.x1
+        state.result = 1
+        return
+    elseif x == state.x2
+        state.result = 2
+        return
+    end
+    if !hasscope(x)
+        traverse(x, state)
+        state.result > 0 && return
+    end
+end
+
+"""
+    check_parent_scopes_for(s::Scope, name)
+
+Checks whether the parent scope of `s` has the name `name`.
+"""
+function check_parent_scopes_for(s::Scope, name)
+    # This returns `s` rather than the parent so that s.expr can be used in the linear
+    # search (e.g. `bound_before`)
+    if s.expr.head !== :module && parentof(s) isa Scope && haskey(parentof(s).names, name)
+        s
+    elseif s.parent isa Scope
+        check_parent_scopes_for(parentof(s), name)
+    end
+end
+
+
+
+function is_overwritten_subsequently(b::Binding, scope::Scope)
+    valof(b.name) === nothing && return false
+    s = BoundAfter(b.name, valof(b.name), 0)
+    traverse(scope.expr, s)
+    return s.result == 2
+end
+
+"""
+    ComesBefore
+
+Check whether x1 comes before x2
+"""
+mutable struct BoundAfter
+    x1::EXPR
+    name::String
+    result::Int
+end
+
+function (state::BoundAfter)(x::EXPR)
+    state.result > 1 && return
+    if x == state.x1
+        state.result = 1
+        return
+    end
+    if scopeof(x) isa Scope && haskey(scopeof(x).names, state.name)
+        state.result = 2
+        return
+    end
+    traverse(x, state)
 end

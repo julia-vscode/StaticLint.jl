@@ -3,7 +3,7 @@ function setref!(x::EXPR, binding::Binding)
         x.meta = Meta()
     end
     x.meta.ref = binding
-    binding.refs !== nothing && push!(binding.refs, x)
+    push!(binding.refs, x)
 end
 
 function setref!(x::EXPR, binding)
@@ -20,7 +20,7 @@ end
 # run over the entire top-level scope.
 function resolve_ref(x, state)
     if !(parentof(x) isa EXPR && headof(parentof(x)) === :quotenode)
-        resolved = resolve_ref(x, state.scope, state)
+        resolve_ref(x, state.scope, state)
     end
 end
 
@@ -38,6 +38,12 @@ end
 # can't be resolved.
 
 function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
+    # if the current scope is a soft scope we should check the parent scope first
+    # before trying to resolve the ref locally
+    # if is_soft_scope(scope) && parentof(scope) isa Scope
+    #     resolve_ref(x, parentof(scope), state) && return true
+    # end
+
     hasref(x) && return true
     resolved = false
 
@@ -55,11 +61,11 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
         setref!(x, Binding(noname, nothing, nothing, []))
         return true
     end
-    x1, mn = nameof_expr_to_resolve(x)
-    mn == true && return true
-    
+    mn = nameof_expr_to_resolve(x)
+    mn === nothing && return true
+
     if scopehasbinding(scope, mn)
-        setref!(x1, scope.names[mn])
+        setref!(x, scope.names[mn])
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0
         for m in values(scope.modules)
@@ -107,11 +113,11 @@ function resolve_ref_from_module(x::EXPR, scope::Scope, state::State)::Bool
     hasref(x) && return true
     resolved = false
 
-    x1, mn = nameof_expr_to_resolve(x)
-    mn == true && return true
+    mn = nameof_expr_to_resolve(x)
+    mn === nothing && return true
 
     if scope_exports(scope, mn, state)
-        setref!(x1, scope.names[mn])
+        setref!(x, scope.names[mn])
         resolved = true
     end
     return resolved
@@ -137,7 +143,7 @@ end
 """
     initial_pass_on_exports(x::EXPR, server)
 
-Export statements need to be (pseudo) evaluated each time we consider 
+Export statements need to be (pseudo) evaluated each time we consider
 whether a variable is made available by an import statement.
 """
 
@@ -145,10 +151,8 @@ function initial_pass_on_exports(x::EXPR, name, state)
     for a in x.args[3] # module block expressions
         if headof(a) === :export
             for i = 1:length(a.args)
-                if isidentifier(a.args[i]) && valof(a.args[i]) == name
-                    if !hasref(a.args[i])
-                        Delayed(scopeof(x), state.env, state.server)(a.args[i])
-                    end
+                if isidentifier(a.args[i]) && valof(a.args[i]) == name && !hasref(a.args[i])
+                    Delayed(scopeof(x), state.env, state.server)(a.args[i])
                 end
             end
         end
@@ -221,12 +225,11 @@ function resolve_getfield(x::EXPR, b::Binding, state::State)::Bool
 end
 
 function resolve_getfield(x::EXPR, parent_type, state::State)::Bool
-    hasref(x) && return true
-    return false
+    hasref(x)
 end
 
 function is_overloaded(val::SymbolServer.SymStore, scope::Scope)
-    (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name)
+    vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name
     haskey(scope.overloaded, vr)
 end
 
@@ -258,15 +261,6 @@ function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::B
     return resolved
 end
 
-# function is_overloaded1(x, tls, val)
-#     vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name
-#     if haskey(tls.names, valof(x)) && tls.names[valof(x)] isa Binding && first(tls.names[valof(x)]) isa SymbolServer.FunctionStore
-
-#     end
-#     haskey(tls.overloaded, vr)
-    
-# end
-
 function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
@@ -283,38 +277,12 @@ end
 
 resolvable_macroname(x::EXPR) = isidentifier(x) && CSTParser.ismacroname(x) && refof(x) === nothing
 
-"""
-    module_safety_trip(scope::Scope,  visited_scopes)
-
-Checks whether the scope is a module and we've visited it before, 
-otherwise adds the module to the list.
-"""
-function module_safety_trip(scope::Scope,  visited_scopes)
-    if CSTParser.defines_module(scope.expr) && length(scope.expr.args) > 1 && isidentifier(scope.expr.args[2])
-        s_m_name = valofid(scope.expr.args[2])
-        if s_m_name in visited_scopes
-            return true
-        else
-            push!(visited_scopes, s_m_name)
-        end
-    end
-    return false
-end
-
-
-function nameof_expr_to_resolve(x)
-    if isidentifier(x)
-        mn = valofid(x)
-    else
-        return x, true
-    end
-    x, mn
-end
+nameof_expr_to_resolve(x) = isidentifier(x) ? valofid(x) : nothing
 
 """
     valofid(x)
 
-Returns the string value of an expression for which `isidentifier` is true, 
+Returns the string value of an expression for which `isidentifier` is true,
 i.e. handles NONSTDIDENTIFIERs.
 """
 valofid(x::EXPR) = headof(x) === :IDENTIFIER ? valof(x) : valof(x.args[2])
@@ -322,7 +290,7 @@ valofid(x::EXPR) = headof(x) === :IDENTIFIER ? valof(x) : valof(x.args[2])
 """
 new_within_struct(x::EXPR)
 
-Checks whether x is a reference to `new` within a datatype constructor. 
+Checks whether x is a reference to `new` within a datatype constructor.
 """
 new_within_struct(x::EXPR) = isidentifier(x) && valofid(x) == "new" && is_in_fexpr(x, CSTParser.defines_struct)
 is_special_macro_term(x::EXPR) = isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && is_in_fexpr(x, CSTParser.defines_macro)
