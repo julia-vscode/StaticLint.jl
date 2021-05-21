@@ -583,7 +583,7 @@ function should_mark_missing_getfield_ref(x, env)
             return true
         elseif lhsref isa Binding
             # by-use type inference runs after we've resolved references so we may not have known lhsref's type first time round, lets try and find `x` again
-            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), server))
+            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), env, nothing)) # FIXME: Setting `server` to nothing might be sketchy?
             hasref(x) && return false # We've resolved
             if lhsref.val isa Binding
                 lhsref = lhsref.val
