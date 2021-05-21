@@ -207,21 +207,21 @@ is_toplevel_scope(x::EXPR) = CSTParser.defines_module(x) || headof(x) === :file
 # for a FunctionStore b, checks whether additional methods are provided by other packages
 # f is a function that returns `true` if we want to break early from the loop
 
-iterate_over_ss_methods(b, tls, server, f) = false
-function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
+iterate_over_ss_methods(b, tls, env, f) = false
+function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, env::ExternalEnv, f)
     for m in b.methods
         ret = f(m)
         ret && return true
     end
-    if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
+    if b.extends in keys(getsymbolextendeds(env)) && tls.modules !== nothing
         # above should be modified,
-        rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+        rootmod = SymbolServer._lookup(b.extends.parent, getsymbols(env)) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, b.extends.name) # check rootmod exists, and that it has the variable
             # find extensoions
-            if haskey(getsymbolextendeds(server), b.extends) # method extensions listed
-                for vr in getsymbolextendeds(server)[b.extends] # iterate over packages with extensions
+            if haskey(getsymbolextendeds(env), b.extends) # method extensions listed
+                for vr in getsymbolextendeds(env)[b.extends] # iterate over packages with extensions
                     !(SymbolServer.get_top_module(vr) in keys(tls.modules)) && continue
-                    rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
+                    rootmod = SymbolServer._lookup(vr, getsymbols(env))
                     !(rootmod isa SymbolServer.ModuleStore) && continue
                     if haskey(rootmod.vals, b.extends.name) && (rootmod.vals[b.extends.name] isa SymbolServer.FunctionStore || rootmod.vals[b.extends.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
                         for m in rootmod.vals[b.extends.name].methods #
@@ -236,7 +236,7 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
     return false
 end
 
-function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, server, f)
+function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, env::ExternalEnv, f)
     if b.name isa SymbolServer.VarRef
         bname = b.name
     elseif b.name isa SymbolServer.FakeTypeName
@@ -246,15 +246,15 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
         ret = f(m)
         ret && return true
     end
-    if (bname in keys(getsymbolextendeds(server))) && tls.modules !== nothing
+    if (bname in keys(getsymbolextendeds(env))) && tls.modules !== nothing
         # above should be modified,
-        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server), true) # points to the module containing the initial function declaration
+        rootmod = SymbolServer._lookup(bname.parent, getsymbols(env), true) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
             # find extensoions
-            if haskey(getsymbolextendeds(server), bname) # method extensions listed
-                for vr in getsymbolextendeds(server)[bname] # iterate over packages with extensions
+            if haskey(getsymbolextendeds(env), bname) # method extensions listed
+                for vr in getsymbolextendeds(env)[bname] # iterate over packages with extensions
                     !(SymbolServer.get_top_module(vr) in keys(tls.modules)) && continue
-                    rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
+                    rootmod = SymbolServer._lookup(vr, getsymbols(env))
                     !(rootmod isa SymbolServer.ModuleStore) && continue
                     if haskey(rootmod.vals, bname.name) && (rootmod.vals[bname.name] isa SymbolServer.FunctionStore || rootmod.vals[bname.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
                         for m in rootmod.vals[bname.name].methods #

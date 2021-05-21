@@ -63,7 +63,7 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     end
     mn = nameof_expr_to_resolve(x)
     mn === nothing && return true
-    
+
     if scopehasbinding(scope, mn)
         setref!(x, scope.names[mn])
         resolved = true
@@ -93,7 +93,7 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
 
         mn = Symbol(valof(x))
         if isexportedby(mn, m)
-            setref!(x, maybe_lookup(m[mn], state.server))
+            setref!(x, maybe_lookup(m[mn], state))
             return true
         end
     elseif isidentifier(x1)
@@ -102,7 +102,7 @@ function resolve_ref_from_module(x1::EXPR, m::SymbolServer.ModuleStore, state::S
             setref!(x, m)
             return true
         elseif isexportedby(x, m)
-            setref!(x, maybe_lookup(m[Symbol(valof(x))], state.server))
+            setref!(x, maybe_lookup(m[Symbol(valof(x))], state))
             return true
         end
     end
@@ -130,7 +130,7 @@ Does the scope export a variable called `name`?
 """
 function scope_exports(scope::Scope, name::String, state)
     if scopehasbinding(scope, name) && (b = scope.names[name]) isa Binding
-        initial_pass_on_exports(scope.expr, name, state.server)
+        initial_pass_on_exports(scope.expr, name, state)
         for ref in b.refs
             if ref isa EXPR && parentof(ref) isa EXPR && headof(parentof(ref)) === :export
                 return true
@@ -143,15 +143,16 @@ end
 """
     initial_pass_on_exports(x::EXPR, server)
 
-Export statements need to be (pseudo) evaluated each time we consider 
+Export statements need to be (pseudo) evaluated each time we consider
 whether a variable is made available by an import statement.
 """
-function initial_pass_on_exports(x::EXPR, name, server)
+
+function initial_pass_on_exports(x::EXPR, name, state)
     for a in x.args[3] # module block expressions
         if headof(a) === :export
             for i = 1:length(a.args)
                 if isidentifier(a.args[i]) && valof(a.args[i]) == name && !hasref(a.args[i])
-                    Delayed(scopeof(x), server)(a.args[i])
+                    Delayed(scopeof(x), state.env, state.server)(a.args[i])
                 end
             end
         end
@@ -235,10 +236,10 @@ end
 function resolve_getfield(x::EXPR, m::SymbolServer.ModuleStore, state::State)::Bool
     hasref(x) && return true
     resolved = false
-    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
+    if CSTParser.ismacroname(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state)) !== nothing
         setref!(x, val)
         resolved = true
-    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbolserver(state.server)), state.server)) !== nothing
+    elseif isidentifier(x) && (val = maybe_lookup(SymbolServer.maybe_getfield(Symbol(valofid(x)), m, getsymbols(state)), state)) !== nothing
         # Check whether variable is overloaded in top-level scope
         tls = retrieve_toplevel_scope(state.scope)
         # if tls.overloaded !== nothing && (vr = val.name isa SymbolServer.FakeTypeName ? val.name.name : val.name; haskey(tls.overloaded, vr))
@@ -266,7 +267,7 @@ function resolve_getfield(x::EXPR, parent::SymbolServer.DataTypeStore, state::St
     if isidentifier(x) && Symbol(valof(x)) in parent.fieldnames
         fi = findfirst(f -> Symbol(valof(x)) == f, parent.fieldnames)
         ft = parent.types[fi]
-        val = SymbolServer._lookup(ft, getsymbolserver(state.server), true)
+        val = SymbolServer._lookup(ft, getsymbols(state), true)
         # TODO: Need to handle the case where we get back a FakeUnion, etc.
         setref!(x, Binding(noname, nothing, val, []))
         resolved = true
@@ -281,7 +282,7 @@ nameof_expr_to_resolve(x) = isidentifier(x) ? valofid(x) : nothing
 """
     valofid(x)
 
-Returns the string value of an expression for which `isidentifier` is true, 
+Returns the string value of an expression for which `isidentifier` is true,
 i.e. handles NONSTDIDENTIFIERs.
 """
 valofid(x::EXPR) = headof(x) === :IDENTIFIER ? valof(x) : valof(x.args[2])
@@ -289,7 +290,7 @@ valofid(x::EXPR) = headof(x) === :IDENTIFIER ? valof(x) : valof(x.args[2])
 """
 new_within_struct(x::EXPR)
 
-Checks whether x is a reference to `new` within a datatype constructor. 
+Checks whether x is a reference to `new` within a datatype constructor.
 """
 new_within_struct(x::EXPR) = isidentifier(x) && valofid(x) == "new" && is_in_fexpr(x, CSTParser.defines_struct)
 is_special_macro_term(x::EXPR) = isidentifier(x) && (valofid(x) == "__source__" || valofid(x) == "__module__") && is_in_fexpr(x, CSTParser.defines_macro)

@@ -38,6 +38,18 @@ hasscope(m::Meta) = m.scope isa Scope
 scopeof(m::Meta) = m.scope
 bindingof(m::Meta) = m.binding
 
+
+"""
+    ExternalEnv
+
+Holds a representation of an environment cached by SymbolServer.
+"""
+mutable struct ExternalEnv
+    symbols::SymbolServer.EnvStore
+    extended_methods::Dict{SymbolServer.VarRef,Vector{SymbolServer.VarRef}}
+    project_deps::Vector{Symbol}
+end
+
 abstract type State end
 mutable struct Toplevel{T} <: State
     file::T
@@ -47,6 +59,7 @@ mutable struct Toplevel{T} <: State
     modified_exprs::Union{Nothing,Vector{EXPR}}
     delayed::Vector{EXPR}
     resolveonly::Vector{EXPR}
+    env::ExternalEnv
     server
 end
 
@@ -59,7 +72,7 @@ function (state::Toplevel)(x::EXPR)
     s0 = scopes(x, state)
     resolve_ref(x, state)
     followinclude(x, state)
-    
+
     old_in_modified_expr = state.in_modified_expr
     if state.modified_exprs !== nothing && x in state.modified_exprs
         state.in_modified_expr = true
@@ -73,7 +86,7 @@ function (state::Toplevel)(x::EXPR)
     else
         traverse(x, state)
     end
-    
+
     state.in_modified_expr = old_in_modified_expr
     state.scope != s0 && (state.scope = s0)
     return state.scope
@@ -81,6 +94,7 @@ end
 
 mutable struct Delayed <: State
     scope::Scope
+    env::ExternalEnv
     server
 end
 
@@ -95,8 +109,8 @@ function (state::Delayed)(x::EXPR)
     traverse(x, state)
     if state.scope != s0
         for b in values(state.scope.names)
-            infer_type_by_use(b, state.server)
-            check_unused_binding(b, state.scope)    
+            infer_type_by_use(b, state.env)
+            check_unused_binding(b, state.scope)
         end
         state.scope = s0
     end
@@ -105,6 +119,7 @@ end
 
 mutable struct ResolveOnly <: State
     scope::Scope
+    env::ExternalEnv
     server
 end
 
@@ -132,26 +147,27 @@ Performs a semantic pass across a project from the entry point `file`. A first p
 """
 function semantic_pass(file, modified_expr=nothing)
     server = file.server
-    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), nothing))
-    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], server)
+    env = getenv(file, server)
+    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => env.symbols[:Base], :Core => env.symbols[:Core]), nothing))
+    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], env, server)
     state(getcst(file))
     for x in state.delayed
         if hasscope(x)
-            traverse(x, Delayed(scopeof(x), server)) 
-            for b in values(scopeof(x).names)
-                infer_type_by_use(b, state.server)
+            traverse(x, Delayed(scopeof(x), env, server))
+            for (k, b) in scopeof(x).names
+                infer_type_by_use(b, env)
                 check_unused_binding(b, scopeof(x))
             end
         else
-            traverse(x, Delayed(retrieve_delayed_scope(x), server))
+            traverse(x, Delayed(retrieve_delayed_scope(x), env, server))
         end
     end
     if state.resolveonly !== nothing
         for x in state.resolveonly
             if hasscope(x)
-                traverse(x, ResolveOnly(scopeof(x), server))
+                traverse(x, ResolveOnly(scopeof(x), env, server))
             else
-                traverse(x, ResolveOnly(retrieve_delayed_scope(x), server))
+                traverse(x, ResolveOnly(retrieve_delayed_scope(x), env, server))
             end
         end
     end
@@ -263,7 +279,7 @@ the path of the file to be included. Has limited support for `joinpath` calls.
 function get_path(x::EXPR, state)
     if CSTParser.iscall(x) && length(x.args) == 2
         parg = x.args[2]
-        
+
         if CSTParser.isstringliteral(parg)
             if occursin("\0", valof(parg))
                 seterror!(parg, IncludePathContainsNULL)

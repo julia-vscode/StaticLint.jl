@@ -75,7 +75,7 @@ function infer_type_assignment_rhs(binding, state, scope)
             refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
             if refof_rhs isa Binding
                 if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
-                    settype!(binding, maybe_lookup(refof_rhs.val.typ.name, state.server))
+                    settype!(binding, maybe_lookup(refof_rhs.val.typ.name, state))
                 elseif refof_rhs.val isa SymbolServer.FunctionStore
                     settype!(binding, CoreTypes.Function)
                 elseif refof_rhs.val isa SymbolServer.DataTypeStore
@@ -84,7 +84,7 @@ function infer_type_assignment_rhs(binding, state, scope)
                     settype!(binding, refof_rhs.type)
                 end
             elseif refof_rhs isa SymbolServer.GenericStore && refof_rhs.typ isa SymbolServer.FakeTypeName
-                settype!(binding, maybe_lookup(refof_rhs.typ.name, state.server))
+                settype!(binding, maybe_lookup(refof_rhs.typ.name, state))
             elseif refof_rhs isa SymbolServer.FunctionStore
                 settype!(binding, CoreTypes.Function)
             elseif refof_rhs isa SymbolServer.DataTypeStore
@@ -120,7 +120,7 @@ function infer_type_decl(binding, state, scope)
 end
 
 # Work out what type a bound variable has by functions that are called on it.
-function infer_type_by_use(b::Binding, server)
+function infer_type_by_use(b::Binding, env::ExternalEnv)
     b.type !== nothing && return # b already has a type
     possibletypes = []
     visitedmethods = []
@@ -138,7 +138,7 @@ function infer_type_by_use(b::Binding, server)
             end
             ifbranch = newbranch
         end
-        check_ref_against_calls(ref, visitedmethods, new_possibles, server)
+        check_ref_against_calls(ref, visitedmethods, new_possibles, env)
         if !isempty(new_possibles)
             if isempty(possibletypes)
                 possibletypes = new_possibles
@@ -158,14 +158,14 @@ function infer_type_by_use(b::Binding, server)
         elseif type isa SymbolServer.DataTypeStore
             settype!(b, type)
         elseif type isa SymbolServer.VarRef
-            settype!(b, SymbolServer._lookup(type, getsymbolserver(server))) # could be nothing
+            settype!(b, SymbolServer._lookup(type, getsymbols(env))) # could be nothing
         elseif type isa SymbolServer.FakeTypeName && isempty(type.parameters)
-            settype!(b, SymbolServer._lookup(type.name, getsymbolserver(server))) # could be nothing
+            settype!(b, SymbolServer._lookup(type.name, getsymbols(env))) # could be nothing
         end
     end
 end
 
-function check_ref_against_calls(x, visitedmethods, new_possibles, server)
+function check_ref_against_calls(x, visitedmethods, new_possibles, env::ExternalEnv)
     if is_arg_of_resolved_call(x) && !call_is_func_sig(x.parent)
         sig = parentof(x)
         # x is argument of function call (func) and we know what that function is
@@ -180,18 +180,18 @@ function check_ref_against_calls(x, visitedmethods, new_possibles, server)
             for method in func.refs
                 method = get_method(method)
                 method === nothing && continue
-                if method isa EXPR 
+                if method isa EXPR
                     if defines_function(method)
                         get_arg_type_at_position(method, argi, new_possibles)
                     # elseif CSTParser.defines_struct(method)
                         # Can we ignore this? Default constructor gives us no type info?
                     end
-                else # elseif what? 
-                    iterate_over_ss_methods(method, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+                else # elseif what?
+                    iterate_over_ss_methods(method, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
                 end
             end
         else
-            iterate_over_ss_methods(func, tls, server, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+            iterate_over_ss_methods(func, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
         end
     end
 end
@@ -211,7 +211,7 @@ function call_is_func_sig(call::EXPR)
     end
 end
 
-function is_arg_of_resolved_call(x::EXPR) 
+function is_arg_of_resolved_call(x::EXPR)
     parentof(x) isa EXPR && headof(parentof(x)) === :call && # check we're in a call signature
     (caller = parentof(x).args[1]) !== x && # and that x is not the caller
     ((CSTParser.isidentifier(caller) && hasref(caller)) || (is_getfield(caller) && headof(caller.args[2]) === :quotenode && hasref(caller.args[2].args[1])))
@@ -226,10 +226,10 @@ end
 function get_arg_type_at_position(method, argi, types)
     if method isa EXPR
         sig = CSTParser.get_sig(method)
-        if sig !== nothing && 
+        if sig !== nothing &&
             sig.args !== nothing && argi <= length(sig.args) &&
             hasbinding(sig.args[argi]) &&
-            (argb = bindingof(sig.args[argi]); argb isa Binding && argb.type !== nothing) && 
+            (argb = bindingof(sig.args[argi]); argb isa Binding && argb.type !== nothing) &&
             !(argb.type in types)
             push!(types, argb.type)
             return
@@ -260,7 +260,7 @@ function infer_eltype(x::EXPR)
             end
         end
     elseif headof(x) === :ref && hasref(x.args[1])
-        r = refof(x.args[1]) 
+        r = refof(x.args[1])
         if r isa SymbolServer.DataTypeStore ||
             r isa Binding && CoreTypes.isdatatype(r.type)
             r
@@ -283,7 +283,7 @@ end
 function maybe_get_vec_eltype(t)
     if iscurly(t)
         lhs_ref = refof_maybe_getfield(t.args[1])
-        if lhs_ref isa SymbolServer.DataTypeStore && CoreTypes.isarray(lhs_ref) && length(t.args) > 1 
+        if lhs_ref isa SymbolServer.DataTypeStore && CoreTypes.isarray(lhs_ref) && length(t.args) > 1
             refof(t.args[2])
         end
     end

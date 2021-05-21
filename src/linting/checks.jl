@@ -91,26 +91,26 @@ LintOptions(::Colon) = LintOptions(fill(true, length(default_options))...)
 LintOptions(options::Vararg{Union{Bool,Nothing},length(default_options)}) =
     LintOptions(something.(options, default_options)...)
 
-function check_all(x::EXPR, opts::LintOptions, server)
+function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
     # Do checks
-    opts.call && check_call(x, server)
-    opts.iter && check_loop_iter(x, server)
-    opts.nothingcomp && check_nothing_equality(x, server)
+    opts.call && check_call(x, env)
+    opts.iter && check_loop_iter(x, env)
+    opts.nothingcomp && check_nothing_equality(x, env)
     opts.constif && check_if_conds(x)
     opts.lazy && check_lazy(x)
-    opts.datadecl && check_datatype_decl(x, server)
+    opts.datadecl && check_datatype_decl(x, env)
     opts.typeparam && check_typeparams(x)
     opts.modname && check_modulename(x)
     opts.pirates && check_for_pirates(x)
     opts.useoffuncargs && check_farg_unused(x)
-    check_kw_default(x, server)
+    check_kw_default(x, env)
     check_use_of_literal(x)
     check_break_continue(x)
     check_const(x)
 
     if x.args !== nothing
         for i in 1:length(x.args)
-            check_all(x.args[i], opts, server)
+            check_all(x.args[i], opts, env)
         end
     end
 end
@@ -261,13 +261,13 @@ end
 
 function is_something_with_methods(x::Binding)
     (CoreTypes.isfunction(x.type) && x.val isa EXPR) ||
-    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) || 
+    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) ||
     (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
 is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
 is_something_with_methods(x) = false
 
-function check_call(x, server)
+function check_call(x, env::ExternalEnv)
     if iscall(x)
         parentof(x) isa EXPR && headof(parentof(x)) === :do && return # TODO: add number of args specified in do block.
         length(x.args) == 0 && return
@@ -287,30 +287,30 @@ function check_call(x, server)
         call_counts = call_nargs(x)
         tls = retrieve_toplevel_scope(x)
         tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
-        func_ref === nothing && return 
-        !sig_match_any(func_ref, x, call_counts, tls, server) && seterror!(x, IncorrectCallArgs)
+        func_ref === nothing && return
+        !sig_match_any(func_ref, x, call_counts, tls, env) && seterror!(x, IncorrectCallArgs)
     end
 end
 
-function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls, server)
-    iterate_over_ss_methods(func_ref, tls, server, m -> compare_f_call(func_nargs(m), call_counts))
+function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls::Scope, env::ExternalEnv)
+    iterate_over_ss_methods(func_ref, tls, env, m -> compare_f_call(func_nargs(m), call_counts))
 end
 
-function sig_match_any(func_ref::Binding, x, call_counts, tls, server)
+function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::ExternalEnv)
     if func_ref.val isa SymbolServer.FunctionStore || func_ref.val isa SymbolServer.DataTypeStore
-        match = sig_match_any(func_ref.val, x, call_counts, tls, server)
+        match = sig_match_any(func_ref.val, x, call_counts, tls, env)
         match && return true
     end
     for r in func_ref.refs
         method = get_method(r)
         method === nothing && continue
-        sig_match_any(method, x, call_counts, tls, server) && return true
+        sig_match_any(method, x, call_counts, tls, env) && return true
     end
-    
+
     return false
 end
 
-function sig_match_any(func::EXPR, x, call_counts, tls, server)
+function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     if CSTParser.defines_function(func)
         m_counts = func_nargs(func)
     elseif CSTParser.defines_struct(func)
@@ -337,11 +337,11 @@ get_method(x) = nothing
 
 isdocumented(x::EXPR) = parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x)) && headof(parentof(x).args[1]) === :globalrefdoc
 
-function check_loop_iter(x::EXPR, server)
+function check_loop_iter(x::EXPR, env::ExternalEnv)
     if headof(x) === :for
         if length(x.args) > 0 && CSTParser.is_range(x.args[1])
             rng = rhs_of_iterator(x.args[1])
-            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(server)[:Base][:length])
+            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
                 seterror!(x.args[1], IncorrectIterSpec)
             end
         end
@@ -349,7 +349,7 @@ function check_loop_iter(x::EXPR, server)
         for i = 2:length(x.args)
             if CSTParser.is_range(x.args[i])
                 rng = rhs_of_iterator(x.args[i])
-                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbolserver(server)[:Base][:length])
+                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
                     seterror!(x.args[i], IncorrectIterSpec)
                 end
             end
@@ -357,11 +357,11 @@ function check_loop_iter(x::EXPR, server)
     end
 end
 
-function check_nothing_equality(x::EXPR, server)
+function check_nothing_equality(x::EXPR, env::ExternalEnv)
     if isbinarycall(x) && length(x.args) == 3
-        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
+        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
             seterror!(x.args[1], NothingEquality)
-        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbolserver(server)[:Core][:nothing]
+        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
             seterror!(x.args[1], NothingNotEq)
         end
     end
@@ -420,16 +420,16 @@ function check_lazy(x::EXPR)
     end
 end
 
-is_never_datatype(b, server) = false
-is_never_datatype(b::SymbolServer.DataTypeStore, server) = false
-function is_never_datatype(b::SymbolServer.FunctionStore, server)
-    !(SymbolServer._lookup(b.extends, getsymbolserver(server)) isa SymbolServer.DataTypeStore)
+is_never_datatype(b, env::ExternalEnv) = false
+is_never_datatype(b::SymbolServer.DataTypeStore, env::ExternalEnv) = false
+function is_never_datatype(b::SymbolServer.FunctionStore, env::ExternalEnv)
+    !(SymbolServer._lookup(b.extends, getsymbols(env)) isa SymbolServer.DataTypeStore)
 end
-function is_never_datatype(b::Binding, server)
+function is_never_datatype(b::Binding, env::ExternalEnv)
     if b.val isa Binding
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, env)
     elseif b.val isa SymbolServer.FunctionStore
-        return is_never_datatype(b.val, server)
+        return is_never_datatype(b.val, env)
     elseif CoreTypes.isdatatype(b.type)
         return false
     elseif b.type !== nothing
@@ -438,11 +438,11 @@ function is_never_datatype(b::Binding, server)
     return false
 end
 
-function check_datatype_decl(x::EXPR, server)
+function check_datatype_decl(x::EXPR, env::ExternalEnv)
     # Only call in function signatures?
     if isdeclaration(x) && parentof(x) isa EXPR && iscall(parentof(x))
         if (dt = refof_maybe_getfield(last(x.args))) !== nothing
-            if is_never_datatype(dt, server)
+            if is_never_datatype(dt, env)
                 seterror!(x, InvalidTypeDeclaration)
             end
         elseif CSTParser.isliteral(last(x.args))
@@ -494,7 +494,7 @@ function check_farg_unused_(arg, arg_names)
         return false
     end
     b = bindingof(arg)
-    
+
     # We don't care about these
     valof(b.name) isa String && all_underscore(valof(b.name)) && return false
 
@@ -523,18 +523,18 @@ function unwrap_nospecialize(x)
 end
 
 function is_nospecialize_call(x)
-    CSTParser.ismacrocall(x) && 
-    CSTParser.ismacroname(x.args[1]) && 
+    CSTParser.ismacrocall(x) &&
+    CSTParser.ismacroname(x.args[1]) &&
     is_nospecialize(x.args[1])
 end
 
 """
-collect_hints(x::EXPR, server, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
+collect_hints(x::EXPR, env, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
 
 Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
 identifiers are marked, the :all option will mark identifiers used in getfield calls."
 """
-function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
+function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tuple{Int,EXPR}[], pos=0)
     if quoted(x)
         isquoted = true
     elseif isquoted && unquoted(x)
@@ -553,12 +553,12 @@ function collect_hints(x::EXPR, server, missingrefs=:all, isquoted=false, errs=T
             # collect lint hints
             push!(errs, (pos, x))
         end
-    elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, server)
+    elseif isquoted && missingrefs == :all && should_mark_missing_getfield_ref(x, env)
         push!(errs, (pos, x))
     end
-    
+
     for i in 1:length(x)
-        collect_hints(x[i], server, missingrefs, isquoted, errs, pos)
+        collect_hints(x[i], env, missingrefs, isquoted, errs, pos)
         pos += x[i].fullspan
     end
 
@@ -573,7 +573,7 @@ function refof_maybe_getfield(x::EXPR)
     end
 end
 
-function should_mark_missing_getfield_ref(x, server)
+function should_mark_missing_getfield_ref(x, env)
     if isidentifier(x) && !hasref(x) && # x has no ref
     parentof(x) isa EXPR && headof(parentof(x)) === :quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x)).args[1])
@@ -583,7 +583,7 @@ function should_mark_missing_getfield_ref(x, server)
             return true
         elseif lhsref isa Binding
             # by-use type inference runs after we've resolved references so we may not have known lhsref's type first time round, lets try and find `x` again
-            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), server))
+            resolve_getfield(x, lhsref, ResolveOnly(retrieve_scope(x), env, nothing)) # FIXME: Setting `server` to nothing might be sketchy?
             hasref(x) && return false # We've resolved
             if lhsref.val isa Binding
                 lhsref = lhsref.val
@@ -592,7 +592,7 @@ function should_mark_missing_getfield_ref(x, server)
             if lhsref isa EXPR
                 # Not clear what is happening here.
                 return false
-            elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, server))
+            elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, env))
                 return true
             elseif lhsref.type isa Binding && lhsref.type.val isa EXPR && CSTParser.defines_struct(lhsref.type.val) && !has_getproperty_method(lhsref.type)
                 # We may have infered the lhs type after the semantic pass that was resolving references. Copied from `resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool`.
@@ -608,17 +608,17 @@ function should_mark_missing_getfield_ref(x, server)
 end
 
 unwrap_fakeunionall(x) = x isa SymbolServer.FakeUnionAll ? unwrap_fakeunionall(x.body) : x
-function has_getproperty_method(b::SymbolServer.DataTypeStore, server)
+function has_getproperty_method(b::SymbolServer.DataTypeStore, env)
     getprop_vr = SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Base), :getproperty)
-    if haskey(getsymbolextendeds(server), getprop_vr)
-        for ext in getsymbolextendeds(server)[getprop_vr]
-            for m in SymbolServer._lookup(ext, getsymbolserver(server))[:getproperty].methods
+    if haskey(getsymbolextendeds(env), getprop_vr)
+        for ext in getsymbolextendeds(env)[getprop_vr]
+            for m in SymbolServer._lookup(ext, getsymbols(env))[:getproperty].methods
                 t = unwrap_fakeunionall(m.sig[1][2])
                 !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
             end
         end
     else
-        for m in getsymbolserver(server)[:Base][:getproperty].methods
+        for m in getsymbols(env)[:Base][:getproperty].methods
             t = unwrap_fakeunionall(m.sig[1][2])
             !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
         end
@@ -718,7 +718,7 @@ end
 
 overwrites_imported_function(b) = false
 function overwrites_imported_function(b::Binding)
-    if ((b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore) && 
+    if ((b.val isa SymbolServer.FunctionStore || b.val isa SymbolServer.DataTypeStore) &&
         (is_in_fexpr(b.name, x -> headof(x) === :import)) || (b.refs isa Vector && length(b.refs) > 0 && (first(b.refs) isa SymbolServer.FunctionStore || first(b.refs) isa SymbolServer.DataTypeStore)))
         return true
     end
@@ -771,7 +771,7 @@ function find_if_parents(x::EXPR, current=Int[], list=Dict{EXPR,Vector{Int}}())
             end
             i += 1
         end
-        if headof(parentof(x)) == :if 
+        if headof(parentof(x)) == :if
             list[parentof(x)] = current
             current = []
         end
@@ -794,30 +794,30 @@ Check that the default value matches the type for keyword arguments. Following t
 checked: `String, Symbol, Int, Char, Bool, Float32, Float64, UInt8, UInt16, UInt32,
 UInt64, UInt128`.
 """
-function check_kw_default(x::EXPR, server)
+function check_kw_default(x::EXPR, env::ExternalEnv)
     if headof(x) == :kw && isdeclaration(x.args[1]) && CSTParser.isliteral(x.args[2]) && hasref(x.args[1].args[2])
         decl_T = refof(x.args[1].args[2])
         rhs = x.args[2]
         rhsval = valof(rhs)
-        if decl_T == getsymbolserver(server)[:Core][:String] && !CSTParser.isstringliteral(rhs)
+        if decl_T == getsymbols(env)[:Core][:String] && !CSTParser.isstringliteral(rhs)
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Symbol] && headof(rhs) !== :IDENTIFIER
+        elseif decl_T == getsymbols(env)[:Core][:Symbol] && headof(rhs) !== :IDENTIFIER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Int] && headof(rhs) !== :INTEGER
+        elseif decl_T == getsymbols(env)[:Core][:Int] && headof(rhs) !== :INTEGER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && headof(rhs) !== :INTEGER
+        elseif decl_T == getsymbols(env)[:Core][Sys.WORD_SIZE == 64 ? :Int64 : :Int32] && headof(rhs) !== :INTEGER
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Bool] && !(headof(rhs) === :TRUE || headof(rhs) === :FALSE)
+        elseif decl_T == getsymbols(env)[:Core][:Bool] && !(headof(rhs) === :TRUE || headof(rhs) === :FALSE)
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Char] && headof(rhs) !== :CHAR
+        elseif decl_T == getsymbols(env)[:Core][:Char] && headof(rhs) !== :CHAR
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Float64] && headof(rhs) !== :FLOAT
+        elseif decl_T == getsymbols(env)[:Core][:Float64] && headof(rhs) !== :FLOAT
             seterror!(rhs, KwDefaultMismatch)
-        elseif decl_T == getsymbolserver(server)[:Core][:Float32] && !(headof(rhs) === :FLOAT && occursin("f", rhsval))
+        elseif decl_T == getsymbols(env)[:Core][:Float32] && !(headof(rhs) === :FLOAT && occursin("f", rhsval))
             seterror!(rhs, KwDefaultMismatch)
         else
             for T in (UInt8, UInt16, UInt32, UInt64, UInt128)
-                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                if decl_T == getsymbols(env)[:Core][Symbol(T)]
                     # count the digits without prefix (=0x, 0o, 0b) and make sure it fits
                     # between upper and lower literal boundaries for `T` where the boundaries
                     # depend on the type of literal (binary, octal, hex)
@@ -837,7 +837,7 @@ function check_kw_default(x::EXPR, server)
             end
             # signed integers of non native size can't be declared as literal
             for T in (Int8, Int16, Sys.WORD_SIZE == 64 ? Int32 : Int64, Int128)
-                if decl_T == getsymbolserver(server)[:Core][Symbol(T)]
+                if decl_T == getsymbols(env)[:Core][Symbol(T)]
                     seterror!(rhs, KwDefaultMismatch)
                 end
             end
@@ -871,7 +871,7 @@ function check_break_continue(x::EXPR)
 end
 
 function check_const(x::EXPR)
-    if headof(x) === :const 
+    if headof(x) === :const
         if CSTParser.isassignment(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
             seterror!(x, TypeDeclOnGlobalVariable)
         elseif headof(x.args[1]) === :local
@@ -897,14 +897,14 @@ function is_sig_arg(x)
 end
 
 function is_overwritten_in_loop(x)
-    # Cuts out false positives for check_unused_binding - the linear nature of our 
-    # semantic passes mean a variable declared at the end of a loop's block but used at 
+    # Cuts out false positives for check_unused_binding - the linear nature of our
+    # semantic passes mean a variable declared at the end of a loop's block but used at
     # the start won't appear to be referenced.
 
     # Cheap version:
     # is_in_fexpr(x, x -> x.head === :while || x.head === :for)
-    
-    # We really want to check whether the enclosing scope(s) of the loop has a binding 
+
+    # We really want to check whether the enclosing scope(s) of the loop has a binding
     # with matching name.
     # Is this too expensive?
     loop = maybe_get_parent_fexpr(x, x -> x.head === :while || x.head === :for)
@@ -951,7 +951,7 @@ function (state::ComesBefore)(x::EXPR)
     state.result > 0 && return
     if x == state.x1
         state.result = 1
-        return 
+        return
     elseif x == state.x2
         state.result = 2
         return
@@ -972,7 +972,7 @@ function check_parent_scopes_for(s::Scope, name)
     # search (e.g. `bound_before`)
     if s.expr.head !== :module && parentof(s) isa Scope && haskey(parentof(s).names, name)
         s
-    elseif s.parent isa Scope 
+    elseif s.parent isa Scope
         check_parent_scopes_for(parentof(s), name)
     end
 end
@@ -1001,7 +1001,7 @@ function (state::BoundAfter)(x::EXPR)
     state.result > 1 && return
     if x == state.x1
         state.result = 1
-        return 
+        return
     end
     if scopeof(x) isa Scope && haskey(scopeof(x).names, state.name)
         state.result = 2

@@ -17,7 +17,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
         arg = x.args[i]
         if isoperator(arg) && valof(arg) == "."
             # Leading dots. Can only be leading elements.
-            if root == getsymbolserver(state.server)
+            if root == getsymbols(state)
                 root = state.scope
             elseif root isa Scope && parentof(root) !== nothing
                 root = parentof(root)
@@ -25,7 +25,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
                 return
             end
         elseif isidentifier(arg) || (i == n && (CSTParser.ismacroname(arg) || isoperator(arg)))
-            root = maybe_lookup(hasref(arg) ? refof(arg) : _get_field(root, arg, state), state.server)
+            root = maybe_lookup(hasref(arg) ? refof(arg) : _get_field(root, arg, state), state)
             setref!(arg, root)
             if i == n
                 markfinal && _mark_import_arg(arg, root, state, usinged)
@@ -37,7 +37,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
     end
 end
 
-function resolve_import(x::EXPR, state::State, root=getsymbolserver(state.server))
+function resolve_import(x::EXPR, state::State, root=getsymbols(state))
     if headof(x) === :using || headof(x) === :import
         usinged = headof(x) === :using
         if length(x.args) > 0 && isoperator(headof(x.args[1])) && valof(headof(x.args[1])) == ":"
@@ -50,9 +50,6 @@ function resolve_import(x::EXPR, state::State, root=getsymbolserver(state.server
                 resolve_import_block(x.args[i], state, root, usinged)
             end
         end
-        for i = 1:length(x.args)
-            resolve_import_block(x.args[i], state, root, usinged)
-        end
     end
 end
 
@@ -62,7 +59,7 @@ function _mark_import_arg(arg, par, state, usinged)
             push!(par.refs, arg)
         end
         if par isa SymbolServer.VarRef
-            par = SymbolServer._lookup(par, getsymbolserver(state.server), true)
+            par = SymbolServer._lookup(par, getsymbols(state), true)
             !(par isa SymbolServer.SymStore) && return
         end
         if bindingof(arg) === nothing
@@ -116,7 +113,9 @@ function _get_field(par, arg, state)
         if (arg_scope = retrieve_scope(arg)) !== nothing && (tlm = get_named_toplevel_module(arg_scope, arg_str_rep)) !== nothing && hasbinding(tlm)
             return bindingof(tlm)
         elseif haskey(par, Symbol(arg_str_rep))
-            return par[Symbol(arg_str_rep)]
+            if isempty(state.env.project_deps) || Symbol(arg_str_rep) in state.env.project_deps
+                return par[Symbol(arg_str_rep)]
+            end
         end
     elseif par isa SymbolServer.ModuleStore # imported module
         if Symbol(arg_str_rep) === par.name.name
@@ -124,12 +123,12 @@ function _get_field(par, arg, state)
         elseif haskey(par, Symbol(arg_str_rep))
             par = par[Symbol(arg_str_rep)]
             if par isa SymbolServer.VarRef # reference to dependency
-                return SymbolServer._lookup(par, getsymbolserver(state.server), true)
+                return SymbolServer._lookup(par, getsymbols(state), true)
             end
             return par
         end
         for used_module_name in par.used_modules
-            used_module = maybe_lookup(par[used_module_name], state.server)
+            used_module = maybe_lookup(par[used_module_name], state)
             if used_module !== nothing && isexportedby(Symbol(arg_str_rep), used_module)
                 return used_module[Symbol(arg_str_rep)]
             end
@@ -140,7 +139,7 @@ function _get_field(par, arg, state)
         elseif par.modules !== nothing
             for used_module in values(par.modules)
                 if used_module isa SymbolServer.ModuleStore && isexportedby(Symbol(arg_str_rep), used_module)
-                    return maybe_lookup(used_module[Symbol(arg_str_rep)], state.server)
+                    return maybe_lookup(used_module[Symbol(arg_str_rep)], state)
                 elseif used_module isa Scope && scope_exports(used_module, arg_str_rep, state)
                     return used_module.names[arg_str_rep]
                 end

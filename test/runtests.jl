@@ -1,6 +1,6 @@
 using StaticLint, SymbolServer
 using CSTParser, Test
-using StaticLint: scopeof, bindingof, refof, errorof, check_all
+using StaticLint: scopeof, bindingof, refof, errorof, check_all, getenv
 
 server = StaticLint.FileServer();
 
@@ -452,10 +452,6 @@ f(arg) = arg
         sin(x::Array{Number}) = 1
         sin(x::Array{<:Number}) = 1
         """)
-            StaticLint.check_for_pirates(cst[3])
-            StaticLint.check_for_pirates(cst[4])
-            StaticLint.check_for_pirates(cst[5])
-            StaticLint.check_for_pirates(cst[6])
             @test errorof(cst[3]) === nothing
             @test errorof(cst[4]) === nothing
             @test errorof(cst[5]) === StaticLint.TypePiracy
@@ -477,9 +473,6 @@ f(arg) = arg
         !=(a::T,b::T) = true
         !=(a::T,b::T) where T= true
         """)
-            StaticLint.check_for_pirates.(cst)
-
-
             @test errorof(cst[1]) === StaticLint.NotEqDef
             @test errorof(cst[2]) === StaticLint.NotEqDef
             @test errorof(cst[3]) === StaticLint.NotEqDef
@@ -492,8 +485,6 @@ f(arg) = arg
         sin(1)
         sin(1,2)
         """)
-            StaticLint.check_call(cst.args[1], server)
-            StaticLint.check_call(cst.args[2], server)
             @test StaticLint.errorof(cst.args[1]) === nothing
             @test StaticLint.errorof(cst.args[2]) == StaticLint.IncorrectCallArgs
         end
@@ -504,9 +495,7 @@ f(arg) = arg
             1
         end
         """)
-            StaticLint.check_call(cst.args[1].args[1], server)
             @test StaticLint.errorof(cst.args[1].args[1]) === nothing
-            StaticLint.check_call(cst.args[2].args[1], server)
             @test StaticLint.errorof(cst.args[2].args[1]) === nothing
         end
 
@@ -514,14 +503,12 @@ f(arg) = arg
         f(x) = 1
         f(1, 2)
         """)
-            StaticLint.check_call(cst.args[2], server)
             @test StaticLint.errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
         end
 
         let cst = parse_and_pass("""
         view([1], 1, 2, 3)
         """)
-            StaticLint.check_call(cst.args[1], server)
             @test StaticLint.errorof(cst.args[1]) === nothing
         end
 
@@ -530,8 +517,6 @@ f(arg) = arg
         f(1)
         f(1, 2)
         """)
-            StaticLint.check_call(cst.args[2], server)
-            StaticLint.check_call(cst.args[3], server)
             @test StaticLint.errorof(cst.args[2]) === nothing
             @test StaticLint.errorof(cst.args[3]) === nothing
         end
@@ -540,7 +525,6 @@ f(arg) = arg
             func(a...)
         end
         """)
-            StaticLint.check_call(cst.args[1].args[2].args[1], server)
             m_counts = StaticLint.func_nargs(cst.args[1])
             call_counts = StaticLint.call_nargs(cst.args[1].args[2].args[1])
             @test StaticLint.errorof(cst.args[1].args[2].args[1]) === nothing
@@ -550,7 +534,6 @@ f(arg) = arg
         func(1, 2)
         """)
             @test StaticLint.func_nargs(cst.args[1]) == (0, typemax(Int), String[], false)
-            StaticLint.check_call(cst.args[2], server)
             @test StaticLint.errorof(cst.args[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -558,7 +541,6 @@ f(arg) = arg
         tail(x::Tuple) = argtail(x...)
         """)
             @test StaticLint.func_nargs(cst[1]) == (1, typemax(Int), String[], false)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -567,14 +549,12 @@ f(arg) = arg
         """)
 
             @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
         function f(a, b; kw = kw) end
         f(1,2, kw = 1)
         """)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -582,7 +562,6 @@ f(arg) = arg
         func(a..., 2)
         """)
             StaticLint.call_nargs(cst[2])
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -591,7 +570,6 @@ f(arg) = arg
         end
         A(x = 5.0)
         """)
-            StaticLint.check_call(cst[2], server)
             @test StaticLint.errorof(cst[2]) === nothing
         end
         let cst = parse_and_pass("""
@@ -604,7 +582,7 @@ f(arg) = arg
         sin(1)
         """)
         # Checks that documented symbols are skipped
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, StaticLint.getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         import Base: sin
@@ -612,13 +590,13 @@ f(arg) = arg
         sin(1)
         """)
         # Checks that documented symbols are skipped
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
             function f(a::F)::Bool where {F} a end
             """)
             # ensure we strip all type decl code from around signature
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
 
@@ -655,7 +633,7 @@ f(arg) = arg
         func
         func1
         """)
-                StaticLint.collect_hints(cst, server)
+                StaticLint.collect_hints(cst, getenv(server.files[""], server))
                 @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
                 @test StaticLint.hasref(cst[4])
                 @test StaticLint.hasref(cst[5])
@@ -679,7 +657,7 @@ f(arg) = arg
     @variable(model, x6 >= some_bound)
     # @variable(model, some_bound >= x7)
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -695,7 +673,7 @@ f(arg) = arg
     @variable model x6 >= some_bound
     # @variable(model, some_bound >= x7)
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -713,7 +691,7 @@ f(arg) = arg
     some_bound = 1
     @expression(model, ex, some_bound >= 1)
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -723,7 +701,7 @@ f(arg) = arg
     @constraint(model, con1, expr)
     @constraint model con2 expr
     """)
-                @test isempty(StaticLint.collect_hints(cst, server))
+                @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
             end
         end
     end
@@ -731,8 +709,8 @@ f(arg) = arg
     @testset "stdcall" begin
         let cst = parse_and_pass("""
         ccall(:GetCurrentProcess, stdcall, Ptr{Cvoid}, ())""")
-            StaticLint.collect_hints(cst, server)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            StaticLint.collect_hints(cst, getenv(server.files[""], server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         stdcall
@@ -844,7 +822,7 @@ f(arg) = arg
         ASDF(1)
         """)
             # Check inner constructor is hoisted
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
 
@@ -888,7 +866,7 @@ f(arg) = arg
         f(x::T) = x.f3
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         struct T{S}
@@ -900,16 +878,16 @@ f(arg) = arg
         """)
             @test !StaticLint.hasref(cst.args[3].args[2].args[1].args[2].args[1])
             @test StaticLint.is_type_of_call_to_getproperty(cst.args[2].args[1].args[2].args[2].args[1])
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
 
         let cst = parse_and_pass("f(x::Module) = x.parent1")
-            @test StaticLint.has_getproperty_method(server.symbolserver[:Core][:Module], server)
-            @test !StaticLint.has_getproperty_method(server.symbolserver[:Core][:DataType], server)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:Module], getenv(server.files[""], server))
+            @test !StaticLint.has_getproperty_method(server.external_env.symbols[:Core][:DataType], getenv(server.files[""], server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("f(x::DataType) = x.sdf")
-            @test !isempty(StaticLint.collect_hints(cst, server))
+            @test !isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     @testset "using of self" begin # e.g. `using StaticLint: StaticLint`
@@ -1044,12 +1022,12 @@ f(arg) = arg
         function Bool(x) x end
         ^(z::Complex, n::Bool) = n ? z : one(z)
         """)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
         (rand(d::Vector{T})::T) where {T}  =  1
         """)
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     @testset "Test self" begin
@@ -1063,16 +1041,16 @@ f(arg) = arg
     @irrational ase 0.45343 π
     ase
     """)
-        @test isempty(StaticLint.collect_hints(cst, server))
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
     end
 
     @testset "quoted getfield" begin
         let cst = parse_and_pass("Base.:sin")
-            @test isempty(StaticLint.collect_hints(cst[1], server))
+            @test isempty(StaticLint.collect_hints(cst[1], getenv(server.files[""], server)))
         end
         @testset "quoted getfield" begin
             let cst = parse_and_pass("Base.:sin")
-                @test isempty(StaticLint.collect_hints(cst.args[1], server))
+                @test isempty(StaticLint.collect_hints(cst.args[1], getenv(server.files[""], server)))
             end
 
             let cst = parse_and_pass("""
@@ -1090,9 +1068,8 @@ f(arg) = arg
         sin()
         """)
                 @test haskey(cst.meta.scope.names, "sin") #
-                @test first(cst.meta.scope.names["sin"].refs) == server.symbolserver[:Base][:sin]
-                StaticLint.check_call(cst[2], server)
-                @test isempty(StaticLint.collect_hints(cst[2], server))
+                @test first(cst.meta.scope.names["sin"].refs) == server.external_env.symbols[:Base][:sin]
+                @test isempty(StaticLint.collect_hints(cst[2], getenv(server.files[""], server)))
             end
     # As above but for user defined function
             let cst = parse_and_pass("""
@@ -1103,7 +1080,6 @@ f(arg) = arg
         M.f(1,2)
         """)
                 @test !haskey(cst.meta.scope.names, "f")
-                StaticLint.check_call(cst.args[3], server)
                 @test errorof(cst.args[3]) === nothing
             end
 
@@ -1121,7 +1097,7 @@ f(arg) = arg
         Base.argtail()
         """)
             @test !haskey(cst.meta.scope.names, "argtail") #
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     # As above but for user defined function
         let cst = parse_and_pass("""
@@ -1132,7 +1108,7 @@ f(arg) = arg
         M.ff()
         """)
             @test !haskey(cst.meta.scope.names, "ff")
-            @test isempty(StaticLint.collect_hints(cst[3], server))
+            @test isempty(StaticLint.collect_hints(cst[3], getenv(server.files[""], server)))
         end
 
         let cst = parse_and_pass("""
@@ -1144,7 +1120,7 @@ f(arg) = arg
             @test cst.meta.scope.names["argtail"] === bindingof(cst[1][2][3][1])
             @test StaticLint.get_method(cst.meta.scope.names["argtail"].refs[2]) isa CSTParser.EXPR
             @test cst[3][1][3][1].meta.ref == cst.meta.scope.names["argtail"]
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
 
@@ -1166,12 +1142,10 @@ f(arg) = arg
     @testset "check kw default definition" begin
         function kw_default_ok(s)
             cst = parse_and_pass(s)
-            StaticLint.check_kw_default(cst.args[1].args[2], server)
             @test errorof(cst.args[1].args[2].args[2]) === nothing
         end
         function kw_default_notok(s)
             cst = parse_and_pass(s)
-            StaticLint.check_kw_default(cst.args[1].args[2], server)
             @test errorof(cst.args[1].args[2].args[2]) == StaticLint.KwDefaultMismatch
         end
 
@@ -1382,8 +1356,8 @@ f(arg) = arg
 
     if VERSION > v"1.5-"
         @testset "issue #210" begin
-            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = ()""")
-            @test isempty(StaticLint.collect_hints(cst, server))
+            cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     if isdefined(Base, Symbol("@kwdef"))
@@ -1392,7 +1366,7 @@ f(arg) = arg
             Base.@kwdef struct T
                 arg = 1
             end""")
-            @test isempty(StaticLint.collect_hints(cst, server))
+            @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
     end
     @testset "type inference by use" begin
@@ -1491,7 +1465,7 @@ end
         arg * kw
     end
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 end
 
 @testset "handle shadow bindings on method" begin
@@ -1500,7 +1474,7 @@ end
     g = f
     g(1)
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 end
 
 @testset "documented symbol resolving" begin
@@ -1511,7 +1485,7 @@ end
     func
     func(x) = 1
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 
     cst = parse_and_pass("""
     \"\"\"
@@ -1520,7 +1494,7 @@ end
     func(a,b)::Int
     func(x, b) = 1
     """)
-    @test isempty(StaticLint.collect_hints(cst, server))
+    @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 end
 
 @testset "unused bindings" begin
@@ -1550,7 +1524,7 @@ end
         while true
             arg = 1
         end
-    end 
+    end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 
@@ -1562,14 +1536,14 @@ end
                 arg = 1
             end
         end
-    end 
+    end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 
     cst = parse_and_pass("""
     function f()
         (a = 1, b = 2)
-    end 
+    end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 
@@ -1581,11 +1555,11 @@ end
                 arg = 1
             end
         end
-    end 
+    end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
-                                                
+
 @testset "unwrap sig" begin
     cst = parse_and_pass("""
     function multiply!(x::T, y::Integer) where {T} end
@@ -1675,7 +1649,7 @@ end
         x
     end
     """)
-    
+
     # check soft-scope bindings are lifted to parent scope
     @test refof(cst[1][3][2]) == bindingof(cst[1][3][1][1])
     @test refof(cst[1][3][4]) == bindingof(cst[1][3][3][3][1][1])
@@ -1685,7 +1659,7 @@ end
     # check binding made in soft-scope with no matching binidng in parent scope isn't lifted
     @test !haskey(scopeof(cst[1]).names, "y")
     @test haskey(scopeof(cst[1][3][7]).names, "y")
-    
+
 
     @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][1]))) == 8
     @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][3][1][1]))) == 8
@@ -1707,7 +1681,7 @@ end
     @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 2
 end
 
-@testset "#1218" begin 
+@testset "#1218" begin
     cst = parse_and_pass("""function foo(a; p) a+p end
     foo(1, p = true)""")
     @test isempty(StaticLint.collect_hints(cst, server))
@@ -1716,18 +1690,18 @@ end
     foo(1, p = true)""")
     @test cst[1][2][4][1].meta.error != false
 end
-    
+
 
 if Meta.parse("import a as b", raise = false).head !== :error
-    @testset "import as ..." begin 
+    @testset "import as ..." begin
         cst = parse_and_pass("""import Base as base""")
         @test StaticLint.hasbinding(cst[1][2][3])
         @test !StaticLint.hasbinding(cst[1][2][1][1])
     end
 end
-    
 
-@testset "#1218" begin 
+
+@testset "#1218" begin
     cst = parse_and_pass("""
     module Sup
     function myfunc end
@@ -1741,5 +1715,3 @@ end
     @test isempty(StaticLint.collect_hints(cst, server))
 
 end
-    
-

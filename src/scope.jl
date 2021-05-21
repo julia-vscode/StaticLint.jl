@@ -126,12 +126,12 @@ function scopes(x::EXPR, state)
         state.scope = scopeof(x)
         if headof(x) === :module && headof(x.args[1]) === :TRUE # Add default modules to a new module
             state.scope.modules = Dict{Symbol,Any}() # TODO: only create new Dict if not assigned?
-            state.scope.modules[:Base] = getsymbolserver(state.server)[:Base]
-            state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
+            state.scope.modules[:Base] = getsymbols(state)[:Base]
+            state.scope.modules[:Core] = getsymbols(state)[:Core]
             add_eval_method(x, state)
         elseif headof(x) === :module && headof(x.args[1]) === :FALSE
             state.scope.modules = Dict{String,Any}()
-            state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
+            state.scope.modules[:Core] = getsymbols(state)[:Core]
             add_eval_method(x, state)
         end
         if headof(x) === :module && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
@@ -153,5 +153,5 @@ function add_eval_method(x, state)
         Symbol("top-level")
     end
     meth = SymbolServer.MethodStore(:eval, mod, "", 0, [:expr => SymbolServer.FakeTypeName(SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any), [])], [], Any)
-    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbolserver(state.server)[:Core][:DataType], [])
+    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbols(state)[:Core][:DataType], [])
 end
