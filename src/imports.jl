@@ -4,7 +4,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
         if x.args[2].meta === nothing
             x.args[2].meta = Meta()
         end
-        if hasbinding(last(x.args[1].args))
+        if hasbinding(last(x.args[1].args)) && CSTParser.isidentifier(x.args[2])
             lhsbinding = bindingof(last(x.args[1].args))
             x.args[2].meta.binding = Binding(x.args[2], lhsbinding.val, lhsbinding.type, lhsbinding.refs)
             setref!(x.args[2], bindingof(x.args[2]))
@@ -32,7 +32,7 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
                 return refof(arg)
             end
         else
-            return 
+            return
         end
     end
 end
@@ -92,11 +92,11 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
     end
 end
 no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)
-function get_named_toplevel_module(s, name) 
+function get_named_toplevel_module(s, name)
     return nothing
 end
 function get_named_toplevel_module(s::Scope, name::String)
-    if CSTParser.defines_module(s.expr) 
+    if CSTParser.defines_module(s.expr)
         m_name = CSTParser.get_name(s.expr)
         if ((headof(m_name) === :IDENTIFIER && valof(m_name) == name) || headof(m_name) === :NONSTDIDENTIFIER && length(m_name.args) == 2 && valof(m_name.args[2]) == name) && no_modules_above(s)
             return s.expr
