@@ -1697,6 +1697,9 @@ if Meta.parse("import a as b", raise = false).head !== :error
         cst = parse_and_pass("""import Base as base""")
         @test StaticLint.hasbinding(cst[1][2][3])
         @test !StaticLint.hasbinding(cst[1][2][1][1])
+
+        # incomplete expressinon should not error
+        cst = parse_and_pass("""import Base as""")
     end
 end
 
