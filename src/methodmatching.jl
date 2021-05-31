@@ -221,7 +221,7 @@ function refof_call_func(x)
     end
 end
 
-function is_sig_of_method(sig::EXPR, method = maybe_get_parent_fexpr(sig, defines_function))
+function is_sig_of_method(sig::EXPR, method=maybe_get_parent_fexpr(sig, defines_function))
     method !== nothing && sig == CSTParser.get_sig(method)
 end
 

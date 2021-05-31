@@ -189,7 +189,7 @@ function maybe_quoted_list(x::EXPR)
             if name !== nothing
                 push!(names, name)
             else
-                return nothing
+    return nothing
             end
         end
         return names
@@ -241,7 +241,7 @@ function interpret_eval(x::EXPR, state)
                         end
                     end
                 end
-            end
+    end
         end
     end
 end
@@ -253,7 +253,7 @@ function rhs_of_iterator(x::EXPR)
     else
         x.args[3]
     end
-end
+    end
 
 function collect_expr_with_bindings(x, bound_exprs=EXPR[])
     if hasbinding(x)

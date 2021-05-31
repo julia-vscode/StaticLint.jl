@@ -34,7 +34,7 @@ function gotoobjectofref(x::EXPR)
     r = refof(x)
     if r isa SymbolServer.SymStore
         return r
-    elseif r isa Binding
+elseif r isa Binding
 
     end
 end
@@ -114,7 +114,7 @@ function mark_bindings!(x::EXPR, state)
             if isidentifier(x.args[i])
                 mark_binding!(x.args[i])
                 setref!(x.args[i], bindingof(x.args[i]))
-            end
+end
         end
     end
 end
@@ -140,7 +140,7 @@ function mark_binding!(x::EXPR, val=x)
     return x
 end
 
-function mark_parameters(sig::EXPR, params = String[])
+function mark_parameters(sig::EXPR, params=String[])
     if CSTParser.issubtypedecl(sig)
         mark_parameters(sig.args[1], params)
     elseif iswhere(sig)
@@ -228,12 +228,12 @@ function mark_typealias_bindings!(x::EXPR)
             mark_binding!(arg)
         elseif CSTParser.issubtypedecl(arg) && isidentifier(arg.args[1])
             mark_binding!(arg.args[1])
-        end
+end
     end
     return x
 end
 
-function is_in_funcdef(x)
+    function is_in_funcdef(x)
     if !(parentof(x) isa EXPR)
         return false
     elseif CSTParser.iswhere(parentof(x)) || CSTParser.isbracketed(parentof(x))
@@ -281,7 +281,7 @@ function add_binding(x, state, scope=state.scope)
             return
         end
         # check for global marker
-        if isglobal(name, scope)
+            if isglobal(name, scope)
             scope = _get_global_scope(state.scope)
         end
 
@@ -366,7 +366,7 @@ function add_binding(x, state, scope=state.scope)
 end
 
 function enforce_hard_scope(x::EXPR, scope)
-    scope.expr.head === :for && is_in_fexpr(x, x-> x == scope.expr.args[1])
+    scope.expr.head === :for && is_in_fexpr(x, x -> x == scope.expr.args[1])
 end
 
 name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && CSTParser.is_getfield_w_quotenode(parentof(parentof(x)))
@@ -389,7 +389,7 @@ function mark_globals(x::EXPR, state)
         if !scopehasbinding(state.scope, "#globals")
             state.scope.names["#globals"] = Binding(EXPR(:IDENTIFIER, EXPR[], nothing, 0, 0, "#globals", nothing, nothing), nothing, nothing, [])
         end
-        for i = 2:length(x.args)
+            for i = 2:length(x.args)
             if isidentifier(x.args[i]) && !scopehasbinding(state.scope, valofid(x.args[i]))
                 push!(state.scope.names["#globals"].refs, valofid(x.args[i]))
             end

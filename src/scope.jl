@@ -153,5 +153,5 @@ function add_eval_method(x, state)
         Symbol("top-level")
     end
     meth = SymbolServer.MethodStore(:eval, mod, "", 0, [:expr => SymbolServer.FakeTypeName(SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any), [])], [], Any)
-    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbols(state)[:Core][:DataType], [])
+    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth], "", SymbolServer.VarRef(nothing, :nothing), false), getsymbols(state)[:Core][:DataType], [])
 end
