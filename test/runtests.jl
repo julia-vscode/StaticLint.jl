@@ -1718,3 +1718,14 @@ end
     @test isempty(StaticLint.collect_hints(cst, server))
 
 end
+
+
+@testset "macrocall bindings: #2187" begin
+    cst = parse_and_pass("""
+    function f()
+        @info "Downloading" source = url dest = file
+        return nothing
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
