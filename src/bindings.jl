@@ -59,6 +59,8 @@ function mark_bindings!(x::EXPR, state)
             mark_sig_args!(x.args[1])
         elseif CSTParser.iscurly(x.args[1])
             mark_typealias_bindings!(x)
+        elseif is_in_noneval_macrocall(x.args[1])
+            return
         elseif !is_getfield(x.args[1])
             mark_binding!(x.args[1], x)
         end
@@ -156,8 +158,8 @@ function mark_parameters(sig::EXPR, params = String[])
         for i = 2:length(sig.args)
             x = mark_binding!(sig.args[i])
             if bindingof(x) isa Binding && valof(bindingof(x).name) in params
-                # Don't mark a new binding if a parameter has already been 
-                # introduced from a :where 
+                # Don't mark a new binding if a parameter has already been
+                # introduced from a :where
                 x.meta.binding = nothing
             end
         end
@@ -259,7 +261,7 @@ end
 
 Add the binding of `x` to the current scope. Special handling is required for:
 * macros: to prefix the `@`
-* functions: These are added to the top-level scope unless this syntax is used to define a closure within a function. If a function with the same name already exists in the scope then it is not replaced. This enables the `refs` list of the Binding of that 'root method' to hold a method table, the name of the new function will resolve to the binding of the root method (to get a list of actual methods -`[get_method(ref) for ref in binding.refs if get_method(ref) !== nothing]`). For example 
+* functions: These are added to the top-level scope unless this syntax is used to define a closure within a function. If a function with the same name already exists in the scope then it is not replaced. This enables the `refs` list of the Binding of that 'root method' to hold a method table, the name of the new function will resolve to the binding of the root method (to get a list of actual methods -`[get_method(ref) for ref in binding.refs if get_method(ref) !== nothing]`). For example
 ```julia
 [1] f() = 1
 [2] f(x) = 2
@@ -302,14 +304,14 @@ function add_binding(x, state, scope=state.scope)
                     # Overloading
                     if haskey(tls.names, name) && eventually_overloads(tls.names[name], lhs_ref.vals[Symbol(name)], state)
                         # Though we're explicitly naming a function for overloading, it has already been imported to the toplevel scope.
-                        if !hasref(b.name) 
+                        if !hasref(b.name)
                             setref!(b.name, tls.names[name]) # Add ref to previous overload
                             overload_method(tls, b, VarRef(lhs_ref.name, Symbol(name)))
                         end
                         # Do nothing, get_name(x) will resolve to the root method
                     elseif isexportedby(name, lhs_ref)
                         # Name is already available
-                        tls.names[name] = b 
+                        tls.names[name] = b
                         if !hasref(b.name) # Is this an appropriate indicator that we've not marked the overload?
                             push!(b.refs, maybe_lookup(lhs_ref[Symbol(name)], state))
                             setref!(b.name, b) # we actually set the rhs of the qualified name to point to this binding
