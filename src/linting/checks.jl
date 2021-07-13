@@ -301,13 +301,21 @@ function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::Exter
         match = sig_match_any(func_ref.val, x, call_counts, tls, env)
         match && return true
     end
+    
+    has_at_least_one_method = func_ref.val isa EXPR && defines_function(func_ref.val)
+    # handle case where func_ref is typed as Function and yet has no methods 
+
     for r in func_ref.refs
         method = get_method(r)
         method === nothing && continue
+        has_at_least_one_method = true
         sig_match_any(method, x, call_counts, tls, env) && return true
     end
-
-    return false
+    if has_at_least_one_method
+        return false
+    else
+        return true
+    end
 end
 
 function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
