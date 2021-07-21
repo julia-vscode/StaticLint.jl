@@ -62,8 +62,6 @@ An `AbstractFile` must support the following:
 
 `StaticLint.getpath(file)` : Retrieve the path of a file.
 
-`StaticLint.setpath(file, path)` : Set the path of a file.
-
 `StaticLint.getroot(file)` : Retrieve the root of a file. The root is the main/first file in a file structure. For example the `StaticLint.jl` file is the root of all files (including itself) in `src/`.
 
 `StaticLint.setroot(file, root)` : Set the root of a file.
@@ -76,4 +74,4 @@ An `AbstractFile` must support the following:
 
 `StaticLint.setserver(file, server::AbstractServer)` : Set the server of a file.
 
-`StaticLint.scopepass(file, target = nothing(optional))` : Run a full pass on the ST of a project (i.e. ST of all linked files). It is expected that `file` is the root of the project. 
+`StaticLint.semantic_pass(file, target = nothing(optional))` : Run a full pass on the ST of a project (i.e. ST of all linked files). It is expected that `file` is the root of the project. 

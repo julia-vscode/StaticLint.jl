@@ -1,35 +1,5 @@
-quoted(x) = typof(x) === Quote || typof(x) === Quotenode
-unquoted(x) = typof(x) === UnaryOpCall && typof(x[1]) === OPERATOR && kindof(x[1]) == CSTParser.Tokens.EX_OR
-
-function get_ids(x, q = false, ids = [])
-    if quoted(x)
-        q = true
-    end
-    if q && unquoted(x)
-        q = false
-    end
-    if isidentifier(x) 
-        !q && push!(ids, x)
-    elseif length(x) > 0
-        for i in 1:length(x)
-            get_ids(x[i], q, ids)
-        end
-    end
-    ids
-end
-
-function collect_bindings_refs(x::EXPR, bindings = [], refs = [])
-    if bindingof(x) !== nothing
-        push!(bindings, x)
-    end
-    if StaticLint.hasref(x)
-        push!(refs, x)
-    end
-    for a in x
-        collect_bindings_refs(a, bindings, refs)
-    end
-    return bindings, refs
-end
+quoted(x) = headof(x) === :quote || headof(x) === :quotenode
+unquoted(x) = isunarycall(x) && valof(x.args[1]) == "\$"
 
 function remove_ref(x::EXPR)
     if hasref(x) && refof(x) isa Binding && refof(x).refs isa Vector
@@ -50,7 +20,11 @@ function clear_binding(x::EXPR)
             if r isa EXPR
                 setref!(r, nothing)
             elseif r isa Binding
-                clear_binding(r)
+                if r.type == bindingof(x)
+                    r.type = nothing
+                else
+                    clear_binding(r)
+                end
             end
         end
         x.meta.binding = nothing
@@ -60,13 +34,16 @@ function clear_scope(x::EXPR)
     if hasmeta(x) && scopeof(x) isa Scope
         setparent!(scopeof(x), nothing)
         empty!(scopeof(x).names)
-        if typof(x) === FileH && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
+        if headof(x) === :file && scopeof(x).modules isa Dict && scopehasmodule(scopeof(x), :Base) && scopehasmodule(scopeof(x), :Core)
             m1, m2 = getscopemodule(scopeof(x), :Base), getscopemodule(scopeof(x), :Core)
             empty!(scopeof(x).modules)
             addmoduletoscope!(scopeof(x), m1)
             addmoduletoscope!(scopeof(x), m2)
         else
             scopeof(x).modules = nothing
+        end
+        if scopeof(x).overloaded !== nothing
+            empty!(scopeof(x).overloaded)
         end
     end
 end
@@ -87,7 +64,7 @@ function clear_ref(x::EXPR)
     end
 end
 function clear_error(x::EXPR)
-    if hasmeta(x) && x.meta.error !== nothing 
+    if hasmeta(x) && x.meta.error !== nothing
         x.meta.error = nothing
     end
 end
@@ -96,26 +73,27 @@ function clear_meta(x::EXPR)
     clear_ref(x)
     clear_scope(x)
     clear_error(x)
-    for a in x
-        clear_meta(a)
+    if x.args !== nothing
+        for a in x.args
+            clear_meta(a)
+        end
     end
+    # if x.trivia !== nothing
+    #     for a in x.trivia
+    #         clear_meta(a)
+    #     end
+    # end
 end
 
 function get_root_method(b, server)
     return b
 end
 
-function get_root_method(b::Binding, server, b1 = nothing, visited_bindings = Binding[])
-    if b.prev === nothing || b == b.prev || !(b.prev isa Binding) || b in visited_bindings
-        return b
-    end
-    push!(visited_bindings, b)
-    if b.type == b.prev.type == CoreTypes.Function
-        return get_root_method(b.prev, server, b, visited_bindings)
-    elseif b.type == CoreTypes.Function && b.prev.type == CoreTypes.DataType
-        return b.prev
+function get_root_method(b::Binding, server)
+    if CoreTypes.isfunction(b.type) && !isempty(b.refs)
+        first(b.refs)
     else
-        return b
+        b
     end
 end
 
@@ -126,10 +104,8 @@ function retrieve_delayed_scope(x)
         else
             return scopeof(x)
         end
-    elseif typof(x) === Export
+    else
         return retrieve_scope(x)
-    elseif parentof(x) !== nothing
-        return retrieve_delayed_scope(parentof(x))
     end
     return nothing
 end
@@ -140,88 +116,45 @@ function retrieve_scope(x)
     elseif parentof(x) isa EXPR
         return retrieve_scope(parentof(x))
     end
-    return 
+    return
 end
 
 
-function find_return_statements(x::EXPR)
-    rets = EXPR[]
-    if CSTParser.defines_function(x)
-        find_return_statements(x[3], true, rets)
-    end
-    return rets
-end
+# function find_return_statements(x::EXPR)
+#     rets = EXPR[]
+#     if CSTParser.defines_function(x)
+#         find_return_statements(x.args[2], true, rets)
+#     end
+#     return rets
+# end
 
-function find_return_statements(x::EXPR, last_stmt, rets)
-    if last_stmt && !(typof(x) === CSTParser.Block || typof(x) === CSTParser.If || typof(x) === CSTParser.KEYWORD)
-        push!(rets, x)
-        return rets, false
-    end 
+# function find_return_statements(x::EXPR, last_stmt, rets)
+#     if last_stmt && !(headof(x) === :block || headof(x) === :if || iskw(x))
+#         push!(rets, x)
+#         return rets, false
+#     end
 
-    if typof(x) === CSTParser.Return
-        push!(rets, x)
-        return rets, true
-    end
-
-
-    for i = 1:length(x)
-        _, stop_iter = find_return_statements(x[i], last_stmt && (i == length(x) || (typof(x) === CSTParser.If && typof(x[i]) === CSTParser.Block)), rets)
-        stop_iter && break
-    end
-    return rets, false
-end
+#     if headof(x) === :return
+#         push!(rets, x)
+#         return rets, true
+#     end
 
 
-function _expr_assert(x::EXPR, typ, nargs)
-    typof(x) == typ && length(x) == nargs
-end
-
-function _binary_assert(x, kind)
-    typof(x) === CSTParser.BinaryOpCall && length(x) == 3 && typof(x[2]) === CSTParser.OPERATOR && kindof(x[2]) === kind
-end
-    
-# should only be called on Bindings to functions
-function last_method(func::Binding)
-    if func.next isa Binding && (func.next.type === CoreTypes.Function || (func.next.type === CoreTypes.DataType && func.type === CoreTypes.Function))
-        return func.next
-    else
-        return func
-    end
-end
-
-function prev_method(func::Binding)
-    if func.prev isa Binding
-        if func.prev.type === CoreTypes.Function
-            return func.prev
-        elseif func.prev.type === CoreTypes.DataType && func.prev.val isa EXPR && CSTParser.defines_struct(func.prev.val)
-            return func.prev
-        elseif (func.prev.val isa SymbolServer.FunctionStore || func.prev.val isa SymbolServer.DataTypeStore) && length(func.prev.val.methods) > 0
-            return func.prev.val, 1
-        end
-    elseif (func.prev isa SymbolServer.FunctionStore || func.prev isa SymbolServer.DataTypeStore) && length(func.prev.methods) > 0
-        return func.prev, 1
-    end
-    return nothing
-end
-
-function prev_method(func_iter::Tuple{T,Int}) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}
-    func = func_iter[1]
-    iter = func_iter[2]
-    if iter < length(func.methods) 
-        return func, iter + 1
-    else
-        return nothing
-    end
-end
+#     for i = 1:length(x)
+#         _, stop_iter = find_return_statements(x[i], last_stmt && (i == length(x) || (headof(x) === CSTParser.If && headof(x[i]) === CSTParser.Block)), rets)
+#         stop_iter && break
+#     end
+#     return rets, false
+# end
 
 function find_exported_names(x::EXPR)
     exported_vars = EXPR[]
-    for i in 1:length(x[3])
-        expr = x[3][i]
-        if typof(expr) == CSTParser.Export && 
-            for j = 2:length(expr)
-                if CSTParser.isidentifier(expr[j]) && hasref(expr[j])
-                    push!(exported_vars, expr[j])
+    for i in 1:length(x.args[3].args)
+        expr = x.args[3].args[i]
+        if headof(expr) === :export
+            for j = 2:length(expr.args)
+                if isidentifier(expr.args[j]) && hasref(expr.args[j])
+                    push!(exported_vars, expr.args[j])
                 end
             end
         end
@@ -229,38 +162,12 @@ function find_exported_names(x::EXPR)
     return exported_vars
 end
 
-"""
-    is_in_fexpr(x::EXPR, f)
-Check whether `x` isa the child of an expression for which `f(parent) == true`.
-"""
-function is_in_fexpr(x::EXPR, f)
-    if f(x)
-        return true
-    elseif parentof(x) isa EXPR
-        return is_in_fexpr(parentof(x), f)
-    else
-        return false
-    end
-end
-
-"""
-    get_in_fexpr(x::EXPR, f)
-Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
-"""
-function get_parent_fexpr(x::EXPR, f)
-    if f(x)
-        return x
-    elseif parentof(x) isa EXPR
-        return get_parent_fexpr(parentof(x), f)
-    end
-end
-
 hasreadperm(p::String) = (uperm(p) & 0x04) == 0x04
 
 # check whether a path is in (including subfolders) the julia base dir. Returns "" if not, and the path to the base dir if so.
 function _is_in_basedir(path::String)
     i = findfirst(r".*base", path)
-    i == nothing && return ""
+    i === nothing && return ""
     path1 = path[i]::String
     !hasreadperm(path1) && return ""
     !isdir(path1) && return ""
@@ -271,43 +178,53 @@ function _is_in_basedir(path::String)
     return ""
 end
 
-isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && ((m[k] isa SymbolServer.SymStore && m[k].exported) || k in m.exportednames)
+_is_macrocall_to_BaseDIR(arg) = headof(arg) === :macrocall && length(arg.args) == 2 && valof(arg.args[1]) == "@__DIR__"
+
+
+isexportedby(k::Symbol, m::SymbolServer.ModuleStore) = haskey(m, k) && k in m.exportednames
 isexportedby(k::String, m::SymbolServer.ModuleStore) = isexportedby(Symbol(k), m)
 isexportedby(x::EXPR, m::SymbolServer.ModuleStore) = isexportedby(valof(x), m)
 isexportedby(k, m::SymbolServer.ModuleStore) = false
 
-function retrieve_toplevel_scope(x)
-    if scopeof(x) !== nothing && (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule || typof(x) === CSTParser.FileH)
+function retrieve_toplevel_scope(x::EXPR)
+    if scopeof(x) !== nothing && is_toplevel_scope(x)
         return scopeof(x)
     elseif parentof(x) isa EXPR
         return retrieve_toplevel_scope(parentof(x))
     else
-        @info "Tried to reach toplevel scope, no scope found. Final expression $(typof(x))"
+        @info "Tried to reach toplevel scope, no scope found. Final expression $(headof(x))"
         return nothing
     end
 end
+retrieve_toplevel_scope(s::Scope) = (is_toplevel_scope(s) || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_scope(parentof(s))
+retrieve_toplevel_or_func_scope(s::Scope) = (is_toplevel_scope(s) || defines_function(s.expr) || !(parentof(s) isa Scope)) ? s : retrieve_toplevel_or_func_scope(parentof(s))
 
+is_toplevel_scope(s::Scope) = is_toplevel_scope(s.expr)
+is_toplevel_scope(x::EXPR) = CSTParser.defines_module(x) || headof(x) === :file
 
 # b::SymbolServer.FunctionStore or DataTypeStore
 # tls is a top-level Scope (expected to contain loaded modules)
 # for a FunctionStore b, checks whether additional methods are provided by other packages
 # f is a function that returns `true` if we want to break early from the loop
 
-iterate_over_ss_methods(b, tls, server, f) = false
-function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, server, f)
-    if b.extends in keys(getsymbolextendeds(server)) && tls.modules !== nothing
-        # above should be modified, 
-        rootmod = SymbolServer._lookup(b.extends.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+iterate_over_ss_methods(b, tls, env, f) = false
+function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, env::ExternalEnv, f)
+    for m in b.methods
+        ret = f(m)
+        ret && return true
+    end
+    if b.extends in keys(getsymbolextendeds(env)) && tls.modules !== nothing
+        # above should be modified,
+        rootmod = SymbolServer._lookup(b.extends.parent, getsymbols(env)) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, b.extends.name) # check rootmod exists, and that it has the variable
-            rootfunc = rootmod[b.extends.name]
             # find extensoions
-            if haskey(getsymbolextendeds(server), b.extends) # method extensions listed
-                for vr in getsymbolextendeds(server)[b.extends] # iterate over packages with extensions
+            if haskey(getsymbolextendeds(env), b.extends) # method extensions listed
+                for vr in getsymbolextendeds(env)[b.extends] # iterate over packages with extensions
                     !(SymbolServer.get_top_module(vr) in keys(tls.modules)) && continue
-                    rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
+                    rootmod = SymbolServer._lookup(vr, getsymbols(env))
                     !(rootmod isa SymbolServer.ModuleStore) && continue
                     if haskey(rootmod.vals, b.extends.name) && (rootmod.vals[b.extends.name] isa SymbolServer.FunctionStore || rootmod.vals[b.extends.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
-                        for m in rootmod.vals[b.extends.name].methods # 
+                        for m in rootmod.vals[b.extends.name].methods #
                             ret = f(m)
                             ret && return true
                         end
@@ -315,37 +232,32 @@ function iterate_over_ss_methods(b::SymbolServer.FunctionStore, tls::Scope, serv
                 end
             end
         end
-    else
-        for m in b.methods
-            ret = f(m)
-            ret && return true
-        end
     end
     return false
 end
 
-
-
-
-function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, server, f)
+function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, env::ExternalEnv, f)
     if b.name isa SymbolServer.VarRef
         bname = b.name
     elseif b.name isa SymbolServer.FakeTypeName
         bname = b.name.name
     end
-    if (bname in keys(getsymbolextendeds(server))) && tls.modules !== nothing
-        # above should be modified, 
-        rootmod = SymbolServer._lookup(bname.parent, getsymbolserver(server)) # points to the module containing the initial function declaration
+    for m in b.methods
+        ret = f(m)
+        ret && return true
+    end
+    if (bname in keys(getsymbolextendeds(env))) && tls.modules !== nothing
+        # above should be modified,
+        rootmod = SymbolServer._lookup(bname.parent, getsymbols(env), true) # points to the module containing the initial function declaration
         if rootmod !== nothing && haskey(rootmod, bname.name) # check rootmod exists, and that it has the variable
-            rootfunc = rootmod[bname.name]
             # find extensoions
-            if haskey(getsymbolextendeds(server), bname) # method extensions listed
-                for vr in getsymbolextendeds(server)[bname] # iterate over packages with extensions
+            if haskey(getsymbolextendeds(env), bname) # method extensions listed
+                for vr in getsymbolextendeds(env)[bname] # iterate over packages with extensions
                     !(SymbolServer.get_top_module(vr) in keys(tls.modules)) && continue
-                    rootmod = SymbolServer._lookup(vr, getsymbolserver(server))
+                    rootmod = SymbolServer._lookup(vr, getsymbols(env))
                     !(rootmod isa SymbolServer.ModuleStore) && continue
                     if haskey(rootmod.vals, bname.name) && (rootmod.vals[bname.name] isa SymbolServer.FunctionStore || rootmod.vals[bname.name] isa SymbolServer.DataTypeStore)# check package is available and has ref
-                        for m in rootmod.vals[bname.name].methods # 
+                        for m in rootmod.vals[bname.name].methods #
                             ret = f(m)
                             ret && return true
                         end
@@ -353,18 +265,73 @@ function iterate_over_ss_methods(b::SymbolServer.DataTypeStore, tls::Scope, serv
                 end
             end
         end
-    else
-        for m in b.methods
-            ret = f(m)
-            ret && return true
-        end
     end
     return false
 end
 
 
-fcall_name(x::EXPR) = typof(x) === Call && length(x) > 0 && valof(x[1])
+"""
+    is_in_fexpr(x::EXPR, f)
+Check whether `x` isa the child of an expression for which `f(parent) == true`.
+"""
+is_in_fexpr(x::EXPR, f) = f(x) || (parentof(x) isa EXPR && is_in_fexpr(parentof(x), f))
 
-is_getfield(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT 
+"""
+    get_in_fexpr(x::EXPR, f)
+Get the `parent` of `x` for which `f(parent) == true`. (is_in_fexpr should be called first.)
+"""
+get_parent_fexpr(x::EXPR, f) = f(x) ? x : get_parent_fexpr(parentof(x), f)
 
-is_getfield_w_quotenode(x) = x isa EXPR && typof(x) === BinaryOpCall && length(x) == 3 && kindof(x[2]) == CSTParser.Tokens.DOT && typof(x[3]) === CSTParser.Quotenode && length(x[3]) > 0 
+maybe_get_parent_fexpr(x::Nothing, f) = nothing
+maybe_get_parent_fexpr(x::EXPR, f) = f(x) ? x : maybe_get_parent_fexpr(parentof(x), f)
+
+issigoffuncdecl(x::EXPR) = parentof(x) isa EXPR ? issigoffuncdecl(x, parentof(x)) : false
+function issigoffuncdecl(x::EXPR, p::EXPR)
+    if CSTParser.iswhere(p) || CSTParser.isdeclaration(p)
+        return issigoffuncdecl(parentof(p))
+    elseif CSTParser.defines_function(p)
+        return true
+    else
+        return false
+    end
+end
+issigoffuncdecl(x::EXPR, p) = false
+
+function is_nameof_func(name)
+    f = get_parent_fexpr(name, CSTParser.defines_function)
+    f !== nothing && CSTParser.get_name(f) == name
+end
+
+function loose_refs(b::Binding)
+    b.val isa EXPR || return b.refs # to account for `#global` binding which doesn't have a val
+    scope = retrieve_scope(b.val)
+    scope isa Scope && isidentifier(b.name) || return b.refs
+    name_str = valofid(b.name)
+    name_str isa String || return b.refs
+
+    if is_soft_scope(scope) && parentof(scope) isa Scope && scopehasbinding(parentof(scope), name_str) && !scopehasbinding(scope, name_str)
+        scope = parentof(scope)
+    end
+    state = LooseRefs(scope.expr, name_str, scope, [])
+    state(scope.expr)
+    vcat([r.refs for r in state.result]...)
+end
+
+mutable struct LooseRefs
+    x::EXPR
+    name::String
+    scope::Scope
+    result::Vector{Binding}
+end
+
+function (state::LooseRefs)(x::EXPR)
+    if hasbinding(x)
+        ex = bindingof(x).name
+        if isidentifier(ex) && valofid(ex) == state.name
+            push!(state.result, bindingof(x))
+        end
+    end
+    if !hasscope(x) || (hasscope(x) && ((is_soft_scope(scopeof(x)) && !scopehasbinding(scopeof(x), state.name)) || scopeof(x) == state.scope))
+        traverse(x, state)
+    end
+end

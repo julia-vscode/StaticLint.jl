@@ -3,14 +3,25 @@ mutable struct Scope
     expr::EXPR
     names::Dict{String,Binding}
     modules::Union{Nothing,Dict{Symbol,Any}}
-    ismodule::Bool
+    overloaded::Union{Dict,Nothing}
 end
-Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, typof(expr) === CSTParser.ModuleH || typof(expr) === CSTParser.BareModule)
+Scope(expr) = Scope(nothing, expr, Dict{Symbol,Binding}(), nothing, nothing)
 function Base.show(io::IO, s::Scope)
-    printstyled(io, typof(s.expr))
-    printstyled(io, " ", join(keys(s.names), ","), color = :yellow)
-    s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color = :blue)
-    println(io)
+    printstyled(io, headof(s.expr))
+    printstyled(io, " ", join(keys(s.names), ","), color=:yellow)
+    s.modules isa Dict && printstyled(io, " ", join(keys(s.modules), ","), color=:blue)
+end
+
+function overload_method(scope::Scope, b::Binding, vr::SymbolServer.VarRef)
+    if scope.overloaded === nothing
+        scope.overloaded = Dict()
+    end
+    if haskey(scope.overloaded, vr)
+        # TODO: need to check this hasn't already been done
+        push!(scope.overloaded[vr].refs, b.val)
+    else
+        scope.overloaded[vr] = b
+    end
 end
 
 """
@@ -45,42 +56,37 @@ Checks whether s has a binding for variable named `n`.
 """
 scopehasbinding(s::Scope, n::String) = haskey(s.names, n)
 
+is_soft_scope(scope::Scope) = scope.expr.head == :for || scope.expr.head == :while || scope.expr.head == :try
+
 """
     introduces_scope(x::EXPR, state)
 
 Does this expression introduce a new scope?
 """
 function introduces_scope(x::EXPR, state)
-    #TODO: remove unused 2nd argument.
-    if typof(x) === CSTParser.BinaryOpCall
-        if kindof(x[2]) === CSTParser.Tokens.EQ && CSTParser.is_func_call(x[1])
-            return true
-        elseif kindof(x[2]) === CSTParser.Tokens.EQ && typof(x[1]) === CSTParser.Curly
-            return true
-        elseif kindof(x[2]) === CSTParser.Tokens.ANON_FUNC
-            return true
-        else
-            return false
-        end
-    elseif typof(x) === CSTParser.WhereOpCall
-        # unless in func def signature
-        return !_in_func_def(x)
-    elseif typof(x) === CSTParser.TupleH && length(x) > 2 && typof(x[1]) === CSTParser.PUNCTUATION && is_assignment(x[2])
+    # TODO: remove unused 2nd argument.
+    if CSTParser.isassignment(x) && (CSTParser.is_func_call(x.args[1]) || CSTParser.iscurly(x.args[1]))
         return true
-    elseif typof(x) === CSTParser.FunctionDef ||
-            typof(x) === CSTParser.Macro ||
-            typof(x) === CSTParser.For ||
-            typof(x) === CSTParser.While ||
-            typof(x) === CSTParser.Let ||
-            typof(x) === CSTParser.Generator || # and Flatten? 
-            typof(x) === CSTParser.Try ||
-            typof(x) === CSTParser.Do ||
-            typof(x) === CSTParser.ModuleH ||
-            typof(x) === CSTParser.BareModule ||
-            typof(x) === CSTParser.Abstract ||
-            typof(x) === CSTParser.Primitive ||
-            typof(x) === CSTParser.Mutable ||
-            typof(x) === CSTParser.Struct
+    elseif CSTParser.defines_anon_function(x)
+        return true
+    elseif CSTParser.iswhere(x) 
+        # unless in func def signature
+        return !_in_func_or_struct_def(x)
+    elseif CSTParser.istuple(x) && CSTParser.hastrivia(x) && ispunctuation(x.trivia[1]) && length(x.args) > 0 && isassignment(x.args[1])
+        # named tuple
+        return true
+    elseif headof(x) === :function ||
+            headof(x) === :macro ||
+            headof(x) === :for ||
+            headof(x) === :while ||
+            headof(x) === :let ||
+            headof(x) === :generator || # and Flatten?
+            headof(x) === :try ||
+            headof(x) === :do ||
+            headof(x) === :module ||
+            headof(x) === :abstract ||
+            headof(x) === :primitive ||
+            headof(x) === :struct
         return true
     end
     return false
@@ -112,29 +118,40 @@ function scopes(x::EXPR, state)
         setscope!(x, Scope(x))
     end
     s0 = state.scope
-    if typof(x) === FileH
+    if headof(x) === :file
         setscope!(x, state.scope)
+        add_eval_method(x, state)
     elseif scopeof(x) isa Scope
-        if CSTParser.defines_function(x) || CSTParser.defines_macro(x)
-            state.delayed = true # Allow delayed resolution
-        end
         scopeof(x) != s0 && setparent!(scopeof(x), s0)
         state.scope = scopeof(x)
-        if typof(x) === ModuleH # Add default modules to a new module
-            state.scope.modules = Dict{Symbol,Any}()
-            state.scope.modules[:Base] = getsymbolserver(state.server)[:Base]
-            state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
-        elseif typof(x) === BareModule
+        if headof(x) === :module && headof(x.args[1]) === :TRUE # Add default modules to a new module
+            state.scope.modules = Dict{Symbol,Any}() # TODO: only create new Dict if not assigned?
+            state.scope.modules[:Base] = getsymbols(state)[:Base]
+            state.scope.modules[:Core] = getsymbols(state)[:Core]
+            add_eval_method(x, state)
+        elseif headof(x) === :module && headof(x.args[1]) === :FALSE
             state.scope.modules = Dict{String,Any}()
-            state.scope.modules[:Core] = getsymbolserver(state.server)[:Core]
+            state.scope.modules[:Core] = getsymbols(state)[:Core]
+            add_eval_method(x, state)
         end
-        if (typof(x) === CSTParser.ModuleH || typof(x) === CSTParser.BareModule) && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
+        if headof(x) === :module && bindingof(x) !== nothing # Add reference to out of scope binding (i.e. itself)
             # state.scope.names[bindingof(x).name] = bindingof(x)
             # TODO: move this to the binding stage
             add_binding(x, state)
-        elseif typof(x) === CSTParser.Flatten && typof(x[1]) === CSTParser.Generator && length(x[1]) > 0 && typof(x[1][1]) === CSTParser.Generator
-            setscope!(x[1][1], nothing)
+        # elseif headof(x) === :flatten && headof(x[1]) === CSTParser.Generator && length(x[1]) > 0 && headof(x[1][1]) === CSTParser.Generator
+        #     setscope!(x[1][1], nothing)
         end
     end
     return s0
+end
+
+# Add an `eval` method
+function add_eval_method(x, state)
+    mod = if x.head === :module
+        CSTParser.isidentifier(x.args[3]) ? Symbol(valof(x.args[3])) : :unknown
+    else
+        Symbol("top-level")
+    end
+    meth = SymbolServer.MethodStore(:eval, mod, "", 0, [:expr => SymbolServer.FakeTypeName(SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any), [])], [], Any)
+    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbols(state)[:Core][:DataType], [])
 end

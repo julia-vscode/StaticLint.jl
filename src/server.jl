@@ -1,3 +1,10 @@
+#=
+Project trees are usually made up of multiple files. An AbstractServer holds the AbstractFiles that represent this tree. FileServer is the basic implementation and assumes files are available and readable from disc. (LanguageServer illustrates another implementaiton). The accompanying functions summarised below are required for making an alternative implementation.
+
+Interface spec.
+AbstractServer :-> (has/canload/load/set/get)file, getsymbols, getsymbolextends
+AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, semantic_pass, (get/set)server
+=#
 abstract type AbstractServer end
 abstract type AbstractFile end
 
@@ -12,15 +19,11 @@ end
 mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
-    symbolserver::SymbolServer.EnvStore
-    symbol_extends::Dict{SymbolServer.VarRef, Vector{SymbolServer.VarRef}}
     workspacepackages::Dict{String,File} # list of files that may represent within-workspace packages
+    external_env::ExternalEnv
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), deepcopy(SymbolServer.stdlibs), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Dict{String,File}())
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), Dict{String,File}(), ExternalEnv(Dict{Symbol,SymbolServer.ModuleStore}(:Base => SymbolServer.stdlibs[:Base], :Core => SymbolServer.stdlibs[:Core]), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Symbol[]))
 
-# Interface spec.
-# AbstractServer :-> (has/canload/load/set/get)file, getsymbolserver, getsymbolextends
-# AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, scopepass, (get/set)server
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
 canloadfile(server, path) = isfile(path)
@@ -36,27 +39,28 @@ function loadfile(server::FileServer, path::String)
     setfile(server, path, f)
     return getfile(server, path)
 end
-getsymbolserver(server::FileServer) = server.symbolserver
-getsymbolextendeds(server::FileServer) = server.symbol_extends
 
-function scopepass(file, target = nothing)
-    server = file.server
-    setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => getsymbolserver(server)[:Base], :Core => getsymbolserver(server)[:Core]), false))
-    state = State(file, target, [getpath(file)], scopeof(getcst(file)), false, EXPR[], server)
-    state(getcst(file))
-    for uref in state.urefs
-        s = retrieve_delayed_scope(uref)
-        if s !== nothing
-            resolve_ref(uref, s, state, [])
-        end
-    end
+getsymbols(env::ExternalEnv) = env.symbols
+getsymbols(state::State) = getsymbols(state.env)
+
+getsymbolextendeds(env::ExternalEnv) = env.extended_methods
+getsymbolextendeds(state::State) = getsymbolextendeds(state.env)
+
+
+"""
+    getenv(file::File, server::FileServer)
+
+Get the relevant `ExternalEnv` for a given file.
+"""
+function getenv(file::File, server::FileServer)
+    # For FileServer this approach is equivalent to the previous behaviour. Other AbstractServers
+    # (e.g. LanguageServerInstance) can use this function to associate different files (or trees of
+    # files) with different environments.
+    server.external_env
 end
+
 
 getpath(file::File) = file.path
-function setpath(file::File, path)
-    file.path = path
-    return file
-end
 
 getroot(file::File) = file.root
 function setroot(file::File, root::File)
@@ -84,48 +88,9 @@ function Base.display(s::FileServer)
     n = length(s.files)
     println(n, "-file Server")
     cnt = 0
-    for (p, f) in s.files
+    for p in keys(s.files)
         cnt += 1
         println(" ", p)
         cnt > 10 && break
     end
 end
-
-"""
-    get_path(x::EXPR)
-
-Usually called on the argument to `include` calls, and attempts to determine
-the path of the file to be included. Has limited support for `joinpath` calls.
-"""
-function get_path(x::EXPR, state)
-    if typof(x) === Call && length(x) == 4
-        parg = x[3]
-        if CSTParser.is_lit_string(parg)
-            path = CSTParser.str_value(parg)
-            return normpath(path)
-        elseif typof(parg) === x_Str && length(parg) == 2 && CSTParser.isidentifier(parg[1]) && valof(parg[1]) == "raw" && typof(parg[2]) === CSTParser.LITERAL && (kindof(parg[2]) == CSTParser.Tokens.STRING || kindof(parg[2]) == CSTParser.Tokens.TRIPLE_STRING)
-            return normpath(CSTParser.str_value(parg[2]))
-        elseif typof(parg) === Call && isidentifier(parg[1]) && CSTParser.str_value(parg[1]) == "joinpath"
-            path_elements = String[]
-
-            for i = 2:length(parg)
-                arg = parg[i]
-                if typof(arg) === PUNCTUATION
-                elseif _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
-                    push!(path_elements, dirname(getpath(state.file)))
-                elseif CSTParser.is_lit_string(arg)
-                    push!(path_elements, string(CSTParser.str_value(arg)))
-                else
-                    return ""
-                end
-            end
-            path = normpath(joinpath(path_elements...))
-            return path
-        end
-    end
-    return ""
-end
-
-_is_macrocall_to_BaseDIR(arg) = typof(arg) === CSTParser.MacroCall && length(arg) == 1 &&
-    typof(arg[1]) === CSTParser.MacroName && length(arg[1]) == 2 &&
-    valof(arg[1][2]) == "__DIR__"
