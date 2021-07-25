@@ -90,7 +90,7 @@ function has_workspace_package(server, name)
     haskey(scopeof(getcst(server.workspacepackages[name])).names, name) &&
     scopeof(getcst(server.workspacepackages[name])).names[name] isa Binding &&
     scopeof(getcst(server.workspacepackages[name])).names[name].val isa EXPR &&
-    (typeof(scopeof(getcst(server.workspacepackages[name])).names[name].val) in (ModuleH, BareModule))
+    (typeof(scopeof(getcst(server.workspacepackages[name])).names[name].val) in (Module, BareModule))
 end
 
 function add_to_imported_modules(scope::Scope, name::Symbol, val)
