@@ -88,10 +88,10 @@ function has_workspace_package(server, name)
     haskey(server.workspacepackages, name) &&
     hasscope(getcst(server.workspacepackages[name])) &&
     haskey(scopeof(getcst(server.workspacepackages[name])).names, name) &&
-    scopeof(getcst(server.workspacepackages[name])).names[name] isa Binding && 
-    scopeof(getcst(server.workspacepackages[name])).names[name].val isa EXPR && 
-    (typof(scopeof(getcst(server.workspacepackages[name])).names[name].val) in (ModuleH,BareModule))
-end 
+    scopeof(getcst(server.workspacepackages[name])).names[name] isa Binding &&
+    scopeof(getcst(server.workspacepackages[name])).names[name].val isa EXPR &&
+    (typeof(scopeof(getcst(server.workspacepackages[name])).names[name].val) in (ModuleH, BareModule))
+end
 
 function add_to_imported_modules(scope::Scope, name::Symbol, val)
     if scope.modules isa Dict
