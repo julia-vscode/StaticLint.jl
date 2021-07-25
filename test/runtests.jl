@@ -1692,7 +1692,7 @@ end
     f1 = StaticLint.File("workspacemod.jl", s1, CSTParser.parse(s1, true), nothing, server)
     StaticLint.setroot(f1, f1)
     StaticLint.setfile(server, f1.path, f1)
-    StaticLint.scopepass(f1)
+    StaticLint.semantic_pass(f1)
     server.workspacepackages["WorkspaceMod"] = f1
     s2 = """
     using WorkspaceMod
@@ -1702,7 +1702,7 @@ end
     f2 = StaticLint.File("someotherfile.jl", s2, CSTParser.parse(s2, true), nothing, server)
     StaticLint.setroot(f2, f2)
     StaticLint.setfile(server, f2.path, f2)
-    StaticLint.scopepass(f2)
+    StaticLint.semantic_pass(f2)
     @test StaticLint.hasref(StaticLint.getcst(f2)[1][2])
     @test StaticLint.hasref(StaticLint.getcst(f2)[2])
     @test StaticLint.hasref(StaticLint.getcst(f2)[3][3][1])
