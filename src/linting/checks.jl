@@ -554,7 +554,8 @@ function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tupl
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall")) &&
+            !is_in_noneval_macrocall(x)
 
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
@@ -903,6 +904,12 @@ all_underscore(s::String) = all(==(0x5f), codeunits(s))
 function is_sig_arg(x)
     is_in_fexpr(x, CSTParser.iscall)
 end
+
+function is_in_noneval_macrocall(x)
+    macrocall = maybe_get_parent_fexpr(x, x -> x.head === :macrocall && valof(x.args[1]) != "@eval")
+    return macrocall !== nothing
+end
+
 
 function is_overwritten_in_loop(x)
     # Cuts out false positives for check_unused_binding - the linear nature of our
