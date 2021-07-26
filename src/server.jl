@@ -19,9 +19,11 @@ end
 mutable struct FileServer <: AbstractServer
     files::Dict{String,File}
     roots::Set{File}
+    workspacepackages::Dict{String,File} # list of files that may represent within-workspace packages
     external_env::ExternalEnv
 end
-FileServer() = FileServer(Dict{String,File}(), Set{File}(), ExternalEnv(Dict{Symbol,SymbolServer.ModuleStore}(:Base => SymbolServer.stdlibs[:Base], :Core => SymbolServer.stdlibs[:Core]), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Symbol[]))
+FileServer() = FileServer(Dict{String,File}(), Set{File}(), Dict{String,File}(), ExternalEnv(Dict{Symbol,SymbolServer.ModuleStore}(:Base => SymbolServer.stdlibs[:Base], :Core => SymbolServer.stdlibs[:Core]), SymbolServer.collect_extended_methods(SymbolServer.stdlibs), Symbol[]))
+
 
 hasfile(server::FileServer, path::String) = haskey(server.files, path)
 canloadfile(server, path) = isfile(path)
