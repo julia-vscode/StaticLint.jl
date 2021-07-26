@@ -1703,7 +1703,7 @@ end
     StaticLint.setroot(f2, f2)
     StaticLint.setfile(server, f2.path, f2)
     StaticLint.semantic_pass(f2)
-    @test StaticLint.hasref(StaticLint.getcst(f2)[1][2])
+    @test StaticLint.hasref(StaticLint.getcst(f2)[1][2][1])
     @test StaticLint.hasref(StaticLint.getcst(f2)[2])
     @test StaticLint.hasref(StaticLint.getcst(f2)[3][3][1])
 end
