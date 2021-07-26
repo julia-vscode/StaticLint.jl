@@ -1681,32 +1681,32 @@ end
     @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 2
 end
 
-@testset "test workspace packages" begin
-    empty!(server.files)
-    s1 = """
-    module WorkspaceMod
-    inner_sym = 1
-    exported_sym = 1
-    export exported_sym
-    end"""
-    f1 = StaticLint.File("workspacemod.jl", s1, CSTParser.parse(s1, true), nothing, server)
-    StaticLint.setroot(f1, f1)
-    StaticLint.setfile(server, f1.path, f1)
-    StaticLint.semantic_pass(f1)
-    server.workspacepackages["WorkspaceMod"] = f1
-    s2 = """
-    using WorkspaceMod
-    exported_sym
-    WorkspaceMod.inner_sym
-    """
-    f2 = StaticLint.File("someotherfile.jl", s2, CSTParser.parse(s2, true), nothing, server)
-    StaticLint.setroot(f2, f2)
-    StaticLint.setfile(server, f2.path, f2)
-    StaticLint.semantic_pass(f2)
-    @test StaticLint.hasref(StaticLint.getcst(f2)[1][2][1])
-    @test StaticLint.hasref(StaticLint.getcst(f2)[2])
-    @test StaticLint.hasref(StaticLint.getcst(f2)[3][3][1])
-end
+# @testset "test workspace packages" begin
+#     empty!(server.files)
+#     s1 = """
+#     module WorkspaceMod
+#     inner_sym = 1
+#     exported_sym = 1
+#     export exported_sym
+#     end"""
+#     f1 = StaticLint.File("workspacemod.jl", s1, CSTParser.parse(s1, true), nothing, server)
+#     StaticLint.setroot(f1, f1)
+#     StaticLint.setfile(server, f1.path, f1)
+#     StaticLint.semantic_pass(f1)
+#     server.workspacepackages["WorkspaceMod"] = f1
+#     s2 = """
+#     using WorkspaceMod
+#     exported_sym
+#     WorkspaceMod.inner_sym
+#     """
+#     f2 = StaticLint.File("someotherfile.jl", s2, CSTParser.parse(s2, true), nothing, server)
+#     StaticLint.setroot(f2, f2)
+#     StaticLint.setfile(server, f2.path, f2)
+#     StaticLint.semantic_pass(f2)
+#     @test StaticLint.hasref(StaticLint.getcst(f2)[1][2][1])
+#     @test StaticLint.hasref(StaticLint.getcst(f2)[2])
+#     @test StaticLint.hasref(StaticLint.getcst(f2)[3][3][1])
+# end
 @testset "#1218" begin
     cst = parse_and_pass("""function foo(a; p) a+p end
     foo(1, p = true)""")
