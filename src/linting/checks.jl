@@ -906,7 +906,7 @@ function is_sig_arg(x)
 end
 
 function is_in_noneval_macrocall(x)
-    macrocall = maybe_get_parent_fexpr(x, x -> x.head === :macrocall && valof(x.args[1]) !== "@eval")
+    macrocall = maybe_get_parent_fexpr(x, x -> x.head === :macrocall && valof(x.args[1]) != "@eval")
     return macrocall !== nothing
 end
 
