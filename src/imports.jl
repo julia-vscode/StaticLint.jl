@@ -161,6 +161,12 @@ function _get_field(par, arg, state)
             return _get_field(par.val, arg, state)
         elseif par.val isa EXPR && CSTParser.defines_module(par.val) && scopeof(par.val) isa Scope
             return _get_field(scopeof(par.val), arg, state)
+        elseif par.val isa EXPR && isassignment(par.val)
+            if hasref(par.val.args[2])
+                return _get_field(refof(par.val.args[2]), arg, state)
+            elseif is_getfield_w_quotenode(par.val.args[2])
+                return _get_field(refof_maybe_getfield(par.val.args[2]), arg, state)
+            end
         elseif par.val isa SymbolServer.ModuleStore
             return _get_field(par.val, arg, state)
         end
