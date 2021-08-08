@@ -554,8 +554,7 @@ function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tupl
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall")) &&
-            !is_in_noneval_macrocall(x)
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
 
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
@@ -892,7 +891,7 @@ end
 function check_unused_binding(b::Binding, scope::Scope)
     if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
         refs = loose_refs(b)
-        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope)
+        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b)
             seterror!(b.name, UnusedBinding)
         end
     end
@@ -905,11 +904,9 @@ function is_sig_arg(x)
     is_in_fexpr(x, CSTParser.iscall)
 end
 
-function is_in_noneval_macrocall(x)
-    macrocall = maybe_get_parent_fexpr(x, x -> x.head === :macrocall && valof(x.args[1]) != "@eval")
-    return macrocall !== nothing
+function is_kw_of_macrocall(b::Binding)
+    b.val isa EXPR && isassignment(b.val) && parentof(b.val) isa EXPR && CSTParser.ismacrocall(parentof(b.val))
 end
-
 
 function is_overwritten_in_loop(x)
     # Cuts out false positives for check_unused_binding - the linear nature of our
