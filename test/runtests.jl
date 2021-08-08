@@ -1759,13 +1759,13 @@ end
 @testset "aliased import: #974" begin
     cst = parse_and_pass("""
     const CC = Core.Compiler
-    import .CC: AbstractInterpreter
+    import .CC: div
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 
     cst = parse_and_pass("""
     const C = Core
-    import .C: Compiler
+    import .C: div
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
