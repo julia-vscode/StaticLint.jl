@@ -252,7 +252,7 @@ end
 is_loop_iter_assignment(x::EXPR) = x.parent isa EXPR && ((x.parent.head == :for || x.parent.head == :generator) || (x.parent.head == :block && x.parent.parent isa EXPR && (x.parent.parent.head == :for || x.parent.parent.head == :generator)))
 
 function infer_eltype(x::EXPR)
-    if hasref(x) # assume is IDENT
+    if isidentifier(x) && hasref(x) # assume is IDENT
         r = refof(x)
         if r isa Binding && r.val isa EXPR
             if isassignment(r.val)
