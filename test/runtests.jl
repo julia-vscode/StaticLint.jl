@@ -1715,6 +1715,14 @@ end
     cst = parse_and_pass("""function foo(a; p) a end
     foo(1, p = true)""")
     @test cst[1][2][4][1].meta.error != false
+
+    cst = parse_and_pass("""function foo(a; p::Bool) a+p end
+    foo(1, p = true)""")
+    @test isempty(StaticLint.collect_hints(cst, server))
+
+    cst = parse_and_pass("""function foo(a; p::Bool) a end
+    foo(1, p = true)""")
+    @test cst[1][2][4][1].meta.error != false
 end
 
 
