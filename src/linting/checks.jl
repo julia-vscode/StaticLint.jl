@@ -160,7 +160,7 @@ function func_nargs(x::EXPR)
                     arg1 = arg.args[j]
                     if iskwarg(arg1)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1.args[1]))))
-                    elseif isidentifier(arg1)
+                    elseif isidentifier(arg1) || isdeclaration(arg1)
                         push!(kws, Symbol(CSTParser.str_value(CSTParser.get_arg_name(arg1))))
                     elseif issplat(arg1)
                         kwsplat = true
@@ -301,9 +301,9 @@ function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::Exter
         match = sig_match_any(func_ref.val, x, call_counts, tls, env)
         match && return true
     end
-    
+
     has_at_least_one_method = func_ref.val isa EXPR && defines_function(func_ref.val)
-    # handle case where func_ref is typed as Function and yet has no methods 
+    # handle case where func_ref is typed as Function and yet has no methods
 
     for r in func_ref.refs
         method = get_method(r)
@@ -311,11 +311,7 @@ function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::Exter
         has_at_least_one_method = true
         sig_match_any(method, x, call_counts, tls, env) && return true
     end
-    if has_at_least_one_method
-        return false
-    else
-        return true
-    end
+    return !has_at_least_one_method
 end
 
 function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
