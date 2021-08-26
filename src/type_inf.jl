@@ -255,7 +255,7 @@ function infer_eltype(x::EXPR)
     if isidentifier(x) && hasref(x) # assume is IDENT
         r = refof(x)
         if r isa Binding && r.val isa EXPR
-            if isassignment(r.val)
+            if isassignment(r.val) && r.val.args[2] != x
                 return infer_eltype(r.val.args[2])
             end
         end
