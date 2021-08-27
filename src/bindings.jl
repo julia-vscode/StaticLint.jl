@@ -59,8 +59,6 @@ function mark_bindings!(x::EXPR, state)
             mark_sig_args!(x.args[1])
         elseif CSTParser.iscurly(x.args[1])
             mark_typealias_bindings!(x)
-        elseif is_in_noneval_macrocall(x.args[1])
-            return
         elseif !is_getfield(x.args[1])
             mark_binding!(x.args[1], x)
         end

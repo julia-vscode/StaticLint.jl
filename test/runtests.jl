@@ -1756,7 +1756,7 @@ end
 
 @testset "macrocall bindings: #2187" begin
     cst = parse_and_pass("""
-    function f()
+    function f(url = 1, file = 1)
         @info "Downloading" source = url dest = file
         return nothing
     end
