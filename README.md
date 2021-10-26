@@ -31,7 +31,7 @@ Identifying and marking errors (5.) is, in general, dependent on steps 1-4. Thes
 
 
 ### Passes
-For a given experssion `x` this pass will:
+For a given expression `x` this pass will:
 
 * Handle import statements (`resolve_import`). This either explicitly imports variables into the current state (for statements such as `import/using SomeModule: binding1, binding2`) or makes the exported bindings of a modules available more generally (e.g. `using SomeOtherModule`). The availability of includable packages is handled by the `getsymbolserver` function called on the `state.server`.
 * Determine whether `x` introduces a new variable. `mark_bindings!` performs this and may mark bindings for child nodes of `x` (e.g. when called on an expression that defines a `Function` this will mark the arguments of the signature as introducing bindings.)
