@@ -230,7 +230,7 @@ function call_nargs(x::EXPR)
             end
         end
     else
-        @info string("call_nargs: ", Expr(x))
+        @info string("call_nargs: ", to_codeobject(x))
     end
 
     return minargs, maxargs, kws

@@ -15,7 +15,7 @@ end
 Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [])
 
 function Base.show(io::IO, b::Binding)
-    printstyled(io, " Binding(", Expr(b.name),
+    printstyled(io, " Binding(", to_codeobject(b.name),
         b.type === nothing ? "" : ":: ",
         b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color=:blue)
 end
@@ -274,7 +274,7 @@ function add_binding(x, state, scope=state.scope)
         if isidentifier(b.name)
             name = valofid(b.name)
         elseif CSTParser.ismacroname(b.name) # must be getfield
-            name = string(Expr(b.name))
+            name = string(to_codeobject(b.name))
         elseif isoperator(b.name)
             name = valof(b.name)
         else
