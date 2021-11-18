@@ -269,9 +269,6 @@ function resolve_FromFile_import(x::EXPR, state::State)
                 dot_.parent = ux.args[1].args[1]
                 pushfirst!(ux.args[1].args[1], dot_)
             end
-        else
-            # unknown expression
-            @debug "StaticLint.jl resolve_FromFile_import unknown experssion"
         end
     end
 end

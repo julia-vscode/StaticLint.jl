@@ -1777,3 +1777,11 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "@from list of modules" begin
+    # server = StaticLint.setup_server()
+    cst1 = parse_and_pass("""@from "fromfile_to_test.jl" using am, am2""")
+    cst2 = parse_and_pass("""@from "fromfile_to_test.jl" using am3: MyStruct31""")
+    @test CSTParser.headof(cst1.args[1].args[4]) === :using
+    @test CSTParser.headof(cst2.args[1].args[4]) === :using
+end
