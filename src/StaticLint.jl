@@ -72,6 +72,7 @@ function (state::Toplevel)(x::EXPR)
     s0 = scopes(x, state)
     resolve_ref(x, state)
     followinclude(x, state)
+    resolve_FromFile_import(x, state)
 
     old_in_modified_expr = state.in_modified_expr
     if state.modified_exprs !== nothing && x in state.modified_exprs
@@ -206,6 +207,72 @@ function traverse(x::EXPR, state)
     end
 end
 
+"""
+FromFile @from includes:
+@from "a.jl" using am
+@from "a.jl" using am: myfun_a, myfun_a2
+@from "a.jl" import am
+@from "a.jl" import am: myfun_a, MyStruct_a
+
+Implementation summary:
+tranform:      @from "a.jl" using am 
+into:          include("a.jl") using .am 
+We call the followinclude method for include("a.jl").
+The "using .am" expression will be traversed later and will be therefore evaluated at that point in time. 
+"""
+function resolve_FromFile_import(x::EXPR, state::State)
+    # we shall have @from in the expresion
+    is_from_include = CSTParser.ismacrocall(x) && length(x.args) >=4  && CSTParser.isidentifier(x.args[1]) && x.args[1].val == "@from"
+    # the file to be included is a string
+    is_from_include = is_from_include && CSTParser.isstring(x.args[3])
+    # the 4'th argument in the expression shall be "using" or "import"
+    is_from_include = is_from_include && (headof(x.args[4]) === :using || headof(x.args[4]) === :import)
+
+    !is_from_include && return
+
+    # tranform @from "a.jl" into include("a.jl") 
+    # and call the followinclude method
+    fl = valof(x.args[3])
+    inc_str = """include("$fl")"""
+    x_ = CSTParser.parse(inc_str)
+    followinclude(x_, state)
+
+    # We have to transform "using am, am2" into "using .am, .am2", and "using am: myfun_a" into "using .am: myfun_a".
+    # Imports expresions do not change.
+    ux = x.args[4]
+    if headof(ux) === :using
+        if valof(headof(ux.args[1])) == "." # for the case "using am" and "using am, am2"
+            for opdot_module in ux.args
+                # we now have to insert the extra dot if not already inserted
+                if length(opdot_module.args) == 1
+                    # we can see where to insert the extra dot if we analyse the following differences
+                    # CSTParser.parse("using am, am2") vs CSTParser.parse("using .am, .am2")
+                    dot_ = CSTParser.parse(".")
+                    # the fullspan and the span are both 1, but we have to treat it as an invisible "." in the text
+                    # so we set the fullspan and the span to 0; this way the intellisense correctly highlights the position of 
+                    # the "am" and "am2" symbols
+                    dot_.fullspan = dot_.span = 0 
+                    dot_.parent = opdot_module
+                    pushfirst!(opdot_module, dot_)    
+                end
+            end            
+        elseif valof(headof(ux.args[1])) == ":"  # for the case "using am: myfun_a, MyStruct_a"
+            # we now have to insert the extra dot if not already present
+            if length(ux.args[1].args[1].args) == 1
+                # we can see where to insert the extra dot if we analyse the following differences
+                # CSTParser.parse("using am: myfun_a, MyStruct_a") vs CSTParser.parse("using .am: myfun_a, MyStruct_a")
+                dot_ = CSTParser.parse(".")
+                # treat the extra dot as "invisible" for correct symbol highlighting, see above
+                dot_.fullspan = dot_.span = 0
+                dot_.parent = ux.args[1].args[1]
+                pushfirst!(ux.args[1].args[1], dot_)
+            end
+        else
+            # unknown expression
+            @debug "StaticLint.jl resolve_FromFile_import unknown experssion"
+        end
+    end
+end
 
 """
     followinclude(x, state)
