@@ -217,7 +217,7 @@ FromFile @from includes:
 See: https://github.com/Roger-luo/FromFile.jl
 
 Implementation summary:
-tranform:      @from "a.jl" using am 
+transform:      @from "a.jl" using am 
 into:          include("a.jl") using .am 
 We call the followinclude method for include("a.jl").
 The "using .am" expression will be traversed later and will be therefore evaluated at that point in time. 
