@@ -213,6 +213,8 @@ FromFile @from includes:
 @from "a.jl" using am: myfun_a, myfun_a2
 @from "a.jl" import am
 @from "a.jl" import am: myfun_a, MyStruct_a
+    
+See: https://github.com/Roger-luo/FromFile.jl
 
 Implementation summary:
 tranform:      @from "a.jl" using am 
