@@ -27,9 +27,9 @@ Meta() = Meta(nothing, nothing, nothing, nothing)
 
 function Base.show(io::IO, m::Meta)
     m.binding !== nothing && show(io, m.binding)
-    m.ref !== nothing && printstyled(io, " * ", color=:red)
-    m.scope !== nothing && printstyled(io, " new scope", color=:green)
-    m.error !== nothing && printstyled(io, " lint ", color=:red)
+    m.ref !== nothing && printstyled(io, " * ", color = :red)
+    m.scope !== nothing && printstyled(io, " new scope", color = :green)
+    m.error !== nothing && printstyled(io, " lint ", color = :red)
 end
 hasmeta(x::EXPR) = x.meta isa Meta
 hasbinding(m::Meta) = m.binding isa Binding
@@ -61,7 +61,11 @@ mutable struct Toplevel{T} <: State
     resolveonly::Vector{EXPR}
     env::ExternalEnv
     server
+    flags::Int64
 end
+
+Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server) =
+    Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0)
 
 function (state::Toplevel)(x::EXPR)
     resolve_import(x, state)
@@ -84,7 +88,9 @@ function (state::Toplevel)(x::EXPR)
             push!(state.resolveonly, x)
         end
     else
+        old = flag!(state, x)
         traverse(x, state)
+        state.flags = old
     end
 
     state.in_modified_expr = old_in_modified_expr
@@ -96,7 +102,10 @@ mutable struct Delayed <: State
     scope::Scope
     env::ExternalEnv
     server
+    flags::Int64
 end
+
+Delayed(scope, env, server) = Delayed(scope, env, server, 0)
 
 function (state::Delayed)(x::EXPR)
     mark_bindings!(x, state)
@@ -106,7 +115,9 @@ function (state::Delayed)(x::EXPR)
     s0 = scopes(x, state)
     resolve_ref(x, state)
 
+    old = flag!(state, x)
     traverse(x, state)
+    state.flags = old
     if state.scope != s0
         for b in values(state.scope.names)
             infer_type_by_use(b, state.env)
@@ -139,13 +150,23 @@ function (state::ResolveOnly)(x::EXPR)
     return state.scope
 end
 
+# feature flags that can disable or enable functionality further down in the CST
+const NO_NEW_BINDINGS = 0x1
+
+function flag!(state, x::EXPR)
+    old = state.flags
+    if CSTParser.ismacrocall(x) && (valof(x.args[1]) == "@." || valof(x.args[1]) == "@__dot__")
+        state.flags |= NO_NEW_BINDINGS
+    end
+    return old
+end
 
 """
     semantic_pass(file, modified_expr=nothing)
 
 Performs a semantic pass across a project from the entry point `file`. A first pass traverses the top-level scope after which secondary passes handle delayed scopes (e.g. functions). These secondary passes can be, optionally, very light and only seek to resovle references (e.g. link symbols to bindings). This can be done by supplying a list of expressions on which the full secondary pass should be made (`modified_expr`), all others will receive the light-touch version.
 """
-function semantic_pass(file, modified_expr=nothing)
+function semantic_pass(file, modified_expr = nothing)
     server = file.server
     env = getenv(file, server)
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => env.symbols[:Base], :Core => env.symbols[:Core]), nothing))
@@ -200,7 +221,7 @@ function traverse(x::EXPR, state)
         end
         state(x.args[2])
     elseif x.args !== nothing && length(x.args) > 0
-        @inbounds for i in 1:length(x.args)
+        @inbounds for i = 1:length(x.args)
             state(x.args[i])
         end
     end

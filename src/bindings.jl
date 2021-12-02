@@ -59,10 +59,7 @@ function mark_bindings!(x::EXPR, state)
             mark_sig_args!(x.args[1])
         elseif CSTParser.iscurly(x.args[1])
             mark_typealias_bindings!(x)
-        elseif is_in_dot_macro(x)
-            # Skip marking bindings on assignments inside @.
-            return
-        elseif !is_getfield(x.args[1])
+        elseif !is_getfield(x.args[1]) && state.flags & NO_NEW_BINDINGS == 0
             mark_binding!(x.args[1], x)
         end
     elseif CSTParser.defines_anon_function(x)
@@ -234,14 +231,6 @@ function mark_typealias_bindings!(x::EXPR)
         end
     end
     return x
-end
-
-function is_in_dot_macro(x::EXPR)
-    while CSTParser.hasparent(x)
-        x = x.parent
-        CSTParser.ismacrocall(x) && (valof(x.args[1]) == "@." || valof(x.args[1]) == "@__dot__") && return true
-    end
-    return false
 end
 
 function is_in_funcdef(x)
