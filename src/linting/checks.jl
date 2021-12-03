@@ -507,8 +507,8 @@ function check_farg_unused_(arg, arg_names)
        isempty(b.refs) ||
         # only self ref:
        (length(b.refs) == 1 && first(b.refs) == b.name) ||
-        # first usage is assignment:
-       (length(b.refs) > 1 && b.refs[2] isa EXPR && CSTParser.hasparent(b.refs[2]) && isassignment(parentof(b.refs[2])) && parentof(b.refs[2]).args[1] == b.refs[2])
+        # first usage has binding:
+        (length(b.refs) > 1 && b.refs[2] isa EXPR && hasbinding(b.refs[2]))
         seterror!(arg, UnusedFunctionArgument)
     end
 

@@ -789,6 +789,18 @@ f(arg) = arg
             StaticLint.check_farg_unused(cst[1])
             @test cst[1].args[1].args[2].meta.error === nothing
         end
+        let cst = parse_and_pass("""
+            function f(x,y,z)
+                @. begin
+                    x = z
+                    y = z
+                end
+            end
+            """)
+           StaticLint.check_farg_unused(cst[1])
+           @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+           @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
+       end
     end
 
     @testset "check redefinition of const" begin

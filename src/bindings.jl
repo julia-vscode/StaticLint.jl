@@ -59,7 +59,7 @@ function mark_bindings!(x::EXPR, state)
             mark_sig_args!(x.args[1])
         elseif CSTParser.iscurly(x.args[1])
             mark_typealias_bindings!(x)
-        elseif !is_getfield(x.args[1])
+        elseif !is_getfield(x.args[1]) && state.flags & NO_NEW_BINDINGS == 0
             mark_binding!(x.args[1], x)
         end
     elseif CSTParser.defines_anon_function(x)
