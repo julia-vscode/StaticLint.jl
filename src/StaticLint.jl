@@ -61,7 +61,7 @@ mutable struct Toplevel{T} <: State
     resolveonly::Vector{EXPR}
     env::ExternalEnv
     server
-    flags::Int64
+    flags::Int
 end
 
 Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server) =
@@ -102,7 +102,7 @@ mutable struct Delayed <: State
     scope::Scope
     env::ExternalEnv
     server
-    flags::Int64
+    flags::Int
 end
 
 Delayed(scope, env, server) = Delayed(scope, env, server, 0)
