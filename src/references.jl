@@ -51,10 +51,14 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
         return resolve_getfield(x, scope, state)
     elseif iskwarg(x)
         # Note to self: this seems wronge - Binding should be attached to entire Kw EXPR.
-        if isidentifier(x.args[1])
-            setref!(x.args[1], Binding(noname, nothing, nothing, []))
-        elseif isdeclaration(x.args[1]) && isidentifier(x.args[1].args[1])
-            setref!(x.args[1].args[1], Binding(noname, nothing, nothing, []))
+        if isidentifier(x.args[1]) && !hasbinding(x.args[1])
+            setref!(x.args[1], Binding(x.args[1], nothing, nothing, []))
+        elseif isdeclaration(x.args[1]) && isidentifier(x.args[1].args[1]) && !hasbinding(x.args[1].args[1])
+            if hasbinding(x.args[1])
+                setref!(x.args[1].args[1], bindingof(x.args[1]))
+            else
+                setref!(x.args[1].args[1], Binding(x.args[1], nothing, nothing, []))
+            end
         end
         return true
     elseif is_special_macro_term(x) || new_within_struct(x)
