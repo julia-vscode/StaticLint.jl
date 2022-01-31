@@ -1789,3 +1789,40 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "kwarg refs" begin
+    cst = parse_and_pass("""
+    function foo(aaa, bbb; ccc)
+        return aaa + bbb + ccc
+    end
+    """)
+    for (_, b) in cst.args[1].meta.scope.names
+        @test length(b.refs) == 2
+    end
+
+    cst = parse_and_pass("""
+    function foo(aaa, bbb::Foo; ccc::Bar)
+        return aaa + bbb + ccc
+    end
+    """)
+    for (_, b) in cst.args[1].meta.scope.names
+        @test length(b.refs) == 2
+    end
+
+    cst = parse_and_pass("""
+    function foo(aaa, bbb=1; ccc=2)
+        return aaa + bbb + ccc
+    end
+    """)
+    for (_, b) in cst.args[1].meta.scope.names
+        @test length(b.refs) == 2
+    end
+    cst = parse_and_pass("""
+    function foo(aaa, bbb::Foo=1; ccc::Bar=2)
+        return aaa + bbb + ccc
+    end
+    """)
+    for (_, b) in cst.args[1].meta.scope.names
+        @test length(b.refs) == 2
+    end
+end
