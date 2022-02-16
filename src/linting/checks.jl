@@ -876,7 +876,7 @@ end
 
 function check_const(x::EXPR)
     if headof(x) === :const
-        if CSTParser.isassignment(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
+        if VERSION < v"1.8.0-DEV.1500" && CSTParser.isassignment(x.args[1]) && CSTParser.isdeclaration(x.args[1].args[1])
             seterror!(x, TypeDeclOnGlobalVariable)
         elseif headof(x.args[1]) === :local
             seterror!(x, UnsupportedConstLocalVariable)

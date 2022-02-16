@@ -1324,7 +1324,7 @@ f(arg) = arg
         let
             cst = parse_and_pass("""const x::T = x
             local const x = 1""")
-            @test errorof(cst.args[1]) === StaticLint.TypeDeclOnGlobalVariable
+            @test errorof(cst.args[1]) === (VERSION < v"1.8.0-DEV.1500" ? StaticLint.TypeDeclOnGlobalVariable : nothing)
             @test errorof(cst.args[2]) === StaticLint.UnsupportedConstLocalVariable
         end
     end
