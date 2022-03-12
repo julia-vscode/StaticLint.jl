@@ -1,10 +1,9 @@
-#=
+#= 
 Project trees are usually made up of multiple files. An AbstractServer holds the AbstractFiles that represent this tree. FileServer is the basic implementation and assumes files are available and readable from disc. (LanguageServer illustrates another implementaiton). The accompanying functions summarised below are required for making an alternative implementation.
 
 Interface spec.
 AbstractServer :-> (has/canload/load/set/get)file, getsymbols, getsymbolextends
-AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, semantic_pass, (get/set)server
-=#
+AbstractFile :-> (get/set)path, (get/set)root, (get/set)cst, semantic_pass, (get/set)server =#
 abstract type AbstractServer end
 abstract type AbstractFile end
 

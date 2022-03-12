@@ -7,7 +7,7 @@ using SymbolServer, CSTParser
 using CSTParser: EXPR, isidentifier, setparent!, valof, headof, hastrivia, parentof, isoperator, ispunctuation, to_codeobject
 # CST utils
 using CSTParser: is_getfield, isassignment, isdeclaration, isbracketed, iskwarg, iscall, iscurly, isunarycall, isunarysyntax, isbinarycall, isbinarysyntax, issplat, defines_function, is_getfield_w_quotenode, iswhere, iskeyword, isstringliteral, isparameters, isnonstdid, istuple
-using SymbolServer: VarRef
+using SymbolServer:VarRef
 
 const noname = EXPR(:noname, nothing, nothing, 0, 0, nothing, nothing, nothing)
 
@@ -27,9 +27,9 @@ Meta() = Meta(nothing, nothing, nothing, nothing)
 
 function Base.show(io::IO, m::Meta)
     m.binding !== nothing && show(io, m.binding)
-    m.ref !== nothing && printstyled(io, " * ", color = :red)
-    m.scope !== nothing && printstyled(io, " new scope", color = :green)
-    m.error !== nothing && printstyled(io, " lint ", color = :red)
+    m.ref !== nothing && printstyled(io, " * ", color=:red)
+    m.scope !== nothing && printstyled(io, " new scope", color=:green)
+    m.error !== nothing && printstyled(io, " lint ", color=:red)
 end
 hasmeta(x::EXPR) = x.meta isa Meta
 hasbinding(m::Meta) = m.binding isa Binding
@@ -166,7 +166,7 @@ end
 
 Performs a semantic pass across a project from the entry point `file`. A first pass traverses the top-level scope after which secondary passes handle delayed scopes (e.g. functions). These secondary passes can be, optionally, very light and only seek to resovle references (e.g. link symbols to bindings). This can be done by supplying a list of expressions on which the full secondary pass should be made (`modified_expr`), all others will receive the light-touch version.
 """
-function semantic_pass(file, modified_expr = nothing)
+function semantic_pass(file, modified_expr=nothing)
     server = file.server
     env = getenv(file, server)
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => env.symbols[:Base], :Core => env.symbols[:Core]), nothing))

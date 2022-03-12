@@ -111,7 +111,7 @@ function check_all(x::EXPR, opts::LintOptions, env::ExternalEnv)
     if x.args !== nothing
         for i in 1:length(x.args)
             check_all(x.args[i], opts, env)
-        end
+end
     end
 end
 
@@ -180,7 +180,7 @@ function func_nargs(x::EXPR)
             else
                 minargs += 1
                 maxargs !== typemax(Int) && (maxargs += 1)
-            end
+        end
         end
     end
 
@@ -227,7 +227,7 @@ function call_nargs(x::EXPR)
             else
                 minargs += 1
                 maxargs !== typemax(Int) && (maxargs += 1)
-            end
+        end
         end
     else
         @info string("call_nargs: ", to_codeobject(x))
@@ -256,7 +256,7 @@ function compare_f_call(
     length(act_kws) > length(ref_kws) && return false # call has more kws than method accepts
     !all(kw in ref_kws for kw in act_kws) && return false # call supplies a kw that isn't defined in the method
 
-    return true
+return true
 end
 
 function is_something_with_methods(x::Binding)
@@ -280,7 +280,7 @@ function check_call(x, env::ExternalEnv)
             if func_ref isa Binding && func_ref.val isa EXPR && isassignment(func_ref.val) && isidentifier(func_ref.val.args[1]) && isidentifier(func_ref.val.args[2])
                 # if func_ref is a shadow binding (for these purposes, an assignment that just changes the name of a mehtod), redirect to the rhs of the assignment.
                 func_ref = refof(func_ref.val.args[2])
-            end
+        end
         else
             return
         end
@@ -347,7 +347,7 @@ function check_loop_iter(x::EXPR, env::ExternalEnv)
             rng = rhs_of_iterator(x.args[1])
             if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
                 seterror!(x.args[1], IncorrectIterSpec)
-            end
+        end
         end
     elseif headof(x) === :generator
         for i = 2:length(x.args)
@@ -357,7 +357,7 @@ function check_loop_iter(x::EXPR, env::ExternalEnv)
                     seterror!(x.args[i], IncorrectIterSpec)
                 end
             end
-        end
+end
     end
 end
 
@@ -367,7 +367,7 @@ function check_nothing_equality(x::EXPR, env::ExternalEnv)
             seterror!(x.args[1], NothingEquality)
         elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
             seterror!(x.args[1], NothingNotEq)
-        end
+end
     end
 end
 
@@ -406,7 +406,7 @@ function check_if_conds(x::EXPR)
             seterror!(cond, ConstIfCondition)
         elseif isassignment(cond)
             seterror!(cond, EqInIfConditional)
-        end
+end
     end
 end
 
@@ -415,12 +415,12 @@ function check_lazy(x::EXPR)
         if valof(headof(x)) == "||"
             if headof(x.args[1]) === :TRUE || headof(x.args[1]) === :FALSE
                 seterror!(x, PointlessOR)
-            end
+        end
         elseif valof(headof(x)) == "&&"
             if headof(x.args[1]) === :TRUE || headof(x.args[1]) === :FALSE || headof(x.args[2]) === :TRUE || headof(x.args[2]) === :FALSE
                 seterror!(x, PointlessAND)
-            end
         end
+end
     end
 end
 
@@ -448,10 +448,10 @@ function check_datatype_decl(x::EXPR, env::ExternalEnv)
         if (dt = refof_maybe_getfield(last(x.args))) !== nothing
             if is_never_datatype(dt, env)
                 seterror!(x, InvalidTypeDeclaration)
-            end
+        end
         elseif CSTParser.isliteral(last(x.args))
             seterror!(x, InvalidTypeDeclaration)
-        end
+end
     end
 end
 
@@ -483,8 +483,8 @@ function check_farg_unused(x::EXPR)
                 else
                     !check_farg_unused_(arg, arg_names) && return
                 end
-            end
         end
+end
     end
 end
 
@@ -605,7 +605,7 @@ function should_mark_missing_getfield_ref(x, env)
                     return false
                 end
                 return true
-            end
+        end
         end
     end
     return false
@@ -627,7 +627,7 @@ function has_getproperty_method(b::SymbolServer.DataTypeStore, env)
             !(t isa SymbolServer.FakeUnion) && t.name == b.name.name && return true
         end
     end
-    return false
+return false
 end
 
 function has_getproperty_method(b::Binding)
@@ -640,7 +640,7 @@ function has_getproperty_method(b::Binding)
             end
         end
     end
-    return false
+return false
 end
 
 function is_type_of_call_to_getproperty(x::EXPR)
@@ -698,7 +698,7 @@ function fname_is_noteq(x)
             return fname_is_noteq(x.args[2].args[1])
         end
     end
-    return false
+return false
 end
 
 function refers_to_nonimported_type(arg::EXPR)
@@ -717,7 +717,7 @@ function refers_to_nonimported_type(arg::EXPR)
         end
         return false
     end
-    return false
+return false
 end
 
 overwrites_imported_function(b) = false
@@ -771,7 +771,7 @@ function find_if_parents(x::EXPR, current=Int[], list=Dict{EXPR,Vector{Int}}())
         while i <= length(parentof(x).args)
             if parentof(x).args[i] == x
                 pushfirst!(current, i)
-                break
+            break
             end
             i += 1
         end
@@ -896,7 +896,7 @@ end
 all_underscore(s) = false
 all_underscore(s::String) = all(==(0x5f), codeunits(s))
 
-function is_sig_arg(x)
+    function is_sig_arg(x)
     is_in_fexpr(x, CSTParser.iscall)
 end
 
@@ -1014,6 +1014,6 @@ function (state::BoundAfter)(x::EXPR)
     if scopeof(x) isa Scope && haskey(scopeof(x).names, state.name)
         state.result = 2
         return
-    end
+end
     traverse(x, state)
 end

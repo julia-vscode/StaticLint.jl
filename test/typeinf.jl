@@ -1,5 +1,5 @@
 @testset "type inference by use" begin  
-cst = parse_and_pass("""
+    cst = parse_and_pass("""
 struct T 
 end
 
@@ -51,15 +51,15 @@ function ex6(x)
 end
 """);
 
-T = cst.meta.scope.names["T"]
-S = cst.meta.scope.names["S"]
+    T = cst.meta.scope.names["T"]
+    S = cst.meta.scope.names["S"]
 
-@test cst.meta.scope.names["ex1"].val.meta.scope.names["x"].type == T
-@test cst.meta.scope.names["ex2"].val.meta.scope.names["x"].type === nothing
-@test cst.meta.scope.names["ex3"].val.meta.scope.names["x"].type === nothing
-@test cst.meta.scope.names["ex4"].val.meta.scope.names["x"].type === nothing
-@test cst.meta.scope.names["ex5"].val.meta.scope.names["x"].type === nothing
-@test cst.meta.scope.names["ex6"].val.meta.scope.names["y"].type === T
+    @test cst.meta.scope.names["ex1"].val.meta.scope.names["x"].type == T
+    @test cst.meta.scope.names["ex2"].val.meta.scope.names["x"].type === nothing
+    @test cst.meta.scope.names["ex3"].val.meta.scope.names["x"].type === nothing
+    @test cst.meta.scope.names["ex4"].val.meta.scope.names["x"].type === nothing
+    @test cst.meta.scope.names["ex5"].val.meta.scope.names["x"].type === nothing
+    @test cst.meta.scope.names["ex6"].val.meta.scope.names["y"].type === T
 end
 
 
