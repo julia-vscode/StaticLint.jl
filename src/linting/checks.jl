@@ -27,9 +27,8 @@ UnsupportedConstLocalVariable,
 UnassignedKeywordArgument,
 CannotDefineFuncAlreadyHasValue,
 DuplicateFuncArgName,
-IncludePathContainsNULL)
-
-
+IncludePathContainsNULL,
+FileTooBig)
 
 const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
@@ -58,7 +57,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
-    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters."
+    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters.",
+    FileTooBig => "File too big, not following include."
     )
 
 haserror(m::Meta) = m.error !== nothing

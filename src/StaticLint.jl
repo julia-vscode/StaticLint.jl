@@ -17,6 +17,8 @@ include("scope.jl")
 include("subtypes.jl")
 include("methodmatching.jl")
 
+const LARGE_FILE_LIMIT = 1_000_000 # bytes
+
 mutable struct Meta
     binding::Union{Nothing,Binding}
     scope::Union{Nothing,Scope}
@@ -277,8 +279,13 @@ function followinclude(x, state::State)
                 seterror!(x, IncludeLoop)
                 return
             end
+            f = getfile(state.server, path)
+            if f.cst.fullspan > LARGE_FILE_LIMIT
+                seterror!(x, FileTooBig)
+                return
+            end
             oldfile = state.file
-            state.file = getfile(state.server, path)
+            state.file = f
             push!(state.included_files, getpath(state.file))
             setroot(state.file, getroot(oldfile))
             setscope!(getcst(state.file), nothing)
