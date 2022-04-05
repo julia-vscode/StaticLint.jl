@@ -363,9 +363,15 @@ end
 
 function check_nothing_equality(x::EXPR, env::ExternalEnv)
     if isbinarycall(x) && length(x.args) == 3
-        if valof(x.args[1]) == "==" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
+        if valof(x.args[1]) == "==" && (
+                (valof(x.args[2]) == "nothing" && refof(x.args[2]) === getsymbols(env)[:Core][:nothing]) ||
+                (valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing])
+            )
             seterror!(x.args[1], NothingEquality)
-        elseif valof(x.args[1]) == "!=" && valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing]
+        elseif valof(x.args[1]) == "!=" && (
+                (valof(x.args[2]) == "nothing" && refof(x.args[2]) === getsymbols(env)[:Core][:nothing]) ||
+                (valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing])
+            )
             seterror!(x.args[1], NothingNotEq)
         end
     end
