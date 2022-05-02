@@ -155,6 +155,17 @@ function f(arg::T)
 end
 """) == [true, true, true, true, true, true, true]
 
+        if VERSION > v"1.8-"
+            @test check_resolved("""
+            mutable struct T
+                const field
+            end
+            function f(arg::T)
+                arg.field
+            end
+            """) == [true, true, true, true, true, true, true]
+        end
+
         @test check_resolved("""
 f(arg) = arg
 """) == [1, 1, 1]
