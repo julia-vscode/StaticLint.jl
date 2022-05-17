@@ -62,7 +62,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
     IncludePathContainsNULL => "Cannot include file, path cotains NULL characters.",
-    LoopOverLength => "Looping over array indices with `for i in 1:length(...)` is discouraged."
+    LoopOverLength => "Looping over array indices with `for i in 1:length(...)` is discouraged. Use `eachindex` instead."
 )
 
 haserror(m::Meta) = m.error !== nothing
