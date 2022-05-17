@@ -1,37 +1,40 @@
-@enum(LintCodes,
-MissingRef,
-IncorrectCallArgs,
-IncorrectIterSpec,
-NothingEquality,
-NothingNotEq,
-ConstIfCondition,
-EqInIfConditional,
-PointlessOR,
-PointlessAND,
-UnusedBinding,
-InvalidTypeDeclaration,
-UnusedTypeParameter,
-IncludeLoop,
-MissingFile,
-InvalidModuleName,
-TypePiracy,
-UnusedFunctionArgument,
-CannotDeclareConst,
-InvalidRedefofConst,
-NotEqDef,
-KwDefaultMismatch,
-InappropriateUseOfLiteral,
-ShouldBeInALoop,
-TypeDeclOnGlobalVariable,
-UnsupportedConstLocalVariable,
-UnassignedKeywordArgument,
-CannotDefineFuncAlreadyHasValue,
-DuplicateFuncArgName,
-IncludePathContainsNULL)
+@enum(
+    LintCodes,
 
+    MissingRef,
+    IncorrectCallArgs,
+    IncorrectIterSpec,
+    NothingEquality,
+    NothingNotEq,
+    ConstIfCondition,
+    EqInIfConditional,
+    PointlessOR,
+    PointlessAND,
+    UnusedBinding,
+    InvalidTypeDeclaration,
+    UnusedTypeParameter,
+    IncludeLoop,
+    MissingFile,
+    InvalidModuleName,
+    TypePiracy,
+    UnusedFunctionArgument,
+    CannotDeclareConst,
+    InvalidRedefofConst,
+    NotEqDef,
+    KwDefaultMismatch,
+    InappropriateUseOfLiteral,
+    ShouldBeInALoop,
+    TypeDeclOnGlobalVariable,
+    UnsupportedConstLocalVariable,
+    UnassignedKeywordArgument,
+    CannotDefineFuncAlreadyHasValue,
+    DuplicateFuncArgName,
+    IncludePathContainsNULL,
+    LoopOverLength
+)
 
-
-const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possible method call error.",
+const LintCodeDescriptions = Dict{LintCodes,String}(
+    IncorrectCallArgs => "Possible method call error.",
     IncorrectIterSpec => "A loop iterator has been used that will likely error.",
     NothingEquality => "Compare against `nothing` using `===`",
     NothingNotEq => "Compare against `nothing` using `!==`",
@@ -58,8 +61,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(IncorrectCallArgs => "Possib
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
-    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters."
-    )
+    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters.",
+    LoopOverLength => "Looping over array indices with `for i in 1:length(...)` is discouraged."
+)
 
 haserror(m::Meta) = m.error !== nothing
 haserror(x::EXPR) = hasmeta(x) && haserror(x.meta)
@@ -347,6 +351,21 @@ function check_loop_iter(x::EXPR, env::ExternalEnv)
             rng = rhs_of_iterator(x.args[1])
             if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
                 seterror!(x.args[1], IncorrectIterSpec)
+            elseif iscall(rng) && valof(rng.args[1]) === ":" &&
+                length(rng.args) === 3 &&
+                headof(rng.args[2]) === :INTEGER &&
+                iscall(rng.args[3]) &&
+                length(rng.args[3].args) > 1 && (
+                    refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:length] ||
+                    refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:size]
+                )
+                if length(x.args[1].args) >= 1
+                    lhs = x.args[1].args[1]
+                    chars = unique(valof(lhs))
+                    if !(length(chars) == 1 && first(chars) == '_')
+                        seterror!(x.args[1], LoopOverLength)
+                    end
+                end
             end
         end
     elseif headof(x) === :generator
