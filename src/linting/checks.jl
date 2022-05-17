@@ -347,23 +347,25 @@ isdocumented(x::EXPR) = parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x
 
 function check_loop_iter(x::EXPR, env::ExternalEnv)
     if headof(x) === :for
-        if length(x.args) > 0
+        if length(x.args) > 1
+            body = x.args[2]
             if headof(x.args[1]) === :block && x.args[1].args !== nothing
                 for arg in x.args[1].args
-                    check_incorrect_iter_spec(arg, env)
+                    check_incorrect_iter_spec(arg, body, env)
                 end
             else
-                check_incorrect_iter_spec(x.args[1], env)
+                check_incorrect_iter_spec(x.args[1], body, env)
             end
         end
     elseif headof(x) === :generator
+        body = x.args[1]
         for i = 2:length(x.args)
-            check_incorrect_iter_spec(x.args[i], env)
+            check_incorrect_iter_spec(x.args[i], body, env)
         end
     end
 end
 
-function check_incorrect_iter_spec(x, env)
+function check_incorrect_iter_spec(x, body, env)
     if x.args !== nothing && CSTParser.is_range(x)
         rng = rhs_of_iterator(x)
         if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
@@ -378,12 +380,34 @@ function check_incorrect_iter_spec(x, env)
             )
             if length(x.args) >= 1
                 lhs = x.args[1]
+                arr = rng.args[3].args[2]
                 if !all_underscore(valof(lhs))
-                    seterror!(x, LoopOverLength)
+                    if check_is_used_in_getindex(body, lhs, arr)
+                        seterror!(x, LoopOverLength)
+                    end
                 end
             end
         end
     end
+end
+
+function check_is_used_in_getindex(expr, lhs, arr)
+    if headof(expr) === :ref && expr.args !== nothing && length(expr.args) > 1
+        this_arr = expr.args[1]
+        if hasref(this_arr) && hasref(arr) && refof(this_arr) == refof(arr)
+            for index_arg in expr.args[2:end]
+                if hasref(index_arg) && hasref(lhs) && refof(index_arg) == refof(lhs)
+                    return true
+                end
+            end
+        end
+    end
+    if expr.args !== nothing
+        for arg in expr.args
+            check_is_used_in_getindex(arg, lhs, arr) && return true
+        end
+    end
+    return false
 end
 
 function check_nothing_equality(x::EXPR, env::ExternalEnv)
