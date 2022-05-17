@@ -62,7 +62,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
     IncludePathContainsNULL => "Cannot include file, path cotains NULL characters.",
-    LoopOverLength => "Looping over array indices with `for i in 1:length(...)` is discouraged. Use `eachindex` instead."
+    LoopOverLength => "Indexing into an array with indices obtained from `for i in 1:length(...)` and similar is discouraged. Use `eachindex` instead."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -368,9 +368,10 @@ end
 function check_incorrect_iter_spec(x, body, env)
     if x.args !== nothing && CSTParser.is_range(x)
         rng = rhs_of_iterator(x)
+
         if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
             seterror!(x, IncorrectIterSpec)
-        elseif iscall(rng) && valof(rng.args[1]) === ":" &&
+        elseif iscall(rng) && valof(rng.args[1]) == ":" &&
             length(rng.args) === 3 &&
             headof(rng.args[2]) === :INTEGER &&
             iscall(rng.args[3]) &&

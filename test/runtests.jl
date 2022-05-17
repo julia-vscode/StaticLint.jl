@@ -1847,7 +1847,7 @@ end
     cst = parse_and_pass("arr = []; [arr[i] for i in 1:length(arr)]")
     @test length(StaticLint.collect_hints(cst, server)) == 1
     cst = parse_and_pass("arr = []; [i for i in 1:length(arr)]")
-    @test length(StaticLint.collect_hints(cst, server)) == 1
+    @test length(StaticLint.collect_hints(cst, server)) == 0
 
     cst = parse_and_pass("""
     arr = []
