@@ -398,6 +398,7 @@ function check_is_used_in_getindex(expr, lhs, arr)
         if hasref(this_arr) && hasref(arr) && refof(this_arr) == refof(arr)
             for index_arg in expr.args[2:end]
                 if hasref(index_arg) && hasref(lhs) && refof(index_arg) == refof(lhs)
+                    seterror!(expr, LoopOverLength)
                     return true
                 end
             end
