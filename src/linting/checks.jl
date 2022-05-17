@@ -347,33 +347,39 @@ isdocumented(x::EXPR) = parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x
 
 function check_loop_iter(x::EXPR, env::ExternalEnv)
     if headof(x) === :for
-        if length(x.args) > 0 && CSTParser.is_range(x.args[1])
-            rng = rhs_of_iterator(x.args[1])
-            if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
-                seterror!(x.args[1], IncorrectIterSpec)
-            elseif iscall(rng) && valof(rng.args[1]) === ":" &&
-                length(rng.args) === 3 &&
-                headof(rng.args[2]) === :INTEGER &&
-                iscall(rng.args[3]) &&
-                length(rng.args[3].args) > 1 && (
-                    refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:length] ||
-                    refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:size]
-                )
-                if length(x.args[1].args) >= 1
-                    lhs = x.args[1].args[1]
-                    chars = unique(valof(lhs))
-                    if !(length(chars) == 1 && first(chars) == '_')
-                        seterror!(x.args[1], LoopOverLength)
-                    end
+        if length(x.args) > 0
+            if headof(x.args[1]) === :block && x.args[1].args !== nothing
+                for arg in x.args[1].args
+                    check_incorrect_iter_spec(arg, env)
                 end
+            else
+                check_incorrect_iter_spec(x.args[1], env)
             end
         end
     elseif headof(x) === :generator
         for i = 2:length(x.args)
-            if CSTParser.is_range(x.args[i])
-                rng = rhs_of_iterator(x.args[i])
-                if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
-                    seterror!(x.args[i], IncorrectIterSpec)
+            check_incorrect_iter_spec(x.args[i], env)
+        end
+    end
+end
+
+function check_incorrect_iter_spec(x, env)
+    if x.args !== nothing && CSTParser.is_range(x)
+        rng = rhs_of_iterator(x)
+        if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
+            seterror!(x, IncorrectIterSpec)
+        elseif iscall(rng) && valof(rng.args[1]) === ":" &&
+            length(rng.args) === 3 &&
+            headof(rng.args[2]) === :INTEGER &&
+            iscall(rng.args[3]) &&
+            length(rng.args[3].args) > 1 && (
+                refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:length] ||
+                refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:size]
+            )
+            if length(x.args) >= 1
+                lhs = x.args[1]
+                if !all_underscore(valof(lhs))
+                    seterror!(x, LoopOverLength)
                 end
             end
         end

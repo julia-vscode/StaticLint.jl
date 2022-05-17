@@ -1840,3 +1840,38 @@ end
         @test length(b.refs) == 2
     end
 end
+
+@testset "iteration over 1:length(...)" begin
+    cst = parse_and_pass("arr = []; [1 for _ in 1:length(arr)]")
+    @test isempty(StaticLint.collect_hints(cst, server))
+    cst = parse_and_pass("arr = []; [1 for i in 1:length(arr)]")
+    @test length(StaticLint.collect_hints(cst, server)) == 1
+
+    cst = parse_and_pass("""
+    arr = []
+    for _ in 1:length(arr)
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+    cst = parse_and_pass("""
+    arr = []
+    for i in 1:length(arr)
+        println(i)
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 1
+
+    cst = parse_and_pass("""
+    arr = []
+    for _ in 1:length(arr), _ in 1:length(arr)
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+    cst = parse_and_pass("""
+    arr = []
+    for i in 1:length(arr), j in 1:length(arr)
+        println(i)
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 2
+end
