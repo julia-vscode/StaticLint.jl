@@ -30,7 +30,7 @@
     CannotDefineFuncAlreadyHasValue,
     DuplicateFuncArgName,
     IncludePathContainsNULL,
-    ArrayIndexFromLength
+    IndexFromLength
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -62,7 +62,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
     IncludePathContainsNULL => "Cannot include file, path contains NULL characters.",
-    ArrayIndexFromLength => "Indexing with indices obtained from `for i in 1:length(...)` and similar is discouraged. Use `eachindex` instead."
+    IndexFromLength => "Indexing with indices obtained from `for i in 1:length(...)` and similar is discouraged. Use `eachindex` instead."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -390,7 +390,7 @@ function check_incorrect_iter_spec(x, body, env)
                 end
                 if !all_underscore(valof(lhs))
                     if check_is_used_in_getindex(body, lhs, arr)
-                        seterror!(x, ArrayIndexFromLength)
+                        seterror!(x, IndexFromLength)
                     end
                 end
             end
@@ -404,7 +404,7 @@ function check_is_used_in_getindex(expr, lhs, arr)
         if hasref(this_arr) && hasref(arr) && refof(this_arr) == refof(arr)
             for index_arg in expr.args[2:end]
                 if hasref(index_arg) && hasref(lhs) && refof(index_arg) == refof(lhs)
-                    seterror!(expr, ArrayIndexFromLength)
+                    seterror!(expr, IndexFromLength)
                     return true
                 end
             end
