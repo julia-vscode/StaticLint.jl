@@ -30,7 +30,7 @@
     CannotDefineFuncAlreadyHasValue,
     DuplicateFuncArgName,
     IncludePathContainsNULL,
-    LoopOverLength
+    ArrayIndexFromLength
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -61,8 +61,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     UnassignedKeywordArgument => "Keyword argument not assigned.",
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
-    IncludePathContainsNULL => "Cannot include file, path cotains NULL characters.",
-    LoopOverLength => "Indexing into an array with indices obtained from `for i in 1:length(...)` and similar is discouraged. Use `eachindex` instead."
+    IncludePathContainsNULL => "Cannot include file, path contains NULL characters.",
+    ArrayIndexFromLength => "Indexing into an array with indices obtained from `for i in 1:length(...)` and similar is discouraged. Use `eachindex` instead."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -382,9 +382,15 @@ function check_incorrect_iter_spec(x, body, env)
             if length(x.args) >= 1
                 lhs = x.args[1]
                 arr = rng.args[3].args[2]
+                b = refof(arr)
+
+                # 1:length(arr) indexing is ok for Vector and Array specifically
+                if b isa Binding && CoreTypes.isarray(b.type) || CoreTypes.isvector(b.type)
+                    return
+                end
                 if !all_underscore(valof(lhs))
                     if check_is_used_in_getindex(body, lhs, arr)
-                        seterror!(x, LoopOverLength)
+                        seterror!(x, ArrayIndexFromLength)
                     end
                 end
             end
@@ -398,7 +404,7 @@ function check_is_used_in_getindex(expr, lhs, arr)
         if hasref(this_arr) && hasref(arr) && refof(this_arr) == refof(arr)
             for index_arg in expr.args[2:end]
                 if hasref(index_arg) && hasref(lhs) && refof(index_arg) == refof(lhs)
-                    seterror!(expr, LoopOverLength)
+                    seterror!(expr, ArrayIndexFromLength)
                     return true
                 end
             end

@@ -1890,4 +1890,58 @@ end
     end
     """)
     @test length(StaticLint.collect_hints(cst, server)) == 0
+
+    cst = parse_and_pass("""
+    function f(arr::Vector)
+        for i in 1:length(arr), j in 1:length(arr)
+            arr[i] + arr[j]
+        end
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 0
+
+    cst = parse_and_pass("""
+    function f(arr::Array)
+        for i in 1:length(arr), j in 1:length(arr)
+            arr[i] + arr[j]
+        end
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 0
+
+    cst = parse_and_pass("""
+    function f(arr::Matrix)
+        for i in 1:length(arr), j in 1:length(arr)
+            arr[i] + arr[j]
+        end
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 0
+
+    cst = parse_and_pass("""
+    function f(arr::Array{T,N}) where T where N
+        for i in 1:length(arr), j in 1:length(arr)
+            arr[i] + arr[j]
+        end
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 0
+
+    cst = parse_and_pass("""
+    function f(arr::AbstractArray)
+        for i in 1:length(arr), j in 1:length(arr)
+            arr[i] + arr[j]
+        end
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 4
+
+    cst = parse_and_pass("""
+    function f(arr)
+        for i in 1:length(arr), j in 1:length(arr)
+            arr[i] + arr[j]
+        end
+    end
+    """)
+    @test length(StaticLint.collect_hints(cst, server)) == 4
 end
