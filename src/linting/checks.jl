@@ -385,7 +385,7 @@ function check_incorrect_iter_spec(x, body, env)
                 b = refof(arr)
 
                 # 1:length(arr) indexing is ok for Vector and Array specifically
-                if b isa Binding && CoreTypes.isarray(b.type) || CoreTypes.isvector(b.type)
+                if b isa Binding && (CoreTypes.isarray(b.type) || CoreTypes.isvector(b.type))
                     return
                 end
                 if !all_underscore(valof(lhs))
