@@ -1945,3 +1945,34 @@ end
     """)
     @test length(StaticLint.collect_hints(cst, server)) == 4
 end
+
+@testset "assigned but not used with loops" begin
+    cst = parse_and_pass("""
+    function a!(v)
+        next = 0
+        for i in eachindex(v)
+            current = next
+            next = sin(current)
+            while true
+                current = next
+                next = sin(current)
+            end
+            v[i] = current
+        end
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+    cst = parse_and_pass("""
+    function f(v)
+        next = 0
+        for _ in v
+            foo = next
+            for _ in v
+                next = foo
+            end
+            foo = sin(next)
+        end
+    end
+    """)
+    @test isempty(StaticLint.collect_hints(cst, server))
+end
