@@ -950,7 +950,9 @@ end
 function check_unused_binding(b::Binding, scope::Scope)
     if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
         refs = loose_refs(b)
-        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) && !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) && !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b)
+        if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) &&
+                !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) &&
+                !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b)
             seterror!(b.name, UnusedBinding)
         end
     end
@@ -986,9 +988,10 @@ function is_overwritten_in_loop(x)
             if s2 isa Scope
                 prev_binding = parentof(s2).names[valof(x)]
                 if prev_binding isa Binding
-                    s = ComesBefore(prev_binding.name, s2.expr, 0)
-                    traverse(parentof(s2).expr, s)
-                    return s.result == 1
+                    return true
+                    # s = ComesBefore(prev_binding.name, s2.expr, 0)
+                    # traverse(parentof(s2).expr, s)
+                    # return s.result == 1
                     # for r in prev_binding.refs
                     #     if r isa EXPR && is_in_fexpr(r, x -> x === loop)
                     #         return true
