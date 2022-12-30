@@ -646,12 +646,17 @@ f(arg) = arg
         name
         func
         func1
+        struct AnyType
+            var"anything"
+        end
+        anything(x::AnyType) = x.var"anything"
         """)
                 StaticLint.collect_hints(cst, getenv(server.files[""], server))
                 @test all(n in keys(cst.meta.scope.names) for n in ("name", "func"))
                 @test StaticLint.hasref(cst[4])
                 @test StaticLint.hasref(cst[5])
                 @test StaticLint.hasref(cst[6])
+                @test cst.args[8].args[2].args[1].args[2].args[1] in bindingof(cst.args[7].args[3].args[1]).refs
             end
         end
     end
