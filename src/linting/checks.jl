@@ -30,7 +30,9 @@
     CannotDefineFuncAlreadyHasValue,
     DuplicateFuncArgName,
     IncludePathContainsNULL,
-    IndexFromLength
+    IndexFromLength,
+    FileTooBig,
+    FileNotAvailable,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -62,7 +64,9 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     CannotDefineFuncAlreadyHasValue => "Cannot define function ; it already has a value.",
     DuplicateFuncArgName => "Function argument name not unique.",
     IncludePathContainsNULL => "Cannot include file, path contains NULL characters.",
-    IndexFromLength => "Indexing with indices obtained from `length`, `size` etc is discouraged. Use `eachindex` or `axes` instead."
+    IndexFromLength => "Indexing with indices obtained from `length`, `size` etc is discouraged. Use `eachindex` or `axes` instead.",
+    FileTooBig => "File too big, not following include.",
+    FileNotAvailable => "File not available."
 )
 
 haserror(m::Meta) = m.error !== nothing
