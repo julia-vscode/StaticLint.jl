@@ -552,12 +552,15 @@ function check_farg_unused(x::EXPR)
 end
 
 function check_farg_unused_(arg, arg_names)
-    if hasbinding(arg)
-    elseif iskwarg(arg) && hasbinding(arg.args[1])
-        arg = arg.args[1]
-    elseif is_nospecialize_call(arg) && hasbinding(unwrap_nospecialize(arg))
-        arg = unwrap_nospecialize(arg)
-    else
+    if !hasbinding(arg)
+        if iskwarg(arg)
+            arg = arg.args[1]
+        end
+        if is_nospecialize_call(arg)
+            arg = unwrap_nospecialize(arg)
+        end
+    end
+    if !hasbinding(arg)
         return false
     end
     b = bindingof(arg)

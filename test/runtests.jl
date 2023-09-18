@@ -187,7 +187,7 @@ f(arg) = arg
             @test StaticLint.CoreTypes.ismodule(bindingof(parse_and_pass("module A end").args[1]).type)
             @test StaticLint.CoreTypes.ismodule(bindingof(parse_and_pass("baremodule A end").args[1]).type)
 
-    # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
+            # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
             let cst = parse_and_pass("""
         struct T end
         function f(x::T) x end""")
@@ -246,9 +246,9 @@ f(arg) = arg
             end
 
             let cst = parse_and_pass("""
-        macro mac_str() end
-        mac"whatever"
-        """)
+                macro mac_str() end
+                mac"whatever"
+                """)
                 @test refof(cst.args[2].args[1]) == bindingof(cst.args[1])
             end
 
@@ -261,38 +261,38 @@ f(arg) = arg
             end
 
             let cst = parse_and_pass("""
-        module Reparse
-        end
-        using .Reparse, CSTParser
-        """)
+                module Reparse
+                end
+                using .Reparse, CSTParser
+                """)
                 @test refof(cst.args[2].args[1].args[2]).val == bindingof(cst[1])
             end
 
             let cst = parse_and_pass("""
-        module A
-        A
-        end
-        """)
+                module A
+                A
+                end
+                """)
                 @test scopeof(cst).names["A"] == scopeof(cst.args[1]).names["A"]
                 @test refof(cst.args[1].args[2]) == bindingof(cst.args[1])
                 @test refof(cst.args[1].args[3].args[1]) == bindingof(cst.args[1])
             end
-    # let cst = parse_and_pass("""
-    #     using Test: @test
-    #     """)
-    #     @test bindingof(cst[1][4]) !== nothing
-    # end
+            # let cst = parse_and_pass("""
+            #     using Test: @test
+            #     """)
+            #     @test bindingof(cst[1][4]) !== nothing
+            # end
             let cst = parse_and_pass("""
-        sin(1,2,3)
-        """)
+            sin(1,2,3)
+            """)
                 @test errorof(cst.args[1]) === StaticLint.IncorrectCallArgs
             end
             let cst = parse_and_pass("""
-        for i in length(1) end
-        for i in 1.1 end
-        for i in 1 end
-        for i in 1:1 end
-        """)
+                for i in length(1) end
+                for i in 1.1 end
+                for i in 1 end
+                for i in 1:1 end
+                """)
                 @test errorof(cst.args[1].args[1]) === StaticLint.IncorrectIterSpec
                 @test errorof(cst.args[2].args[1]) === StaticLint.IncorrectIterSpec
                 @test errorof(cst.args[3].args[1]) === StaticLint.IncorrectIterSpec
@@ -300,11 +300,11 @@ f(arg) = arg
             end
 
             let cst = parse_and_pass("""
-        [i for i in length(1) end]
-        [i for i in 1.1 end]
-        [i for i in 1 end]
-        [i for i in 1:1 end]
-        """)
+                [i for i in length(1) end]
+                [i for i in 1.1 end]
+                [i for i in 1 end]
+                [i for i in 1:1 end]
+                """)
                 @test errorof(cst[1][2][3]) === StaticLint.IncorrectIterSpec
                 @test errorof(cst[2][2][3]) === StaticLint.IncorrectIterSpec
                 @test errorof(cst[3][2][3]) === StaticLint.IncorrectIterSpec
@@ -319,24 +319,24 @@ f(arg) = arg
             end
 
             let cst = parse_and_pass("""
-        struct Graph
-            children:: T
-        end
+                struct Graph
+                    children:: T
+                end
 
-        function test()
-            g = Graph()
-            f = g.children
-        end""")
+                function test()
+                    g = Graph()
+                    f = g.children
+                end""")
                 @test cst.args[2].args[2].args[2].args[2].args[2].args[1] in bindingof(cst.args[1].args[3].args[1]).refs
             end
 
             let cst = parse_and_pass("""
-        __source__
-        __module__
-        macro m()
-            __source__
-            __module__
-        end""")
+                __source__
+                __module__
+                macro m()
+                    __source__
+                    __module__
+                end""")
                 @test refof(cst[1]) === nothing
                 @test refof(cst[2]) === nothing
                 @test refof(cst[3][3][1]) !== nothing
@@ -1351,9 +1351,13 @@ f(arg) = arg
     @testset "issue 1609" begin
         let
             cst1 = parse_and_pass("function g(@nospecialize(x), y) x + y end")
-            cst2 = parse_and_pass("function g(@nospecialize(x), y) y end")
+            cst2 = parse_and_pass("function g(@nospecialize(x) = 1) x end")
+            cst3 = parse_and_pass("function g(@nospecialize(x) = 1, y = 2) x + y end")
+            cst4 = parse_and_pass("function g(@nospecialize(x), y) y end")
             @test !StaticLint.haserror(cst1.args[1].args[1].args[2].args[3])
-            @test StaticLint.haserror(cst2.args[1].args[1].args[2].args[3])
+            @test !StaticLint.haserror(cst2.args[1].args[1].args[2].args[1])
+            @test !StaticLint.haserror(cst3.args[1].args[1].args[2].args[1])
+            @test StaticLint.haserror(cst4.args[1].args[1].args[2].args[3])
         end
     end
 
