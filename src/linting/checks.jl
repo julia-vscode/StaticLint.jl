@@ -31,7 +31,8 @@
     DuplicateFuncArgName,
     IncludePathContainsNULL,
     IndexFromLength,
-    FileTooBig
+    FileTooBig,
+    FileNotAvailable,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -65,6 +66,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     IncludePathContainsNULL => "Cannot include file, path contains NULL characters.",
     IndexFromLength => "Indexing with indices obtained from `length`, `size` etc is discouraged. Use `eachindex` or `axes` instead.",
     FileTooBig => "File too big, not following include.",
+    FileNotAvailable => "File not available."
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -554,12 +556,15 @@ function check_farg_unused(x::EXPR)
 end
 
 function check_farg_unused_(arg, arg_names)
-    if hasbinding(arg)
-    elseif iskwarg(arg) && hasbinding(arg.args[1])
-        arg = arg.args[1]
-    elseif is_nospecialize_call(arg) && hasbinding(unwrap_nospecialize(arg))
-        arg = unwrap_nospecialize(arg)
-    else
+    if !hasbinding(arg)
+        if iskwarg(arg)
+            arg = arg.args[1]
+        end
+        if is_nospecialize_call(arg)
+            arg = unwrap_nospecialize(arg)
+        end
+    end
+    if !hasbinding(arg)
         return false
     end
     b = bindingof(arg)

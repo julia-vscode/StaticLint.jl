@@ -33,6 +33,8 @@ function infer_type(binding::Binding, scope, state)
 end
 
 function infer_type_assignment_rhs(binding, state, scope)
+    is_destructuring = false
+    lhs = binding.val.args[1]
     rhs = binding.val.args[2]
     if is_loop_iter_assignment(binding.val)
         settype!(binding, infer_eltype(rhs))
@@ -43,13 +45,24 @@ function infer_type_assignment_rhs(binding, state, scope)
         end
     else
         if CSTParser.is_func_call(rhs)
+            if CSTParser.istuple(lhs)
+                if CSTParser.isparameters(lhs.args[1])
+                    is_destructuring = true
+                else
+                    return
+                end
+            end
             callname = CSTParser.get_name(rhs)
             if isidentifier(callname)
                 resolve_ref(callname, scope, state)
                 if hasref(callname)
                     rb = get_root_method(refof(callname), state.server)
                     if (rb isa Binding && (CoreTypes.isdatatype(rb.type) || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
-                        settype!(binding, rb)
+                        if is_destructuring
+                            infer_destructuring_type(binding, rb)
+                        else
+                            settype!(binding, rb)
+                        end
                     end
                 end
             end
@@ -93,6 +106,26 @@ function infer_type_assignment_rhs(binding, state, scope)
         end
     end
 end
+
+function infer_destructuring_type(binding, rb::SymbolServer.DataTypeStore)
+    assigned_name = CSTParser.get_name(binding.val)
+    for (fieldname, fieldtype) in zip(rb.val.fieldnames, rb.val.types)
+        if fieldname == assigned_name
+            settype!(binding, fieldtype)
+            return
+        end
+    end
+end
+function infer_destructuring_type(binding::Binding, rb::EXPR)
+    assigned_name = string(to_codeobject(binding.name))
+    scope = scopeof(rb)
+    names = scope.names
+    if haskey(names, assigned_name)
+        b = names[assigned_name]
+        settype!(binding, b.type)
+    end
+end
+infer_destructuring_type(binding, rb::Binding) = infer_destructuring_type(binding, rb.val)
 
 function infer_type_decl(binding, state, scope)
     t = binding.val.args[2]

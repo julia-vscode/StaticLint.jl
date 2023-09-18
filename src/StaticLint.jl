@@ -17,7 +17,7 @@ include("scope.jl")
 include("subtypes.jl")
 include("methodmatching.jl")
 
-const LARGE_FILE_LIMIT = 1_000_000 # bytes
+const LARGE_FILE_LIMIT = 2_000_000 # bytes
 
 mutable struct Meta
     binding::Union{Nothing,Binding}
@@ -229,6 +229,20 @@ function traverse(x::EXPR, state)
     end
 end
 
+function check_filesize(x, path)
+    nb = try
+        filesize(path)
+    catch
+        seterror!(x, FileNotAvailable)
+        return false
+    end
+
+    toobig = nb > LARGE_FILE_LIMIT
+    if toobig
+        seterror!(x, FileTooBig)
+    end
+    return !toobig
+end
 
 """
     followinclude(x, state)
@@ -247,7 +261,11 @@ function followinclude(x, state::State)
         elseif isabspath(path)
             if hasfile(state.server, path)
             elseif canloadfile(state.server, path)
-                loadfile(state.server, path)
+                if check_filesize(x, path)
+                    loadfile(state.server, path)
+                else
+                    return
+                end
             else
                 path = ""
             end
@@ -257,7 +275,11 @@ function followinclude(x, state::State)
                 path = joinpath(dirname(getpath(state.file)), path)
             elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
                 path = joinpath(dirname(getpath(state.file)), path)
-                loadfile(state.server, path)
+                if check_filesize(x, path)
+                    loadfile(state.server, path)
+                else
+                    return
+                end
             else
                 path = ""
             end
@@ -280,6 +302,7 @@ function followinclude(x, state::State)
                 return
             end
             f = getfile(state.server, path)
+
             if f.cst.fullspan > LARGE_FILE_LIMIT
                 seterror!(x, FileTooBig)
                 return
