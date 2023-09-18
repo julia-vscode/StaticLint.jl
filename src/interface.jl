@@ -1,8 +1,9 @@
 function setup_server(env = dirname(SymbolServer.Pkg.Types.Context().env.project_file), depot = first(SymbolServer.Pkg.depots()), cache = joinpath(dirname(pathof(SymbolServer)), "..", "store"))
     server = StaticLint.FileServer()
     ssi = SymbolServerInstance(depot, cache)
-    _, server.symbolserver = SymbolServer.getstore(ssi, env)
-    server.symbol_extends  = SymbolServer.collect_extended_methods(server.symbolserver)
+    _, symbols = SymbolServer.getstore(ssi, env)
+    extended_methods = SymbolServer.collect_extended_methods(symbols)
+    server.external_env = ExternalEnv(symbols, extended_methods, Symbol[])
     server
 end
 

@@ -203,8 +203,8 @@ function resolve_getfield(x::EXPR, parent_type::EXPR, state::State)::Bool
         if CSTParser.defines_module(parent_type) && scopeof(parent_type) isa Scope
             resolved = resolve_ref(x, scopeof(parent_type), state)
         elseif CSTParser.defines_struct(parent_type)
-            if scopehasbinding(scopeof(parent_type), valof(x))
-                setref!(x, scopeof(parent_type).names[valof(x)])
+            if scopehasbinding(scopeof(parent_type), valofid(x))
+                setref!(x, scopeof(parent_type).names[valofid(x)])
                 resolved = true
             end
         end
