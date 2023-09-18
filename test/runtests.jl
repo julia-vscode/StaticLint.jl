@@ -190,7 +190,8 @@ f(arg) = arg
     # @test parse_and_pass("function f(x::Int) x end")[1][2][3].binding.t == StaticLint.getsymbolserver(server)["Core"].vals["Function"]
             let cst = parse_and_pass("""
         struct T end
-        function f(x::T) x end""")
+                    function f(x::T) x end
+                    """)
                 @test StaticLint.CoreTypes.isdatatype(bindingof(cst.args[1]).type)
                 @test StaticLint.CoreTypes.isfunction(bindingof(cst.args[2]).type)
                 @test bindingof(cst.args[2].args[1].args[2]).type == bindingof(cst.args[1])
@@ -199,7 +200,8 @@ f(arg) = arg
             let cst = parse_and_pass("""
         struct T end
         T() = 1
-        function f(x::T) x end""")
+                function f(x::T) x end
+                """)
                 @test StaticLint.CoreTypes.isdatatype(bindingof(cst.args[1]).type)
                 @test StaticLint.CoreTypes.isfunction(bindingof(cst.args[3]).type)
                 @test bindingof(cst.args[3].args[1].args[2]).type == bindingof(cst.args[1])
@@ -208,7 +210,8 @@ f(arg) = arg
 
             let cst = parse_and_pass("""
         struct T end
-        t = T()""")
+                t = T()
+                """)
                 @test StaticLint.CoreTypes.isdatatype(bindingof(cst.args[1]).type)
                 @test bindingof(cst.args[2].args[1]).type == bindingof(cst.args[1])
             end
@@ -222,7 +225,8 @@ f(arg) = arg
         import ..B
         B.x
         end
-        end""")
+                end
+                """)
                 @test refof(cst.args[1].args[3].args[2].args[3].args[2].args[2].args[1]) == bindingof(cst[1].args[3].args[1].args[3].args[1].args[1])
             end
 
@@ -235,7 +239,8 @@ f(arg) = arg
         end
         function f(arg::T1)
             arg.field.x
-        end""");
+                end
+                """);
                 @test refof(cst.args[3].args[2].args[1].args[1].args[1]) == bindingof(cst.args[3].args[1].args[2])
                 @test refof(cst.args[3].args[2].args[1].args[1].args[2].args[1]) == bindingof(cst.args[2].args[3].args[1])
                 @test refof(cst.args[3].args[2].args[1].args[2].args[1]) == bindingof(cst.args[1].args[3].args[1])
@@ -341,6 +346,21 @@ f(arg) = arg
                 @test refof(cst[2]) === nothing
                 @test refof(cst[3][3][1]) !== nothing
                 @test refof(cst[3][3][2]) !== nothing
+            end
+
+            let cst = parse_and_pass("""
+                struct Foo
+                    x::DataType
+                    y::Float64
+                end
+                (;x, y) = Foo(1,2)
+                x
+                y
+                """)
+                mx = cst.args[3].meta
+                @test mx.ref.type.name.name.name == :DataType
+                my = cst.args[4].meta
+                @test my.ref.type.name.name.name == :Float64
             end
         end
 
