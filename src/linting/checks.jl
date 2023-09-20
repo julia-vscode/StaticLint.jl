@@ -337,7 +337,7 @@ function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
 end
 
 function get_method(name::EXPR)
-    f = maybe_get_parent_fexpr(name, x -> CSTParser.defines_function(x) || CSTParser.defines_struct(x))
+    f = maybe_get_parent_fexpr(name, x -> CSTParser.defines_function(x) || CSTParser.defines_struct(x) || CSTParser.defines_macro(x))
     if f !== nothing && CSTParser.get_name(f) == name
         return f
     end

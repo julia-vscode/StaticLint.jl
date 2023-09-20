@@ -2005,3 +2005,26 @@ end
     """)
     @test isempty(StaticLint.collect_hints(cst, server))
 end
+
+@testset "macro definition" begin
+    cst = parse_and_pass("""
+    module JumpToMacroDoesNotWork
+        export @mymacro
+
+        macro mymacro()
+        end
+    end
+
+    JumpToMacroDoesNotWork.@mymacro(1+1)
+    """)
+    m = cst.args[end].args[1].args[2].args[1]
+    methods = Set()
+    for r in m.meta.ref.refs
+        m = StaticLint.get_method(r)
+        if m !== nothing
+            push!(methods, m)
+        end
+    end
+
+    @test !isempty(methods)
+end
