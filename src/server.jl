@@ -32,12 +32,17 @@ function setfile(server::FileServer, path::String, file::File)
 end
 getfile(server::FileServer, path::String) = server.files[path]
 function loadfile(server::FileServer, path::String)
-    source = read(path, String)
-    cst = CSTParser.parse(source, true)
-    f = File(path, source, cst, nothing, server)
-    setroot(f, f)
-    setfile(server, path, f)
-    return getfile(server, path)
+    try
+        source = read(path, String)
+        cst = CSTParser.parse(source, true)
+        f = File(path, source, cst, nothing, server)
+        setroot(f, f)
+        setfile(server, path, f)
+        return getfile(server, path)
+    catch
+        @info "Could not load $(path) from disk."
+        rethrow()
+    end
 end
 
 getsymbols(env::ExternalEnv) = env.symbols
