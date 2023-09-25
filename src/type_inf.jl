@@ -109,7 +109,7 @@ end
 
 function infer_destructuring_type(binding, rb::SymbolServer.DataTypeStore)
     assigned_name = CSTParser.get_name(binding.val)
-    for (fieldname, fieldtype) in zip(rb.val.fieldnames, rb.val.types)
+    for (fieldname, fieldtype) in zip(rb.fieldnames, rb.types)
         if fieldname == assigned_name
             settype!(binding, fieldtype)
             return
