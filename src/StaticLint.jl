@@ -251,73 +251,91 @@ Checks whether the arguments of a call to `include` can be resolved to a path.
 If successful it checks whether a file with that path is loaded on the server
 or a file exists on the disc that can be loaded.
 If this is successful it traverses the code associated with the loaded file.
-
 """
 function followinclude(x, state::State)
-    if CSTParser.iscall(x) && length(x.args) > 0 && isidentifier(x.args[1]) && valofid(x.args[1]) == "include"
+    # this runs on the `include` symbol instead of a function call so that we
+    # can be sure the ref has already been resolved
+    isinclude = isincludet = false
+    p = x
+    if isidentifier(x) && hasref(x)
+        r = x.meta.ref
 
-        init_path = path = get_path(x, state)
-        if isempty(path)
-        elseif isabspath(path)
-            if hasfile(state.server, path)
-            elseif canloadfile(state.server, path)
-                if check_filesize(x, path)
-                    loadfile(state.server, path)
-                else
-                    return
-                end
-            else
-                path = ""
+        if is_in_fexpr(x, iscall)
+            p = get_parent_fexpr(x, iscall)
+            if r == refof_call_func(p)
+                isinclude = r.name == SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Base), :include)
+                isincludet = r.name == SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Revise), :includet)
             end
-        elseif !isempty(getpath(state.file)) && isabspath(joinpath(dirname(getpath(state.file)), path))
-            # Relative path from current
-            if hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
-                path = joinpath(dirname(getpath(state.file)), path)
-            elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
-                path = joinpath(dirname(getpath(state.file)), path)
-                if check_filesize(x, path)
-                    loadfile(state.server, path)
-                else
-                    return
-                end
-            else
-                path = ""
-            end
-        elseif !isempty((basepath = _is_in_basedir(getpath(state.file)); basepath))
-            # Special handling for include method used within Base
-            path = joinpath(basepath, path)
-            if hasfile(state.server, path)
-                # skip
-            elseif canloadfile(state.server, path)
+        end
+    end
+
+    if !(isinclude || isincludet)
+        return
+    end
+
+    x = p
+
+    init_path = path = get_path(x, state)
+    if isempty(path)
+    elseif isabspath(path)
+        if hasfile(state.server, path)
+        elseif canloadfile(state.server, path)
+            if check_filesize(x, path)
                 loadfile(state.server, path)
             else
-                path = ""
+                return
             end
         else
             path = ""
         end
-        if hasfile(state.server, path)
-            if path in state.included_files
-                seterror!(x, IncludeLoop)
+    elseif !isempty(getpath(state.file)) && isabspath(joinpath(dirname(getpath(state.file)), path))
+        # Relative path from current
+        if hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
+            path = joinpath(dirname(getpath(state.file)), path)
+        elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
+            path = joinpath(dirname(getpath(state.file)), path)
+            if check_filesize(x, path)
+                loadfile(state.server, path)
+            else
                 return
             end
-            f = getfile(state.server, path)
-
-            if f.cst.fullspan > LARGE_FILE_LIMIT
-                seterror!(x, FileTooBig)
-                return
-            end
-            oldfile = state.file
-            state.file = f
-            push!(state.included_files, getpath(state.file))
-            setroot(state.file, getroot(oldfile))
-            setscope!(getcst(state.file), nothing)
-            state(getcst(state.file))
-            state.file = oldfile
-            pop!(state.included_files)
-        elseif !is_in_fexpr(x, CSTParser.defines_function) && !isempty(init_path)
-            seterror!(x, MissingFile)
+        else
+            path = ""
         end
+    elseif !isempty((basepath = _is_in_basedir(getpath(state.file)); basepath))
+        # Special handling for include method used within Base
+        path = joinpath(basepath, path)
+        if hasfile(state.server, path)
+            # skip
+        elseif canloadfile(state.server, path)
+            loadfile(state.server, path)
+        else
+            path = ""
+        end
+    else
+        path = ""
+    end
+    if hasfile(state.server, path)
+        if path in state.included_files
+            seterror!(x, IncludeLoop)
+            return
+        end
+        f = getfile(state.server, path)
+
+        if f.cst.fullspan > LARGE_FILE_LIMIT
+            seterror!(x, FileTooBig)
+            return
+        end
+        oldfile = state.file
+        state.file = f
+        push!(state.included_files, getpath(state.file))
+        setroot(state.file, getroot(oldfile))
+        setscope!(getcst(state.file), nothing)
+        state(getcst(state.file))
+        state.file = oldfile
+        pop!(state.included_files)
+    elseif !is_in_fexpr(x, CSTParser.defines_function) && !isempty(init_path)
+        seterror!(x, MissingFile)
     end
 end
 
