@@ -69,12 +69,20 @@ function introduces_scope(x::EXPR, state)
         return true
     elseif CSTParser.defines_anon_function(x)
         return true
-    elseif CSTParser.iswhere(x) 
+    elseif CSTParser.iswhere(x)
         # unless in func def signature
         return !_in_func_or_struct_def(x)
-    elseif CSTParser.istuple(x) && CSTParser.hastrivia(x) && ispunctuation(x.trivia[1]) && length(x.args) > 0 && isassignment(x.args[1])
-        # named tuple
-        return true
+    elseif CSTParser.istuple(x)
+        if length(x.args) > 0
+            if CSTParser.isparameters(x.args[1])
+                # named tuple with semi-colon (;x)
+                return true
+            elseif CSTParser.isassignment(x.args[1])
+                # named tuple without semi-colon (x = 1, y = 2)
+                return true
+            end
+        end
+        return false
     elseif headof(x) === :function ||
             headof(x) === :macro ||
             headof(x) === :for ||
@@ -110,7 +118,7 @@ end
 
 Called when traversing the syntax tree and handles the association of
 scopes with expressions. On the first pass this will add scopes as
-necessary, on following passes it empties it. 
+necessary, on following passes it empties it.
 """
 function scopes(x::EXPR, state)
     clear_scope(x)
