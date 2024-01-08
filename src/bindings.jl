@@ -139,7 +139,7 @@ function mark_binding!(x::EXPR, val=x)
     return x
 end
 
-function mark_parameters(sig::EXPR, params = String[])
+function mark_parameters(sig::EXPR, params=String[])
     if CSTParser.issubtypedecl(sig)
         mark_parameters(sig.args[1], params)
     elseif iswhere(sig)
@@ -365,7 +365,7 @@ function add_binding(x, state, scope=state.scope)
 end
 
 function enforce_hard_scope(x::EXPR, scope)
-    scope.expr.head === :for && is_in_fexpr(x, x-> x == scope.expr.args[1])
+    scope.expr.head === :for && is_in_fexpr(x, x -> x == scope.expr.args[1])
 end
 
 name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && CSTParser.is_getfield_w_quotenode(parentof(parentof(x)))

@@ -2,7 +2,7 @@ function _issubtype(a, b, store)
     _isany(b) && return true
     _type_compare(a, b) && return true
     sup_a = _super(a, store)
-    _type_compare(sup_a, b) && return true    
+    _type_compare(sup_a, b) && return true
     !_isany(sup_a) && return _issubtype(sup_a, b, store)
     return false
 end
@@ -15,8 +15,8 @@ _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.DataTypeStore) = a.
 _type_compare(a::SymbolServer.FakeTypeName, b::SymbolServer.FakeTypeName) = a == b
 _type_compare(a::SymbolServer.FakeTypeName, b::SymbolServer.DataTypeStore) = a == b.name
 _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeName) = a.name == b
-_type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnion) = _type_compare(a, b.a) || 
-_type_compare(a, b.b)
+_type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnion) = _type_compare(a, b.a) ||
+                                                                          _type_compare(a, b.b)
 
 function _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeVar)
     if b.ub isa SymbolServer.FakeUnion
