@@ -606,6 +606,24 @@ f(arg) = arg
         """)
             @test StaticLint.errorof(cst[2]) === nothing
         end
+        if VERSION >= v"1.10"
+            let cst = parse_and_pass("""
+                @kwdef mutable struct A
+                    const x::Float64
+                end
+                A(x = 5.0)
+                """)
+                @test StaticLint.errorof(cst[2]) === nothing
+            end
+            let cst = parse_and_pass("""
+                @kwdef mutable struct A
+                    const x::Float64 = 1.0
+                end
+                A(x = 5.0)
+                """)
+                @test StaticLint.errorof(cst[2]) === nothing
+            end
+        end
         let cst = parse_and_pass("""
         import Base: sin
         \"\"\"
