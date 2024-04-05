@@ -102,7 +102,10 @@ function mark_bindings!(x::EXPR, state)
         if CSTParser.defines_struct(x) # mark field block
             for arg in x.args[3].args
                 CSTParser.defines_function(arg) && continue
-                if kwdef && CSTParser.isassignment(arg) || arg.head === :const
+                if arg.head === :const
+                    arg = arg.args[1]
+                end
+                if kwdef && CSTParser.isassignment(arg)
                     arg = arg.args[1]
                 end
                 mark_binding!(arg)
