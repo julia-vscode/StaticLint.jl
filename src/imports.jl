@@ -140,7 +140,7 @@ function _get_field(par, arg, state)
         end
         for used_module_name in par.used_modules
             used_module = maybe_lookup(par[used_module_name], state)
-            if used_module !== nothing && isexportedby(Symbol(arg_str_rep), used_module)
+            if used_module isa SymbolServer.ModuleStore && isexportedby(Symbol(arg_str_rep), used_module)
                 return used_module[Symbol(arg_str_rep)]
             end
         end
