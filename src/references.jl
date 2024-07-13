@@ -69,6 +69,9 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     mn === nothing && return true
 
     if scopehasbinding(scope, mn)
+        if x.parent.head === :public
+            scope.names[mn].is_public = true
+        end
         setref!(x, scope.names[mn])
         resolved = true
     elseif scope.modules isa Dict && length(scope.modules) > 0

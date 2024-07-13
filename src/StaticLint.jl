@@ -83,7 +83,7 @@ function (state::Toplevel)(x::EXPR)
     if state.modified_exprs !== nothing && x in state.modified_exprs
         state.in_modified_expr = true
     end
-    if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export
+    if CSTParser.defines_function(x) || CSTParser.defines_macro(x) || headof(x) === :export || headof(x) === :public
         if state.in_modified_expr
             push!(state.delayed, x)
         else
@@ -115,6 +115,7 @@ function (state::Delayed)(x::EXPR)
     mark_globals(x, state)
     handle_macro(x, state)
     s0 = scopes(x, state)
+
     resolve_ref(x, state)
 
     old = flag!(state, x)

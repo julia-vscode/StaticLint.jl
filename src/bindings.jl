@@ -11,15 +11,17 @@ mutable struct Binding
     val::Union{Binding,EXPR,SymbolServer.SymStore,Nothing}
     type::Union{Binding,SymbolServer.SymStore,Nothing}
     refs::Vector{Any}
+    is_public::Bool
 end
-Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [])
+Binding(x::EXPR) = Binding(CSTParser.get_name(x), x, nothing, [], false)
+Binding(name, val, type, refs) = Binding(name, val, type, refs, false)
 
 function Base.show(io::IO, b::Binding)
     printstyled(io, " Binding(", to_codeobject(b.name),
-        b.type === nothing ? "" : ":: ",
-        b.refs isa Vector ? "($(length(b.refs)) refs))" : ")", color=:blue)
+        b.is_public ? "ᵖ" : "",
+        b.type === nothing ? "" : "::($(b.type))",
+        b.refs isa Vector ? " ($(length(b.refs)) refs))" : ")", color=:blue)
 end
-
 
 hasbinding(x::EXPR) = hasmeta(x) && hasbinding(x.meta)
 bindingof(x) = nothing
