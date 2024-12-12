@@ -1427,6 +1427,14 @@ f(arg) = arg
         @test errorof(cst.args[3].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
     end
 
+    @testset "issue #382" begin
+        cst = parse_and_pass("""
+        function f(a::T, invert=false)::T where {T <: Integer}
+            invert ? -a : a
+        end""")
+        @test !StaticLint.haserror(cst.args[1].args[1].args[1].args[1])
+    end
+
     if VERSION > v"1.5-"
         @testset "issue #210" begin
             cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
