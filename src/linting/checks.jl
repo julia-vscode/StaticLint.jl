@@ -1,7 +1,5 @@
 @enum(
-    LintCodes,
-
-    MissingRef,
+    LintCodes, MissingRef,
     IncorrectCallArgs,
     IncorrectIterSpec,
     NothingEquality,
@@ -181,9 +179,9 @@ function func_nargs(x::EXPR)
                     maxargs !== typemax(Int) && (maxargs += 1)
                 end
             elseif issplat(arg) ||
-                (isdeclaration(arg) &&
-                ((isidentifier(arg.args[2]) && valofid(arg.args[2]) == "Vararg") ||
-                (iscurly(arg.args[2]) && isidentifier(arg.args[2].args[1]) && valofid(arg.args[2].args[1]) == "Vararg")))
+                   (isdeclaration(arg) &&
+                    ((isidentifier(arg.args[2]) && valofid(arg.args[2]) == "Vararg") ||
+                     (iscurly(arg.args[2]) && isidentifier(arg.args[2].args[1]) && valofid(arg.args[2].args[1]) == "Vararg")))
                 maxargs = typemax(Int)
             else
                 minargs += 1
@@ -247,9 +245,9 @@ end
 # compare_f_call(m_counts, call_counts) = true # fallback method
 
 function compare_f_call(
-        (ref_minargs, ref_maxargs, ref_kws, kwsplat),
-        (act_minargs, act_maxargs, act_kws),
-    )
+    (ref_minargs, ref_maxargs, ref_kws, kwsplat),
+    (act_minargs, act_maxargs, act_kws),
+)
     # check matching on positional arguments
     if act_maxargs == typemax(Int)
         act_minargs <= act_maxargs < ref_minargs && return false
@@ -269,10 +267,10 @@ end
 
 function is_something_with_methods(x::Binding)
     (CoreTypes.isfunction(x.type) && x.val isa EXPR) ||
-    (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) ||
-    (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
+        (CoreTypes.isdatatype(x.type) && x.val isa EXPR && CSTParser.defines_struct(x.val)) ||
+        (x.val isa SymbolServer.FunctionStore || x.val isa SymbolServer.DataTypeStore)
 end
-is_something_with_methods(x::T) where T <: Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
+is_something_with_methods(x::T) where T<:Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore} = true
 is_something_with_methods(x) = false
 
 function check_call(x, env::ExternalEnv)
@@ -376,13 +374,13 @@ function check_incorrect_iter_spec(x, body, env)
         if headof(rng) === :FLOAT || headof(rng) === :INTEGER || (iscall(rng) && refof(rng.args[1]) === getsymbols(env)[:Base][:length])
             seterror!(x, IncorrectIterSpec)
         elseif iscall(rng) && valof(rng.args[1]) == ":" &&
-            length(rng.args) === 3 &&
-            headof(rng.args[2]) === :INTEGER &&
-            iscall(rng.args[3]) &&
-            length(rng.args[3].args) > 1 && (
-                refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:length] ||
-                refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:size]
-            )
+               length(rng.args) === 3 &&
+               headof(rng.args[2]) === :INTEGER &&
+               iscall(rng.args[3]) &&
+               length(rng.args[3].args) > 1 && (
+                   refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:length] ||
+                   refof(rng.args[3].args[1]) === getsymbols(env)[:Base][:size]
+               )
             if length(x.args) >= 1
                 lhs = x.args[1]
                 arr = rng.args[3].args[2]
@@ -425,14 +423,14 @@ end
 function check_nothing_equality(x::EXPR, env::ExternalEnv)
     if isbinarycall(x) && length(x.args) == 3
         if valof(x.args[1]) == "==" && (
-                (valof(x.args[2]) == "nothing" && refof(x.args[2]) === getsymbols(env)[:Core][:nothing]) ||
-                (valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing])
-            )
+            (valof(x.args[2]) == "nothing" && refof(x.args[2]) === getsymbols(env)[:Core][:nothing]) ||
+            (valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing])
+        )
             seterror!(x.args[1], NothingEquality)
         elseif valof(x.args[1]) == "!=" && (
-                (valof(x.args[2]) == "nothing" && refof(x.args[2]) === getsymbols(env)[:Core][:nothing]) ||
-                (valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing])
-            )
+            (valof(x.args[2]) == "nothing" && refof(x.args[2]) === getsymbols(env)[:Core][:nothing]) ||
+            (valof(x.args[3]) == "nothing" && refof(x.args[3]) === getsymbols(env)[:Core][:nothing])
+        )
             seterror!(x.args[1], NothingNotEq)
         end
     end
@@ -524,9 +522,9 @@ end
 
 function check_modulename(x::EXPR)
     if CSTParser.defines_module(x) && # x is a module
-        scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
-        CSTParser.defines_module(parentof(scopeof(x)).expr) && # the parent scope is a module
-        valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
+       scopeof(x) isa Scope && parentof(scopeof(x)) isa Scope && # it has a scope and a parent scope
+       CSTParser.defines_module(parentof(scopeof(x)).expr) && # the parent scope is a module
+       valof(CSTParser.get_name(x)) == valof(CSTParser.get_name(parentof(scopeof(x)).expr)) # their names match
         seterror!(CSTParser.get_name(x), InvalidModuleName)
     end
 end
@@ -536,7 +534,7 @@ function check_farg_unused(x::EXPR)
     if CSTParser.defines_function(x)
         sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
         if (headof(x) === :function && length(x.args) == 2 && x.args[2] isa EXPR && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1])) ||
-            (length(x.args) > 1 && headof(x.args[2]) === :block && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1]))
+           (length(x.args) > 1 && headof(x.args[2]) === :block && length(x.args[2].args) == 1 && CSTParser.isliteral(x.args[2].args[1]))
             return # Allow functions that return constants
         end
         if iscall(sig)
@@ -573,12 +571,12 @@ function check_farg_unused_(arg, arg_names)
     valof(b.name) isa String && all_underscore(valof(b.name)) && return false
 
     if b === nothing ||
-        # no refs:
+       # no refs:
        isempty(b.refs) ||
-        # only self ref:
+       # only self ref:
        (length(b.refs) == 1 && first(b.refs) == b.name) ||
-        # first usage has binding:
-        (length(b.refs) > 1 && b.refs[2] isa EXPR && hasbinding(b.refs[2]))
+       # first usage has binding:
+       (length(b.refs) > 1 && b.refs[2] isa EXPR && hasbinding(b.refs[2]))
         seterror!(arg, UnusedFunctionArgument)
     end
 
@@ -598,8 +596,8 @@ end
 
 function is_nospecialize_call(x)
     CSTParser.ismacrocall(x) &&
-    CSTParser.ismacroname(x.args[1]) &&
-    is_nospecialize(x.args[1])
+        CSTParser.ismacroname(x.args[1]) &&
+        is_nospecialize(x.args[1])
 end
 
 """
@@ -619,8 +617,8 @@ function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tupl
         push!(errs, (pos, x))
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
-            !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
+           !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
+           !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
 
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
@@ -649,7 +647,7 @@ end
 
 function should_mark_missing_getfield_ref(x, env)
     if isidentifier(x) && !hasref(x) && # x has no ref
-    parentof(x) isa EXPR && headof(parentof(x)) === :quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
+       parentof(x) isa EXPR && headof(parentof(x)) === :quotenode && parentof(parentof(x)) isa EXPR && is_getfield(parentof(parentof(x)))  # x is the rhs of a getproperty
         lhsref = refof_maybe_getfield(parentof(parentof(x)).args[1])
         hasref(x) && return false # We've resolved
         if lhsref isa SymbolServer.ModuleStore || (lhsref isa Binding && lhsref.val isa SymbolServer.ModuleStore)
@@ -718,14 +716,14 @@ function is_type_of_call_to_getproperty(x::EXPR)
         if iscall(x)
             func_name = x.args[1]
             return (isidentifier(func_name) && valof(func_name) == "getproperty") || # getproperty()
-            (is_getfield_w_quotenode(func_name) && isidentifier(func_name.args[2].args[1]) && valof(func_name.args[2].args[1]) == "getproperty") # Base.getproperty()
+                   (is_getfield_w_quotenode(func_name) && isidentifier(func_name.args[2].args[1]) && valof(func_name.args[2].args[1]) == "getproperty") # Base.getproperty()
         end
         return false
     end
 
     return parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR &&
-        ((isdeclaration(parentof(x)) && x === parentof(x).args[2] && is_call_to_getproperty(parentof(parentof(x)))) ||
-        (iscurly(parentof(x)) && x === parentof(x).args[1] && isdeclaration(parentof(parentof(x))) &&  parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
+           ((isdeclaration(parentof(x)) && x === parentof(x).args[2] && is_call_to_getproperty(parentof(parentof(x)))) ||
+            (iscurly(parentof(x)) && x === parentof(x).args[1] && isdeclaration(parentof(parentof(x))) && parentof(parentof(parentof(x))) isa EXPR && is_call_to_getproperty(parentof(parentof(parentof(x))))))
 end
 
 isunionfaketype(t::SymbolServer.FakeTypeName) = t.name.name === :Union && t.name.parent isa SymbolServer.VarRef && t.name.parent.name === :Core
@@ -958,8 +956,8 @@ function check_unused_binding(b::Binding, scope::Scope)
     if headof(scope.expr) !== :struct && headof(scope.expr) !== :tuple && !all_underscore(valof(b.name))
         refs = loose_refs(b)
         if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) &&
-                !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) &&
-                !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b)
+           !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) &&
+           !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b)
             seterror!(b.name, UnusedBinding)
         end
     end

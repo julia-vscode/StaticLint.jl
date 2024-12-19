@@ -216,15 +216,15 @@ function check_ref_against_calls(x, visitedmethods, new_possibles, env::External
                 if method isa EXPR
                     if defines_function(method)
                         get_arg_type_at_position(method, argi, new_possibles)
-                    # elseif CSTParser.defines_struct(method)
+                        # elseif CSTParser.defines_struct(method)
                         # Can we ignore this? Default constructor gives us no type info?
                     end
                 else # elseif what?
-                    iterate_over_ss_methods(method, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+                    iterate_over_ss_methods(method, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles); false))
                 end
             end
         else
-            iterate_over_ss_methods(func, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles);false))
+            iterate_over_ss_methods(func, tls, env, m -> (get_arg_type_at_position(m, argi, new_possibles); false))
         end
     end
 end
@@ -246,8 +246,8 @@ end
 
 function is_arg_of_resolved_call(x::EXPR)
     parentof(x) isa EXPR && headof(parentof(x)) === :call && # check we're in a call signature
-    (caller = parentof(x).args[1]) !== x && # and that x is not the caller
-    ((CSTParser.isidentifier(caller) && hasref(caller)) || (is_getfield(caller) && headof(caller.args[2]) === :quotenode && hasref(caller.args[2].args[1])))
+        (caller = parentof(x).args[1]) !== x && # and that x is not the caller
+        ((CSTParser.isidentifier(caller) && hasref(caller)) || (is_getfield(caller) && headof(caller.args[2]) === :quotenode && hasref(caller.args[2].args[1])))
 end
 
 function get_arg_position_in_call(sig::EXPR, arg)
@@ -260,10 +260,10 @@ function get_arg_type_at_position(method, argi, types)
     if method isa EXPR
         sig = CSTParser.get_sig(method)
         if sig !== nothing &&
-            sig.args !== nothing && argi <= length(sig.args) &&
-            hasbinding(sig.args[argi]) &&
-            (argb = bindingof(sig.args[argi]); argb isa Binding && argb.type !== nothing) &&
-            !(argb.type in types)
+           sig.args !== nothing && argi <= length(sig.args) &&
+           hasbinding(sig.args[argi]) &&
+           (argb = bindingof(sig.args[argi]); argb isa Binding && argb.type !== nothing) &&
+           !(argb.type in types)
             push!(types, argb.type)
             return
         end
@@ -295,7 +295,7 @@ function infer_eltype(x::EXPR)
     elseif headof(x) === :ref && hasref(x.args[1])
         r = refof(x.args[1])
         if r isa SymbolServer.DataTypeStore ||
-            r isa Binding && CoreTypes.isdatatype(r.type)
+           r isa Binding && CoreTypes.isdatatype(r.type)
             r
         end
     elseif headof(x) === :STRING
