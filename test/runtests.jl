@@ -2171,3 +2171,24 @@ end
 
     @test !isempty(methods)
 end
+
+@testset "correctly mark public bindings" begin
+    let cst = parse_and_pass("""
+        module TopModule
+        abstract type T end
+        struct Foo <: T end
+        export T
+        public Foo
+
+        module SubModule
+        using ..TopModule
+        T
+        TopModule.Foo
+        end
+
+        end""")
+        @test refof(cst.args[1].args[3].args[3].args[3].args[2]) !== nothing
+        @test refof(cst.args[1].args[3].args[4].args[1]).is_public
+        @test StaticLint.refof(cst.args[1].args[3].args[5].args[3].args[3].args[2].args[1]).is_public
+    end
+end
