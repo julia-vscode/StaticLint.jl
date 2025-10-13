@@ -33,6 +33,7 @@
     IndexFromLength,
     FileTooBig,
     FileNotAvailable,
+    RelativeImportTooManyDots,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -66,7 +67,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     IncludePathContainsNULL => "Cannot include file, path contains NULL characters.",
     IndexFromLength => "Indexing with indices obtained from `length`, `size` etc is discouraged. Use `eachindex` or `axes` instead.",
     FileTooBig => "File too big, not following include.",
-    FileNotAvailable => "File not available."
+    FileNotAvailable => "File not available.",
+    RelativeImportTooManyDots => "Relative import has more leading dots than available module nesting.",
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -330,8 +332,13 @@ function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     else
         return true # We shouldn't get here
     end
-    if compare_f_call(m_counts, call_counts) || (CSTParser.rem_where_decl(CSTParser.get_sig(func)) == x)
+    if compare_f_call(m_counts, call_counts)
         return true
+    else
+        x1 = CSTParser.rem_where_decl(CSTParser.get_sig(func))
+        if (x1.head == :call && x1 == x) || (!(x1.args isa Nothing) && x1.args[1].head == :call && x1.args[1] == x)
+            return true
+        end
     end
     return false
 end

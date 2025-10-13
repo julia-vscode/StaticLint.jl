@@ -23,6 +23,54 @@ function check_resolved(s)
     [(refof(i) !== nothing) for i in IDs]
 end
 
+# Simple iterative DFS utilities (no recursive predicate calls)
+function module_name(ex::CSTParser.EXPR)::Union{String,Nothing}
+    if CSTParser.defines_module(ex)
+        n = CSTParser.get_name(ex)
+        if CSTParser.isidentifier(n)
+            return CSTParser.valof(n)
+        elseif StaticLint.headof(n) === :NONSTDIDENTIFIER && length(n.args) == 2
+            return CSTParser.valof(n.args[2])
+        end
+    end
+    return nothing
+end
+
+function find_module_by_name(root::CSTParser.EXPR, name::String)
+    stack = CSTParser.EXPR[root]
+    while !isempty(stack)
+        x = pop!(stack)
+        if module_name(x) == name
+            return x
+        end
+        if x.args !== nothing
+            # push children
+            for a in x.args
+                a isa CSTParser.EXPR && push!(stack, a)
+            end
+        end
+    end
+    return nothing
+end
+
+function find_first(root::CSTParser.EXPR, f::Function)
+    stack = CSTParser.EXPR[root]
+    while !isempty(stack)
+        x = pop!(stack)
+        if f(x)
+            return x
+        end
+        if x.args !== nothing
+            for a in x.args
+                a isa CSTParser.EXPR && push!(stack, a)
+            end
+        end
+    end
+    return nothing
+end
+# Adapter to support weird block call
+find_first(f::Function, root::CSTParser.EXPR) = find_first(root, f)
+
 @testset "StaticLint" begin
 
     @testset "Basic bindings" begin
@@ -1427,6 +1475,14 @@ f(arg) = arg
         @test errorof(cst.args[3].args[2].args[1].args[3].args[1].args[1]) !== StaticLint.InvalidRedefofConst
     end
 
+    @testset "issue #382" begin
+        cst = parse_and_pass("""
+        function f(a::T, invert=false)::T where {T <: Integer}
+            invert ? -a : a
+        end""")
+        @test !StaticLint.haserror(cst.args[1].args[1].args[1].args[1])
+    end
+
     if VERSION > v"1.5-"
         @testset "issue #210" begin
             cst = parse_and_pass("""h()::@NamedTuple{a::Int,b::String} = (a=1, b = "s")""")
@@ -1485,6 +1541,75 @@ f(arg) = arg
         end""")
         @test bindingof(cst.args[3].args[1].args[2]).type !== nothing
     end
+
+    # @testset "forward relative using/import" begin
+    #    cst = parse_and_pass("""
+    # module A
+    # module B
+    #     module C
+    #         using ..Sibling
+    #         f() = Sibling.g()
+    #     end
+    #     module Sibling
+    #         export g
+    #         g() = 1
+    #     end
+    # end
+    # end
+    # """)
+    #    # f’s body Sibling.g should resolve
+    #    fcall = cst.args[1].args[3].args[1].args[3].args[2]   # C’s f() definition
+    #    # Sibling.g call: fcall.args[2].args[1] is the call; its callee is getfield
+    #    callee = fcall.args[2].args[1].args[1]               # Sibling
+    #    @test StaticLint.hasref(callee)
+    # end
+
+    @testset "forward relative using/import" begin
+        cst = parse_and_pass("""
+        module A
+        module B
+            module C
+                using ..Sibling
+                f() = Sibling.g()
+            end
+            module Sibling
+                export g
+                g() = 1
+            end
+        end
+        end
+        """)
+
+        modC = find_module_by_name(cst, "C")
+        @test modC !== nothing
+
+        fexpr = find_first(modC) do x
+            CSTParser.defines_function(x) &&
+                CSTParser.isidentifier(CSTParser.get_name(x)) &&
+                CSTParser.valof(CSTParser.get_name(x)) == "f"
+        end
+        @test fexpr !== nothing
+
+        gget = find_first(fexpr, CSTParser.is_getfield_w_quotenode)
+        @test gget !== nothing
+
+        lhs = gget.args[1]                    # Sibling
+        rhsid = gget.args[2].args[1]          # g (inside QuoteNode)
+
+        @test StaticLint.hasref(lhs)
+        @test StaticLint.hasref(rhsid)
+    end
+
+    @testset "too many dots" begin
+       cst = parse_and_pass("""
+    module A
+        import ....X
+    end
+    """)
+       errs = StaticLint.collect_hints(cst, getenv(server.files[""], server))
+       @test any(err -> StaticLint.errorof(err[2]) === StaticLint.RelativeImportTooManyDots, errs)
+    end
+
 end
 
 @testset "add eval method to modules/toplevel scope" begin
