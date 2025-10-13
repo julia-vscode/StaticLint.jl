@@ -143,6 +143,10 @@ function (state::ResolveOnly)(x::EXPR)
     else
         s0 = state.scope
     end
+
+    # NEW: late import resolution (idempotent for already-resolved imports)
+    resolve_import(x, state)
+
     resolve_ref(x, state)
 
     traverse(x, state)

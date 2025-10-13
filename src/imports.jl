@@ -22,10 +22,27 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
             elseif root isa Scope && parentof(root) !== nothing
                 root = parentof(root)
             else
+                # Too many dots
+                seterror!(arg, RelativeImportTooManyDots)
                 return
             end
         elseif isidentifier(arg) || (i == n && (CSTParser.ismacroname(arg) || isoperator(arg)))
-            root = maybe_lookup(hasref(arg) ? refof(arg) : _get_field(root, arg, state), state)
+            cand = hasref(arg) ? refof(arg) : _get_field(root, arg, state)
+            if cand === nothing
+                # Cannot resolve now (e.g. sibling not yet defined). Schedule a retry.
+                if state isa Toplevel
+                    # the import/using expression
+                    imp = StaticLint.get_parent_fexpr(arg, y -> headof(y) === :using || headof(y) === :import)
+                    #imp !== nothing && push!(state.resolveonly, imp)
+                    imp !== nothing && (imp ∈ state.resolveonly || push!(state.resolveonly, imp))
+                    # the enclosing module (so we re-resolve refs within it)
+                    mod = StaticLint.maybe_get_parent_fexpr(imp, CSTParser.defines_module)
+                    #mod !== nothing && push!(state.resolveonly, mod)
+                    mod !== nothing && (mod ∈ state.resolveonly || push!(state.resolveonly, mod))
+                end
+                return
+            end
+            root = maybe_lookup(cand, state)
             setref!(arg, root)
             if i == n
                 markfinal && _mark_import_arg(arg, root, state, usinged)
@@ -38,12 +55,21 @@ function resolve_import_block(x::EXPR, state::State, root, usinged, markfinal=tr
 end
 
 function resolve_import(x::EXPR, state::State, root=getsymbols(state))
-    if headof(x) === :using || headof(x) === :import
-        usinged = headof(x) === :using
+    if (headof(x) === :using || headof(x) === :import)
+        usinged = (headof(x) === :using)
         if length(x.args) > 0 && isoperator(headof(x.args[1])) && valof(headof(x.args[1])) == ":"
-            root = resolve_import_block(x.args[1].args[1], state, root, false, false)
+            root2 = resolve_import_block(x.args[1].args[1], state, root, false, false)
+            if root2 === nothing
+                # schedule a retry like above
+                if state isa Toplevel
+                    push!(state.resolveonly, x)
+                    mod = StaticLint.maybe_get_parent_fexpr(x, CSTParser.defines_module)
+                    mod !== nothing && push!(state.resolveonly, mod)
+                end
+                return
+            end
             for i = 2:length(x.args[1].args)
-                resolve_import_block(x.args[1].args[i], state, root, usinged)
+                resolve_import_block(x.args[1].args[i], state, root2, usinged)
             end
         else
             for i = 1:length(x.args)
@@ -80,6 +106,9 @@ function _mark_import_arg(arg, par, state, usinged)
             elseif par isa Binding && par.val isa Binding && par.val.val isa EXPR && CSTParser.defines_module(par.val.val)
                 add_to_imported_modules(state.scope, Symbol(valofid(arg)), scopeof(par.val.val))
             end
+        else
+           # import binds the name in the current scope
+           state.scope.names[valofid(arg)] = bindingof(arg)
         end
     end
 end
@@ -97,7 +126,7 @@ function add_to_imported_modules(scope::Scope, name::Symbol, val)
     if scope.modules isa Dict
         scope.modules[name] = val
     else
-        Dict(name => val)
+        scope.modules = Dict{Symbol,Any}(name => val)
     end
 end
 no_modules_above(s::Scope) = !CSTParser.defines_module(s.expr) || s.parent === nothing || no_modules_above(s.parent)
