@@ -37,11 +37,11 @@ function infer_type_assignment_rhs(binding, state, scope)
     lhs = binding.val.args[1]
     rhs = binding.val.args[2]
     if is_loop_iter_assignment(binding.val)
-        settype!(binding, infer_eltype(rhs))
+        settype!(binding, infer_eltype(rhs, state))
     elseif headof(rhs) === :ref && length(rhs.args) > 1
         ref = refof_maybe_getfield(rhs.args[1])
         if ref isa Binding && ref.val isa EXPR
-            settype!(binding, infer_eltype(ref.val))
+            settype!(binding, infer_eltype(ref.val, state))
         end
     else
         if CSTParser.is_func_call(rhs)
@@ -147,9 +147,18 @@ function infer_type_decl(binding, state, scope)
         else
             settype!(binding, refof(t))
         end
-    elseif refof(t) isa SymbolServer.DataTypeStore
-        settype!(binding, refof(t))
+    else
+        edt = get_eventual_datatype(refof(t), state.server.external_env)
+        if edt !== nothing
+            settype!(binding, edt)
+        end
     end
+end
+
+get_eventual_datatype(_, _::ExternalEnv) = nothing
+get_eventual_datatype(b::SymbolServer.DataTypeStore, _::ExternalEnv) = b
+function get_eventual_datatype(b::SymbolServer.FunctionStore, env::ExternalEnv)
+    return SymbolServer._lookup(b.extends, getsymbols(env))
 end
 
 # Work out what type a bound variable has by functions that are called on it.
@@ -284,19 +293,22 @@ end
 # Assumes x.head.val == "="
 is_loop_iter_assignment(x::EXPR) = x.parent isa EXPR && ((x.parent.head == :for || x.parent.head == :generator) || (x.parent.head == :block && x.parent.parent isa EXPR && (x.parent.parent.head == :for || x.parent.parent.head == :generator)))
 
-function infer_eltype(x::EXPR)
+function infer_eltype(x::EXPR, state)
     if isidentifier(x) && hasref(x) # assume is IDENT
         r = refof(x)
         if r isa Binding && r.val isa EXPR
             if isassignment(r.val) && r.val.args[2] != x
-                return infer_eltype(r.val.args[2])
+                return infer_eltype(r.val.args[2], state)
             end
         end
     elseif headof(x) === :ref && hasref(x.args[1])
         r = refof(x.args[1])
-        if r isa SymbolServer.DataTypeStore ||
-            r isa Binding && CoreTypes.isdatatype(r.type)
-            r
+        if r isa Binding && CoreTypes.isdatatype(r.type)
+            return r
+        end
+        edt = get_eventual_datatype(r, state.server.external_env)
+        if edt isa SymbolServer.DataTypeStore
+            return edt
         end
     elseif headof(x) === :STRING
         return CoreTypes.Char

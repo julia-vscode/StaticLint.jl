@@ -431,15 +431,15 @@ end
 
 function check_nothing_equality(x::EXPR, env::ExternalEnv)
     if isbinarycall(x) && length(x.args) == 3
-        nothings = (getsymbols(env)[:Core][:nothing], getsymbols(env)[:Base][:nothing])
+        _nothing = getsymbols(env)[:Core][:nothing]
         if valof(x.args[1]) == "==" && (
-                (valof(x.args[2]) == "nothing" && refof(x.args[2]) in nothings) ||
-                (valof(x.args[3]) == "nothing" && refof(x.args[3]) in nothings)
+                (valof(x.args[2]) == "nothing" && refof(x.args[2]) == _nothing) ||
+                (valof(x.args[3]) == "nothing" && refof(x.args[3]) == _nothing)
             )
             seterror!(x.args[1], NothingEquality)
         elseif valof(x.args[1]) == "!=" && (
-                (valof(x.args[2]) == "nothing" && refof(x.args[2]) in nothings) ||
-                (valof(x.args[3]) == "nothing" && refof(x.args[3]) in nothings)
+                (valof(x.args[2]) == "nothing" && refof(x.args[2]) == _nothing) ||
+                (valof(x.args[3]) == "nothing" && refof(x.args[3]) == _nothing)
             )
             seterror!(x.args[1], NothingNotEq)
         end
@@ -512,7 +512,9 @@ function is_never_datatype(b::Binding, env::ExternalEnv)
     elseif CoreTypes.isdatatype(b.type)
         return false
     elseif b.type !== nothing
-        return true
+        if !any(x -> x isa SymbolServer.DataTypeStore, get_eventual_datatype(ref, env) for ref in b.refs)
+            return true
+        end
     end
     return false
 end
@@ -878,7 +880,7 @@ UInt64, UInt128`.
 """
 function check_kw_default(x::EXPR, env::ExternalEnv)
     if headof(x) == :kw && isdeclaration(x.args[1]) && CSTParser.isliteral(x.args[2]) && hasref(x.args[1].args[2])
-        decl_T = refof(x.args[1].args[2])
+        decl_T = get_eventual_datatype(refof(x.args[1].args[2]), env)
         rhs = x.args[2]
         rhsval = valof(rhs)
         if decl_T == getsymbols(env)[:Core][:String] && !CSTParser.isstringliteral(rhs)
