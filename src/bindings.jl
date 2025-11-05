@@ -19,7 +19,7 @@ Binding(name, val, type, refs) = Binding(name, val, type, refs, false)
 function Base.show(io::IO, b::Binding)
     printstyled(io, " Binding(", to_codeobject(b.name),
         b.is_public ? "ᵖ" : "",
-        b.type === nothing ? "" : "::($(b.type))",
+        b.type === nothing ? "" : "::($(b.type.name))",
         b.refs isa Vector ? " ($(length(b.refs)) refs))" : ")", color=:blue)
 end
 

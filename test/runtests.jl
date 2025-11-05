@@ -2188,7 +2188,7 @@ end
             end
 
             end""")
-            @test refof(cst.args[1].args[3].args[3].args[3].args[2]) !== nothing
+            @test refof(cst.args[1].args[3].args[3].args[1]) !== nothing
             @test refof(cst.args[1].args[3].args[4].args[1]).is_public
             @test StaticLint.refof(cst.args[1].args[3].args[5].args[3].args[3].args[2].args[1]).is_public
         end
