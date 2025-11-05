@@ -148,7 +148,7 @@ function infer_type_decl(binding, state, scope)
             settype!(binding, refof(t))
         end
     else
-        edt = get_eventual_datatype(refof(t), state.server.external_env)
+        edt = get_eventual_datatype(refof(t), state.env)
         if edt !== nothing
             settype!(binding, edt)
         end
@@ -306,7 +306,7 @@ function infer_eltype(x::EXPR, state)
         if r isa Binding && CoreTypes.isdatatype(r.type)
             return r
         end
-        edt = get_eventual_datatype(r, state.server.external_env)
+        edt = get_eventual_datatype(r, state.env)
         if edt isa SymbolServer.DataTypeStore
             return edt
         end
