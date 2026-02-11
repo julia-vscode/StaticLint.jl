@@ -364,6 +364,52 @@ f(arg) = arg
                 @test errorof(cst[4][2][3]) === nothing
             end
 
+            let cst = parse_and_pass("""
+                function f(x::Int)
+                    for i in x
+                        println(i)
+                    end
+                end
+                """)
+                @test errorof(cst[1][3][1][2]) === StaticLint.IncorrectIterSpec
+            end
+
+            let cst = parse_and_pass("""
+                function f(x::Number)
+                    for i in x
+                        println(i)
+                    end
+                end
+                """)
+                @test errorof(cst[1][3][1][2]) === StaticLint.IncorrectIterSpec
+            end
+
+            let cst = parse_and_pass("""
+                x = 3
+                for i in x
+                    println(i)
+                end
+                """)
+                @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
+            end
+
+            let cst = parse_and_pass("""
+                x = 3.2
+                for i in x
+                    println(i)
+                end
+                """)
+                @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
+            end
+            let cst = parse_and_pass("""
+                x::Float64 = 3.2 * 2
+                for i in x
+                    println(i)
+                end
+                """)
+                @test errorof(cst[2][2]) === StaticLint.IncorrectIterSpec
+            end
+
             for cst in parse_and_pass.(["a == nothing", "nothing == a"])
                 @test errorof(cst[1][2]) === StaticLint.NothingEquality
             end

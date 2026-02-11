@@ -405,6 +405,8 @@ function check_incorrect_iter_spec(x, body, env)
                     end
                 end
             end
+        elseif hasref(rng) && refof(rng) isa Binding && refof(rng).type !== nothing && _issubtype(refof(rng).type, getsymbols(env)[:Core][:Number], env.symbols)
+            seterror!(x, IncorrectIterSpec)
         end
     end
 end
