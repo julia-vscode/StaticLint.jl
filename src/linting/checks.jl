@@ -405,8 +405,15 @@ function check_incorrect_iter_spec(x, body, env)
                     end
                 end
             end
-        elseif hasref(rng) && refof(rng) isa Binding && refof(rng).type !== nothing && _issubtype(refof(rng).type, getsymbols(env)[:Core][:Number], env.symbols)
-            seterror!(x, IncorrectIterSpec)
+        elseif hasref(rng) && refof(rng) isa Binding && refof(rng).type !== nothing
+            type = get_eventual_datatype(refof(rng).type, env)
+            try
+                if type !== nothing && _issubtype(type, getsymbols(env)[:Core][:Number], env.symbols)
+                    seterror!(x, IncorrectIterSpec)
+                end
+            catch err
+                @warn "iter type checker crashed with" ex=(err, catch_backtrace())
+            end
         end
     end
 end
