@@ -100,7 +100,7 @@ function find_methods(x::EXPR, store)
         func_ref === nothing && return possibles
         args, kws = call_arg_types(x, false)
         if func_ref isa Binding && func_ref.val isa SymbolServer.FunctionStore ||
-            func_ref isa Binding && func_ref.val isa SymbolServer.DataTypeStore
+           func_ref isa Binding && func_ref.val isa SymbolServer.DataTypeStore
             func_ref = func_ref.val
         end
         if func_ref isa SymbolServer.FunctionStore || func_ref isa SymbolServer.DataTypeStore
@@ -155,7 +155,7 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::SymbolServer.
             else
                 !_issubtype(args[i], method.sig[i][2], store) && !_issubtype(method.sig[i][2], args[i], store) && return false
             end
-            
+
         end
         return true
     end
@@ -196,7 +196,7 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)
             push!(margs, mopts[i])
         end
         if vararg
-            for _ in 1:length(args) - length(margs)
+            for _ in 1:length(args)-length(margs)
                 push!(margs, CoreTypes.Any)
             end
         end
@@ -221,7 +221,7 @@ function refof_call_func(x)
     end
 end
 
-function is_sig_of_method(sig::EXPR, method = maybe_get_parent_fexpr(sig, defines_function))
+function is_sig_of_method(sig::EXPR, method=maybe_get_parent_fexpr(sig, defines_function))
     method !== nothing && sig == CSTParser.get_sig(method)
 end
 
