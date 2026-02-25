@@ -64,10 +64,11 @@ mutable struct Toplevel{T} <: State
     env::ExternalEnv
     server
     flags::Int
+    forced_references::Set{String}    
 end
 
 Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server) =
-    Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0)
+    Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0, Set{String}())
 
 function (state::Toplevel)(x::EXPR)
     resolve_import(x, state)
@@ -105,9 +106,10 @@ mutable struct Delayed <: State
     env::ExternalEnv
     server
     flags::Int
+    forced_references::Set{String}    
 end
 
-Delayed(scope, env, server) = Delayed(scope, env, server, 0)
+Delayed(scope, env, server) = Delayed(scope, env, server, 0, Set{String}())
 
 function (state::Delayed)(x::EXPR)
     mark_bindings!(x, state)
@@ -135,7 +137,10 @@ mutable struct ResolveOnly <: State
     scope::Scope
     env::ExternalEnv
     server
+    forced_references::Set{String}    
 end
+
+ResolveOnly(scope,env,server) = ResolveOnly(scope,env,server,Set{String}())
 
 function (state::ResolveOnly)(x::EXPR)
     if hasscope(x)
@@ -168,6 +173,26 @@ function flag!(state, x::EXPR)
     return old
 end
 
+function add_forced_references!(file, current::Set{String})
+    
+    if :_text_document in propertynames(file) # 1.56.2
+        source = file._text_document._content
+    elseif :_content in propertynames(file) # 1.38.2
+        source = file._content
+    elseif :source in propertynames(file)
+        source = file.source
+    else
+        source = ""
+    end
+
+    linter_rows = collect(eachmatch(r"(^|\n)#@linter_refs (?<refs>.*)", source))
+    for r in linter_rows
+        for ref in split(r[:refs], ","; keepempty=false)
+            push!(current, strip(ref))
+        end
+    end
+end
+
 """
     semantic_pass(file, modified_expr=nothing)
 
@@ -176,26 +201,30 @@ Performs a semantic pass across a project from the entry point `file`. A first p
 function semantic_pass(file, modified_expr = nothing)
     server = file.server
     env = getenv(file, server)
+
+    forced_references = Set{String}()
+    add_forced_references!(file, forced_references)
+
     setscope!(getcst(file), Scope(nothing, getcst(file), Dict(), Dict{Symbol,Any}(:Base => env.symbols[:Base], :Core => env.symbols[:Core]), nothing))
-    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], env, server)
+    state = Toplevel(file, [getpath(file)], scopeof(getcst(file)), modified_expr === nothing, modified_expr, EXPR[], EXPR[], env, server, 0, forced_references)
     state(getcst(file))
     for x in state.delayed
         if hasscope(x)
-            traverse(x, Delayed(scopeof(x), env, server))
+            traverse(x, Delayed(scopeof(x), env, server, 0, state.forced_references))
             for (k, b) in scopeof(x).names
                 infer_type_by_use(b, env)
                 check_unused_binding(b, scopeof(x))
             end
         else
-            traverse(x, Delayed(retrieve_delayed_scope(x), env, server))
+            traverse(x, Delayed(retrieve_delayed_scope(x), env, server, 0, state.forced_references))
         end
     end
     if state.resolveonly !== nothing
         for x in state.resolveonly
             if hasscope(x)
-                traverse(x, ResolveOnly(scopeof(x), env, server))
+                traverse(x, ResolveOnly(scopeof(x), env, server, state.forced_references))
             else
-                traverse(x, ResolveOnly(retrieve_delayed_scope(x), env, server))
+                traverse(x, ResolveOnly(retrieve_delayed_scope(x), env, server, state.forced_references))
             end
         end
     end
@@ -336,6 +365,7 @@ function followinclude(x, state::State)
         push!(state.included_files, getpath(state.file))
         setroot(state.file, getroot(oldfile))
         setscope!(getcst(state.file), nothing)
+	add_forced_references!(state.file, state.forced_references)
         state(getcst(state.file))
         state.file = oldfile
         pop!(state.included_files)

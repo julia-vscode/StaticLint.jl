@@ -83,6 +83,12 @@ function resolve_ref(x::EXPR, scope::Scope, state::State)::Bool
     if !resolved && !CSTParser.defines_module(scope.expr) && parentof(scope) isa Scope
         return resolve_ref(x, parentof(scope), state)
     end
+
+    if valof(x) in state.forced_references
+        setref!(x, Binding(noname, nothing, nothing, []))
+        return true
+    end
+    
     return resolved
 end
 
