@@ -39,7 +39,7 @@ isva(x::SymbolServer.FakeUnionAll) = isva(x.body)
 @static if Core.Vararg isa Core.Type
     function isva(x)
         return (x isa SymbolServer.FakeTypeName && x.name.name == :Vararg &&
-            x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core)
+                x.name.parent isa SymbolServer.VarRef && x.name.parent.name == :Core)
     end
 else
     isva(x) = x isa SymbolServer.FakeTypeofVararg

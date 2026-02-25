@@ -79,48 +79,48 @@ find_first(f::Function, root::CSTParser.EXPR) = find_first(root, f)
 x
 x = 1
 x
-""")  == [false, true, true]
+""") == [false, true, true]
 
         @test check_resolved("""
 x, y
 x = y = 1
 x, y
-""")  == [false, false, true, true, true, true]
+""") == [false, false, true, true, true, true]
 
         @test check_resolved("""
 x, y
 x, y = 1, 1
 x, y
-""")  == [false, false, true, true, true, true]
+""") == [false, false, true, true, true, true]
 
         @test check_resolved("""
 M
 module M end
 M
-""")  == [false, true, true]
+""") == [false, true, true]
 
         @test check_resolved("""
 f
 f() = 0
 f
-""")  == [false, true, true]
+""") == [false, true, true]
 
         @test check_resolved("""
 f
 function f end
 f
-""")  == [false, true, true]
+""") == [false, true, true]
 
         @test check_resolved("""
 f
 function f() end
 f
-""")  == [false, true, true]
+""") == [false, true, true]
 
         @test check_resolved("""
 function f(a)
 end
-""")  == [true, true]
+""") == [true, true]
 
         @test check_resolved("""
 f, a
@@ -128,7 +128,7 @@ function f(a)
     a
 end
 f, a
-""")  == [false, false, true, true, true, true, false]
+""") == [false, false, true, true, true, true, false]
 
 
         @test check_resolved("""
@@ -137,7 +137,7 @@ let x = 1
     x
 end
 x
-""")  == [false, true, true, false]
+""") == [false, true, true, false]
 
         @test check_resolved("""
 x,y
@@ -145,36 +145,36 @@ let x = 1, y = 1
     x, y
 end
 x, y
-""")  == [false, false, true, true, true, true, false, false]
+""") == [false, false, true, true, true, true, false, false]
 
         @test check_resolved("""
 function f(a...)
     f(a)
 end
-""")  == [true, true, true, true]
+""") == [true, true, true, true]
 
         @test check_resolved("""
 for i = 1:1
 end
-""")  == [true]
+""") == [true]
 
         @test check_resolved("""
 [i for i in 1:1]
-""")  == [true, true]
+""") == [true, true]
 
         @test check_resolved("""
 [i for i in 1:1 if i]
-""")  == [true, true, true]
+""") == [true, true, true]
 
-# @test check_resolved("""
-# @deprecate f(a) sin(a)
-# f
-# """)  == [true, true, true, true, true, true]
+        # @test check_resolved("""
+        # @deprecate f(a) sin(a)
+        # f
+        # """)  == [true, true, true, true, true, true]
 
         @test check_resolved("""
 @deprecate f sin
 f
-""")  == [true, true, true, true]
+""") == [true, true, true, true]
 
         @test check_resolved("""
 module Mod
@@ -288,7 +288,7 @@ f(arg) = arg
         function f(arg::T1)
             arg.field.x
                 end
-                """);
+                """)
                 @test refof(cst.args[3].args[2].args[1].args[1].args[1]) == bindingof(cst.args[3].args[1].args[2])
                 @test refof(cst.args[3].args[2].args[1].args[1].args[2].args[1]) == bindingof(cst.args[2].args[3].args[1])
                 @test refof(cst.args[3].args[2].args[1].args[2].args[1]) == bindingof(cst.args[1].args[3].args[1])
@@ -464,7 +464,7 @@ f(arg) = arg
     E
     a
     b
-    """)  == [true, true, true, true, true, true, true]
+    """) == [true, true, true, true, true, true, true]
         end
 
         @test check_resolved("""
@@ -472,7 +472,7 @@ f(arg) = arg
     E
     a
     b
-    """)  == [true, true, true, true, true, true, true]
+    """) == [true, true, true, true, true, true, true]
 
         @test check_resolved("""
     @enum E begin
@@ -482,7 +482,7 @@ f(arg) = arg
     E
     a
     b
-    """)  == [true, true, true, true, true, true, true]
+    """) == [true, true, true, true, true, true, true]
     end
 
     @testset "tuple args" begin
@@ -727,7 +727,7 @@ f(arg) = arg
         sin(a,b) = 1
         sin(1)
         """)
-        # Checks that documented symbols are skipped
+            # Checks that documented symbols are skipped
             @test isempty(StaticLint.collect_hints(cst, StaticLint.getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
@@ -735,7 +735,7 @@ f(arg) = arg
         sin(a,b) = 1
         sin(1)
         """)
-        # Checks that documented symbols are skipped
+            # Checks that documented symbols are skipped
             @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
         let cst = parse_and_pass("""
@@ -921,10 +921,10 @@ f(arg) = arg
             @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
         end
         let cst = parse_and_pass(
-             """function f(arg)
-                    x = arg
-                    arg = x
-                end""")
+                """function f(arg)
+                       x = arg
+                       arg = x
+                   end""")
             StaticLint.check_farg_unused(cst[1])
             @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
         end
@@ -948,10 +948,10 @@ f(arg) = arg
                 end
             end
             """)
-           StaticLint.check_farg_unused(cst[1])
-           @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
-           @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
-       end
+            StaticLint.check_farg_unused(cst[1])
+            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+            @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
+        end
     end
 
     @testset "check redefinition of const" begin
@@ -1225,7 +1225,7 @@ f(arg) = arg
             end
         end
         @testset "overloading" begin
-    # overloading of a function that happens to be exported into the current scope.
+            # overloading of a function that happens to be exported into the current scope.
             let cst = parse_and_pass("""
         Base.sin() = nothing
         sin()
@@ -1234,7 +1234,7 @@ f(arg) = arg
                 @test first(cst.meta.scope.names["sin"].refs) == server.external_env.symbols[:Base][:sin]
                 @test isempty(StaticLint.collect_hints(cst[2], getenv(server.files[""], server)))
             end
-    # As above but for user defined function
+            # As above but for user defined function
             let cst = parse_and_pass("""
         module M
         f(x) = nothing
@@ -1254,7 +1254,7 @@ f(arg) = arg
                 @test errorof(cst[1]) === errorof(cst[2]) === errorof(cst[3])
             end
         end
-    # Non exported function is overloaded
+        # Non exported function is overloaded
         let cst = parse_and_pass("""
         Base.argtail() = nothing
         Base.argtail()
@@ -1262,7 +1262,7 @@ f(arg) = arg
             @test !haskey(cst.meta.scope.names, "argtail") #
             @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
-    # As above but for user defined function
+        # As above but for user defined function
         let cst = parse_and_pass("""
         module M
         ff(x) = nothing
@@ -1647,13 +1647,13 @@ f(arg) = arg
     end
 
     @testset "too many dots" begin
-       cst = parse_and_pass("""
-    module A
-        import ....X
-    end
-    """)
-       errs = StaticLint.collect_hints(cst, getenv(server.files[""], server))
-       @test any(err -> StaticLint.errorof(err[2]) === StaticLint.RelativeImportTooManyDots, errs)
+        cst = parse_and_pass("""
+     module A
+         import ....X
+     end
+     """)
+        errs = StaticLint.collect_hints(cst, getenv(server.files[""], server))
+        @test any(err -> StaticLint.errorof(err[2]) === StaticLint.RelativeImportTooManyDots, errs)
     end
 
 end
@@ -1970,7 +1970,7 @@ end
 end
 
 
-if Meta.parse("import a as b", raise = false).head !== :error
+if Meta.parse("import a as b", raise=false).head !== :error
     @testset "import as ..." begin
         cst = parse_and_pass("""import Base as base""")
         @test StaticLint.hasbinding(cst[1][2][3])

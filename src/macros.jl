@@ -9,10 +9,10 @@ function handle_macro(x::EXPR, state)
                 end
             elseif CSTParser.is_func_call(x.args[4])
                 sig = (x.args[4])
-                if sig isa EXPR 
+                if sig isa EXPR
                     hasscope(sig) && return # We've already done this, don't repeat
                     setscope!(sig, Scope(sig))
-                    mark_sig_args!(sig)                    
+                    mark_sig_args!(sig)
                 end
                 if state isa Toplevel
                     push!(state.resolveonly, x)
@@ -85,35 +85,35 @@ function handle_macro(x::EXPR, state)
                 end
                 mark_binding!(x.args[i], x)
             end
-        # elseif _points_to_arbitrary_macro(x.args[1], :Turing, :model, state) && length(x) == 3 &&
-        #     isassignment(x.args[3]) &&
-        #     headof(x.args[3].args[2]) === CSTParser.Begin && length(x.args[3].args[2]) == 3 && headof(x.args[3].args[2].args[2]) === :block
-        #     for i = 1:length(x.args[3].args[2].args[2])
-        #         ex = x.args[3].args[2].args[2].args[i]
-        #         if isbinarycall(ex, "~")
-        #             mark_binding!(ex)
-        #         end
-        #     end
-        # elseif _points_to_arbitrary_macro(x.args[1], :JuMP, :variable, state)
-        #     if length(x.args) < 3
-        #         return
-        #     elseif length(x) >= 5 && ispunctuation(x[2])
-        #         _mark_JuMP_binding(x[5])
-        #     else
-        #         _mark_JuMP_binding(x[3])
-        #     end
-        # elseif (_points_to_arbitrary_macro(x[1], :JuMP, :expression, state) ||
-        #     _points_to_arbitrary_macro(x[1], :JuMP, :NLexpression, state) ||
-        #     _points_to_arbitrary_macro(x[1], :JuMP, :constraint, state) || _points_to_arbitrary_macro(x[1], :JuMP, :NLconstraint, state)) && length(x) > 1
-        #     if ispunctuation(x[2])
-        #         if length(x) == 8
-        #             _mark_JuMP_binding(x[5])
-        #         end
-        #     else
-        #         if length(x) == 4
-        #             _mark_JuMP_binding(x[3])
-        #         end
-        #     end
+            # elseif _points_to_arbitrary_macro(x.args[1], :Turing, :model, state) && length(x) == 3 &&
+            #     isassignment(x.args[3]) &&
+            #     headof(x.args[3].args[2]) === CSTParser.Begin && length(x.args[3].args[2]) == 3 && headof(x.args[3].args[2].args[2]) === :block
+            #     for i = 1:length(x.args[3].args[2].args[2])
+            #         ex = x.args[3].args[2].args[2].args[i]
+            #         if isbinarycall(ex, "~")
+            #             mark_binding!(ex)
+            #         end
+            #     end
+            # elseif _points_to_arbitrary_macro(x.args[1], :JuMP, :variable, state)
+            #     if length(x.args) < 3
+            #         return
+            #     elseif length(x) >= 5 && ispunctuation(x[2])
+            #         _mark_JuMP_binding(x[5])
+            #     else
+            #         _mark_JuMP_binding(x[3])
+            #     end
+            # elseif (_points_to_arbitrary_macro(x[1], :JuMP, :expression, state) ||
+            #     _points_to_arbitrary_macro(x[1], :JuMP, :NLexpression, state) ||
+            #     _points_to_arbitrary_macro(x[1], :JuMP, :constraint, state) || _points_to_arbitrary_macro(x[1], :JuMP, :NLconstraint, state)) && length(x) > 1
+            #     if ispunctuation(x[2])
+            #         if length(x) == 8
+            #             _mark_JuMP_binding(x[5])
+            #         end
+            #     else
+            #         if length(x) == 4
+            #             _mark_JuMP_binding(x[3])
+            #         end
+            #     end
         end
     end
 end
@@ -130,7 +130,7 @@ is_nospecialize(x) = isidentifier(x) && valofid(x) == "@nospecialize"
 function _mark_JuMP_binding(arg)
     if isidentifier(arg) || headof(arg) === :ref
         mark_binding!(_rem_ref(arg))
-    elseif isbinarycall(arg, "==") || isbinarycall(arg, "<=")  || isbinarycall(arg, ">=")
+    elseif isbinarycall(arg, "==") || isbinarycall(arg, "<=") || isbinarycall(arg, ">=")
         if isidentifier(arg.args[1]) || headof(arg.args[1]) === :ref
             mark_binding!(_rem_ref(arg.args[1]))
         else
@@ -144,14 +144,14 @@ end
 function _points_to_Base_macro(x::EXPR, name, state)
     CSTParser.is_getfield_w_quotenode(x) && return _points_to_Base_macro(x.args[2].args[1], name, state)
     haskey(getsymbols(state)[:Base], name) || return false
-    targetmacro =  maybe_lookup(getsymbols(state)[:Base][name], state)
+    targetmacro = maybe_lookup(getsymbols(state)[:Base][name], state)
     isidentifier(x) && Symbol(valofid(x)) == name && (ref = refof(x)) !== nothing &&
-    (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
+        (ref == targetmacro || (ref isa Binding && ref.val == targetmacro))
 end
 
 function _points_to_arbitrary_macro(x::EXPR, module_name, name, state)
     length(x.args) == 2 && isidentifier(x.args[2]) && valof(x.args[2]) == name && haskey(getsymbols(state), Symbol(module_name)) && haskey(getsymbols(state)[Symbol(module_name)], Symbol("@", name)) && (refof(x.args[2]) == maybe_lookup(getsymbols(state)[Symbol(module_name)][Symbol("@", name)], state) ||
-    (refof(x.args[2]) isa Binding && refof(x.args[2]).val == maybe_lookup(getsymbols(state)[Symbol(module_name)][Symbol("@", name)], state)))
+                                                                                                                                                                                                          (refof(x.args[2]) isa Binding && refof(x.args[2]).val == maybe_lookup(getsymbols(state)[Symbol(module_name)][Symbol("@", name)], state)))
 end
 
 maybe_lookup(x, env::ExternalEnv) = x isa SymbolServer.VarRef ? SymbolServer._lookup(x, getsymbols(env), true) : x
@@ -172,8 +172,8 @@ maybeget_quotedsymbol(x::EXPR) = isquoted(x) ? maybe_eventually_get_id(x.args[1]
 
 function is_loop_iterator(x::EXPR)
     CSTParser.is_range(x) &&
-    ((parentof(x) isa EXPR && headof(parentof(x)) === :for) ||
-    (parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && headof(parentof(parentof(x))) === :for))
+        ((parentof(x) isa EXPR && headof(parentof(x)) === :for) ||
+         (parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && headof(parentof(parentof(x))) === :for))
 end
 
 """
