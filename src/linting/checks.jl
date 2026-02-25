@@ -682,7 +682,7 @@ function should_mark_missing_getfield_ref(x, env)
                 lhsref = lhsref.val
             end
             lhsref = get_root_method(lhsref, nothing)
-            if lhsref isa EXPR
+            if !(lhsref isa Binding)
                 # Not clear what is happening here.
                 return false
             elseif lhsref.type isa SymbolServer.DataTypeStore && !(isempty(lhsref.type.fieldnames) || isunionfaketype(lhsref.type.name) || has_getproperty_method(lhsref.type, env))
