@@ -1,9 +1,9 @@
-@testset "type inference by use" begin  
+@testset "type inference by use" begin
 cst = parse_and_pass("""
-struct T 
+struct T
 end
 
-struct S 
+struct S
 end
 
 f(x::T) = 1
@@ -49,6 +49,10 @@ function ex6(x)
         g(x)
     end
 end
+
+function ex7(x)
+    Base.throwto(x, ErrorException("asd"))
+end
 """);
 
 T = cst.meta.scope.names["T"]
@@ -60,6 +64,7 @@ S = cst.meta.scope.names["S"]
 @test cst.meta.scope.names["ex4"].val.meta.scope.names["x"].type === nothing
 @test cst.meta.scope.names["ex5"].val.meta.scope.names["x"].type === nothing
 @test cst.meta.scope.names["ex6"].val.meta.scope.names["y"].type === T
+@test cst.meta.scope.names["ex7"].val.meta.scope.names["x"].type !== nothing
 end
 
 
@@ -92,7 +97,7 @@ end
 
 @testset "Vector{T} infer" begin
 cst = parse_and_pass("""
-struct T 
+struct T
     t1
 end
 struct S

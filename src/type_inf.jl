@@ -317,7 +317,11 @@ function get_arg_type_at_position(method, argi, types)
 end
 
 function get_arg_type_at_position(m::SymbolServer.MethodStore, argi, types)
-    if length(m.sig) >= argi && m.sig[argi][2] != SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any) && !(m.sig[argi][2] in types)
+    argi -= 1
+    if !(0 < argi < length(m.sig))
+        return
+    end
+    if m.sig[argi][2] != SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any) && !(m.sig[argi][2] in types)
         push!(types, m.sig[argi][2])
     end
 end
