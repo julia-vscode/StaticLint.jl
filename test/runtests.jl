@@ -2240,3 +2240,80 @@ end
         end
     end
 end
+
+@testset "IncludeLoop and DuplicateInclude" begin
+    # Test duplicate include: main.jl includes a.jl twice
+    mktempdir() do dir
+        write(joinpath(dir, "a.jl"), "x = 1\n")
+        write(joinpath(dir, "main.jl"), """
+        include("a.jl")
+        include("a.jl")
+        """)
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints=true)
+        @test any(h -> errorof(h[1]) === StaticLint.DuplicateInclude, hints)
+        @test !any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+    end
+
+    # Test circular include: a.jl includes b.jl, b.jl includes a.jl
+    mktempdir() do dir
+        write(joinpath(dir, "a.jl"), """
+        include("b.jl")
+        """)
+        write(joinpath(dir, "b.jl"), """
+        include("a.jl")
+        """)
+        write(joinpath(dir, "main.jl"), """
+        include("a.jl")
+        """)
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints=true)
+        @test any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+    end
+    # Test circular include: a.jl includes b.jl, b.jl includes a.jl
+    mktempdir() do dir
+        write(joinpath(dir, "a.jl"), """
+        include("b.jl")
+        """)
+        write(joinpath(dir, "b.jl"), """
+        include("./a.jl")
+        """)
+        write(joinpath(dir, "main.jl"), """
+        include("a.jl")
+        """)
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints=true)
+        @test any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+        _, hints = StaticLint.lint_file(joinpath(dir, "a.jl"), s; gethints=true)
+        @test any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+        _, hints = StaticLint.lint_file(joinpath(dir, "b.jl"), s; gethints=true)
+        @test any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+    end
+
+    # Test self-include: a.jl includes itself
+    mktempdir() do dir
+        write(joinpath(dir, "a.jl"), """
+        include("a.jl")
+        """)
+        write(joinpath(dir, "main.jl"), """
+        include("a.jl")
+        """)
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints=true)
+        @test any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+    end
+
+    # Test no false positive: each file included exactly once
+    mktempdir() do dir
+        write(joinpath(dir, "a.jl"), "x = 1\n")
+        write(joinpath(dir, "b.jl"), "y = 2\n")
+        write(joinpath(dir, "main.jl"), """
+        include("a.jl")
+        include("b.jl")
+        """)
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints=true)
+        @test !any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
+        @test !any(h -> errorof(h[1]) === StaticLint.DuplicateInclude, hints)
+    end
+end

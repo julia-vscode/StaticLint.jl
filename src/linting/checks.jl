@@ -34,6 +34,7 @@
     FileTooBig,
     FileNotAvailable,
     RelativeImportTooManyDots,
+    DuplicateInclude,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -48,7 +49,8 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     UnusedBinding => "Variable has been assigned but not used.",
     InvalidTypeDeclaration => "A non-DataType has been used in a type declaration statement.",
     UnusedTypeParameter => "A DataType parameter has been specified but not used.",
-    IncludeLoop => "Loop detected, this file has already been included.",
+    IncludeLoop => "Circular include detected.",
+    DuplicateInclude => "This file has already been included.",
     MissingFile => "The included file can not be found.",
     InvalidModuleName => "Module name matches that of its parent.",
     TypePiracy => "An imported function has been extended without using module defined typed arguments.",

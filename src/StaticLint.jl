@@ -56,6 +56,7 @@ abstract type State end
 mutable struct Toplevel{T} <: State
     file::T
     included_files::Vector{String}
+    all_included_files::Set{String}
     scope::Scope
     in_modified_expr::Bool
     modified_exprs::Union{Nothing,Vector{EXPR}}
@@ -67,7 +68,7 @@ mutable struct Toplevel{T} <: State
 end
 
 Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server) =
-    Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0)
+    Toplevel(file, included_files, Set(included_files), scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0)
 
 function (state::Toplevel)(x::EXPR)
     resolve_import(x, state)
@@ -325,6 +326,10 @@ function followinclude(x, state::State)
             seterror!(x, IncludeLoop)
             return
         end
+        if path in state.all_included_files
+            seterror!(x, DuplicateInclude)
+            return
+        end
         f = getfile(state.server, path)
 
         if f.cst.fullspan > LARGE_FILE_LIMIT
@@ -334,6 +339,7 @@ function followinclude(x, state::State)
         oldfile = state.file
         state.file = f
         push!(state.included_files, getpath(state.file))
+        push!(state.all_included_files, getpath(state.file))
         setroot(state.file, getroot(oldfile))
         setscope!(getcst(state.file), nothing)
         state(getcst(state.file))
