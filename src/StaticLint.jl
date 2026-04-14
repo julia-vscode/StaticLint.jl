@@ -282,6 +282,8 @@ function followinclude(x, state::State)
     x = p
 
     init_path = path = get_path(x, state)
+    maybe_relpath = normpath(joinpath(dirname(getpath(state.file)), path))
+
     if isempty(path)
     elseif isabspath(path)
         if hasfile(state.server, path)
@@ -294,12 +296,12 @@ function followinclude(x, state::State)
         else
             path = ""
         end
-    elseif !isempty(getpath(state.file)) && isabspath(joinpath(dirname(getpath(state.file)), path))
+    elseif !isempty(getpath(state.file)) && isabspath(maybe_relpath)
         # Relative path from current
-        if hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
-            path = joinpath(dirname(getpath(state.file)), path)
-        elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
-            path = joinpath(dirname(getpath(state.file)), path)
+        if hasfile(state.server, maybe_relpath)
+            path = maybe_relpath
+        elseif canloadfile(state.server, maybe_relpath)
+            path = maybe_relpath
             if check_filesize(x, path)
                 loadfile(state.server, path)
             else
@@ -321,6 +323,7 @@ function followinclude(x, state::State)
     else
         path = ""
     end
+
     if hasfile(state.server, path)
         if path in state.included_files
             seterror!(x, IncludeLoop)
