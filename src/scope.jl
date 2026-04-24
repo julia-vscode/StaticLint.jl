@@ -43,7 +43,7 @@ function addmoduletoscope!(s::Scope, m, mname::Symbol)
     s.modules[mname] = m
 end
 addmoduletoscope!(s::Scope, m::SymbolServer.ModuleStore) = addmoduletoscope!(s, m, m.name.name)
-addmoduletoscope!(s::Scope, m::EXPR) =  CSTParser.defines_module(m) && addmoduletoscope!(s, scopeof(m), Symbol(valof(CSTParser.get_name(m))))
+addmoduletoscope!(s::Scope, m::EXPR) = CSTParser.defines_module(m) && addmoduletoscope!(s, scopeof(m), Symbol(valof(CSTParser.get_name(m))))
 addmoduletoscope!(s::Scope, s1::Scope) = CSTParser.defines_module(s1.expr) && addmoduletoscope!(s, s1, Symbol(valof(CSTParser.get_name(s1.expr))))
 
 
@@ -69,24 +69,24 @@ function introduces_scope(x::EXPR, state)
         return true
     elseif CSTParser.defines_anon_function(x)
         return true
-    elseif CSTParser.iswhere(x) 
+    elseif CSTParser.iswhere(x)
         # unless in func def signature
         return !_in_func_or_struct_def(x)
     elseif CSTParser.istuple(x) && CSTParser.hastrivia(x) && ispunctuation(x.trivia[1]) && length(x.args) > 0 && isassignment(x.args[1])
         # named tuple
         return true
     elseif headof(x) === :function ||
-            headof(x) === :macro ||
-            headof(x) === :for ||
-            headof(x) === :while ||
-            headof(x) === :let ||
-            headof(x) === :generator || # and Flatten?
-            headof(x) === :try ||
-            headof(x) === :do ||
-            headof(x) === :module ||
-            headof(x) === :abstract ||
-            headof(x) === :primitive ||
-            headof(x) === :struct
+           headof(x) === :macro ||
+           headof(x) === :for ||
+           headof(x) === :while ||
+           headof(x) === :let ||
+           headof(x) === :generator || # and Flatten?
+           headof(x) === :try ||
+           headof(x) === :do ||
+           headof(x) === :module ||
+           headof(x) === :abstract ||
+           headof(x) === :primitive ||
+           headof(x) === :struct
         return true
     end
     return false
@@ -138,8 +138,8 @@ function scopes(x::EXPR, state)
             # state.scope.names[bindingof(x).name] = bindingof(x)
             # TODO: move this to the binding stage
             add_binding(x, state)
-        # elseif headof(x) === :flatten && headof(x[1]) === CSTParser.Generator && length(x[1]) > 0 && headof(x[1][1]) === CSTParser.Generator
-        #     setscope!(x[1][1], nothing)
+            # elseif headof(x) === :flatten && headof(x[1]) === CSTParser.Generator && length(x[1]) > 0 && headof(x[1][1]) === CSTParser.Generator
+            #     setscope!(x[1][1], nothing)
         end
     end
     return s0
@@ -153,5 +153,5 @@ function add_eval_method(x, state)
         Symbol("top-level")
     end
     meth = SymbolServer.MethodStore(:eval, mod, "", 0, [:expr => SymbolServer.FakeTypeName(SymbolServer.VarRef(SymbolServer.VarRef(nothing, :Core), :Any), [])], [], Any)
-    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth],"", SymbolServer.VarRef(nothing, :nothing), false), getsymbols(state)[:Core][:DataType], [])
+    state.scope.names["eval"] = Binding(x, SymbolServer.FunctionStore(SymbolServer.VarRef(nothing, :nothing), SymbolServer.MethodStore[meth], "", SymbolServer.VarRef(nothing, :nothing), false), getsymbols(state)[:Core][:DataType], [])
 end
