@@ -56,6 +56,7 @@ abstract type State end
 mutable struct Toplevel{T} <: State
     file::T
     included_files::Vector{String}
+    all_included_files::Set{String}
     scope::Scope
     in_modified_expr::Bool
     modified_exprs::Union{Nothing,Vector{EXPR}}
@@ -67,7 +68,7 @@ mutable struct Toplevel{T} <: State
 end
 
 Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server) =
-    Toplevel(file, included_files, scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0)
+    Toplevel(file, included_files, Set(included_files), scope, in_modified_expr, modified_exprs, delayed, resolveonly, env, server, 0)
 
 function (state::Toplevel)(x::EXPR)
     resolve_import(x, state)
@@ -281,6 +282,8 @@ function followinclude(x, state::State)
     x = p
 
     init_path = path = get_path(x, state)
+    maybe_relpath = normpath(joinpath(dirname(getpath(state.file)), path))
+
     if isempty(path)
     elseif isabspath(path)
         if hasfile(state.server, path)
@@ -293,12 +296,12 @@ function followinclude(x, state::State)
         else
             path = ""
         end
-    elseif !isempty(getpath(state.file)) && isabspath(joinpath(dirname(getpath(state.file)), path))
+    elseif !isempty(getpath(state.file)) && isabspath(maybe_relpath)
         # Relative path from current
-        if hasfile(state.server, joinpath(dirname(getpath(state.file)), path))
-            path = joinpath(dirname(getpath(state.file)), path)
-        elseif canloadfile(state.server, joinpath(dirname(getpath(state.file)), path))
-            path = joinpath(dirname(getpath(state.file)), path)
+        if hasfile(state.server, maybe_relpath)
+            path = maybe_relpath
+        elseif canloadfile(state.server, maybe_relpath)
+            path = maybe_relpath
             if check_filesize(x, path)
                 loadfile(state.server, path)
             else
@@ -320,9 +323,14 @@ function followinclude(x, state::State)
     else
         path = ""
     end
+
     if hasfile(state.server, path)
         if path in state.included_files
             seterror!(x, IncludeLoop)
+            return
+        end
+        if path in state.all_included_files
+            seterror!(x, DuplicateInclude)
             return
         end
         f = getfile(state.server, path)
@@ -334,6 +342,7 @@ function followinclude(x, state::State)
         oldfile = state.file
         state.file = f
         push!(state.included_files, getpath(state.file))
+        push!(state.all_included_files, getpath(state.file))
         setroot(state.file, getroot(oldfile))
         setscope!(getcst(state.file), nothing)
         state(getcst(state.file))
