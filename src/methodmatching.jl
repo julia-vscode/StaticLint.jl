@@ -1,10 +1,24 @@
 function arg_type(arg, ismethod)
+    # Strip `@nospecialize` and `x...` wrappers — the binding/type info
+    # lives on the inner expression in both cases.
+    if is_nospecialize_call(arg)
+        arg = arg.args[3]
+    end
+    if CSTParser.issplat(arg) && length(arg.args) >= 1
+        arg = arg.args[1]
+    end
     if ismethod
         if hasbinding(arg)
             if bindingof(arg) isa Binding && bindingof(arg).type !== nothing
                 type = bindingof(arg).type
                 if type isa Binding && type.val isa SymbolServer.DataTypeStore
                     type = type.val
+                elseif type isa Binding && CoreTypes.isdatatype(type.type)
+                    # Bound through a typevar (the link's `.type` is the
+                    # `DataType` meta-type). We don't know the concrete
+                    # constraint statically — fall back to `Any` so the
+                    # type-intersection check stays permissive.
+                    return CoreTypes.Any
                 end
                 return type
             end
@@ -24,7 +38,7 @@ function arg_type(arg, ismethod)
             return CoreTypes.Char
         elseif headof(arg) === :FLOAT
             return CoreTypes.Float64
-        elseif headof(arg) === :INT
+        elseif headof(arg) === :INTEGER
             return CoreTypes.Int
         elseif headof(arg) === :HEXINT
             if length(arg.val) < 5
@@ -48,19 +62,37 @@ end
 
 isquotedsymbol(x) = x isa EXPR && x.head === :quotenode && length(x.args) == 1 && x.args[1].head === :IDENTIFIER && hastrivia(x)
 
+# Extract the name from a kwarg in a `:parameters` block. The entry may
+# be a bare identifier (sig form `f(a; p)`), a kwarg with default
+# (`p = v`), or a typed decl (`p::T`). Bare identifiers have no `.args`,
+# so we can't always reach `.args[1]`.
+function _kw_name(x::EXPR)
+    x.args !== nothing && !isempty(x.args) ? x.args[1] : x
+end
+
 function call_arg_types(call::EXPR, ismethod)
     types, kws = [], []
     call.args === nothing && return types, kws
     if length(call.args) > 1 && headof(call.args[2]) === :parameters
         for i = 1:length(call.args[2].args)
-            push!(kws, call.args[2].args[i].args[1])
+            push!(kws, _kw_name(call.args[2].args[i]))
         end
         for i = 3:length(call.args)
-            push!(types, arg_type(call.args[i], ismethod))
+            if CSTParser.iskwarg(call.args[i])
+                push!(kws, call.args[i].args[1])
+            else
+                push!(types, arg_type(call.args[i], ismethod))
+            end
         end
     else
         for i = 2:length(call.args)
-            push!(types, arg_type(call.args[i], ismethod))
+            if CSTParser.iskwarg(call.args[i])
+                # `f(a, b, kw = v)` — kwarg without semicolon. Pull it
+                # into `kws` so arity matches `method_arg_types`'s view.
+                push!(kws, call.args[i].args[1])
+            else
+                push!(types, arg_type(call.args[i], ismethod))
+            end
         end
     end
     types, kws
@@ -71,7 +103,7 @@ function method_arg_types(call::EXPR)
     call.args === nothing && return types, opts, kws
     if length(call.args) > 1 && headof(call.args[2]) === :parameters
         for i = 1:length(call.args[2].args)
-            push!(kws, call.args[2].args[i].args[1])
+            push!(kws, _kw_name(call.args[2].args[i]))
         end
         for i = 3:length(call.args)
             if CSTParser.iskwarg(call.args[i])
@@ -135,6 +167,43 @@ function find_methods(x::EXPR, store)
     possibles
 end
 
+"""
+    is_explicit_vararg_decl(arg)
+
+True if `arg` is a method-arg declaration of the form `x::Vararg` or
+`x::Vararg{...}`. Unlike `CSTParser.issplat`, this matches the explicit
+`::Vararg` spelling rather than the `x...` splat.
+"""
+function is_explicit_vararg_decl(arg)
+    isdeclaration(arg) || return false
+    length(arg.args) >= 2 || return false
+    t = arg.args[2]
+    isidentifier(t) && valofid(t) == "Vararg" && return true
+    iscurly(t) && length(t.args) >= 1 && isidentifier(t.args[1]) && valofid(t.args[1]) == "Vararg" && return true
+    return false
+end
+
+"""
+    bounded_vararg_N(arg)
+
+Return the literal `N` if `arg` is a method-arg declaration of the form
+`x::Vararg{T,N}` with an integer literal `N`; otherwise `nothing`.
+Distinguishes bounded `Vararg{T,N}` (consumes exactly N args) from the
+unbounded `Vararg{T}` and parametric `Vararg{T,N} where N`.
+"""
+function bounded_vararg_N(arg)
+    isdeclaration(arg) || return nothing
+    length(arg.args) >= 2 || return nothing
+    t = arg.args[2]
+    iscurly(t) || return nothing
+    length(t.args) == 3 || return nothing
+    isidentifier(t.args[1]) && valofid(t.args[1]) == "Vararg" || return nothing
+    N_expr = t.args[3]
+    CSTParser.headof(N_expr) === :INTEGER || return nothing
+    N_expr.val isa AbstractString || return nothing
+    return tryparse(Int, N_expr.val)
+end
+
 function match_method(args::Vector{Any}, kws::Vector{Any}, method::SymbolServer.MethodStore, store)
     !isempty(kws) && isempty(method.kws) && return false
     nsig = length(method.sig)
@@ -165,9 +234,36 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::SymbolServer.
     return true
 end
 
+# Resolve a type-position EXPR (`String`, `Vector{Int}`, …) to the
+# SymbolServer type used by `_has_type_intersection`. A type name often
+# `refof`s to its constructor `FunctionStore`; we follow `extends` back
+# to the `DataTypeStore`. Falls back to `CoreTypes.Any` so callers stay
+# permissive if resolution fails.
+function _resolve_type_expr(t, store)
+    if iscurly(t) && length(t.args) >= 1
+        t = t.args[1]
+    end
+    hasref(t) || return CoreTypes.Any
+    r = refof(t)
+    if r isa SymbolServer.DataTypeStore
+        return r
+    elseif r isa SymbolServer.FunctionStore
+        dt = SymbolServer._lookup(r.extends, store)
+        return dt === nothing ? CoreTypes.Any : dt
+    elseif r isa Binding && r.type isa Binding && r.type.val isa SymbolServer.DataTypeStore
+        # The reference points at a concrete locally-defined DataType via
+        # an intermediate Binding. A bare `r.type isa DataTypeStore` would
+        # also catch typevars (whose binding.type === `Core.DataType` —
+        # the meta-type, not a usable constraint), so we don't.
+        return r.type.val
+    end
+    return CoreTypes.Any
+end
+
 function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)
     margs, mkws = [], []
     vararg = false
+    vararg_N = nothing
     if CSTParser.defines_struct(method)
         for i in 1:length(method.args[3].args)
             arg = method.args[3].args[i]
@@ -183,31 +279,66 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)
             push!(margs, arg_type(arg, true))
         end
     else
-        sig = CSTParser.rem_decl(CSTParser.get_sig(method))
-        margs, mopts, mkws = method_arg_types(sig)
-        # vararg
+        # `rem_wheres_decls` strips outer `where` clauses (so parametric
+        # `Vararg{T,N} where N` is reachable) and the outer return-type
+        # decl `f(...)::T` (so the call expression sits at the top).
+        # `arg_type` itself unwraps `<decl>...` splats and `@nospecialize`
+        # wrappers internally, so we don't need to walk inner decls here.
+        sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(method))
+        # Element type for an explicit `::Vararg{T,...}` slot. `arg_type`
+        # on the decl returns the *Vararg* binding, not `T`, so we extract
+        # `T` from the AST and use it for the trailing-arg type check.
+        vararg_T = nothing
         if length(sig.args) > 0
-            if CSTParser.issplat(last(sig.args))
+            last_arg = last(sig.args)
+            is_nospecialize_call(last_arg) && (last_arg = last_arg.args[3])
+            vararg_N = bounded_vararg_N(last_arg)
+            if vararg_N !== nothing || is_explicit_vararg_decl(last_arg)
+                vararg = true
+                ty = last_arg.args[2]
+                if iscurly(ty) && length(ty.args) >= 2
+                    vararg_T = _resolve_type_expr(ty.args[2], store)
+                end
+            end
+            if CSTParser.issplat(last_arg)
                 vararg = true
             end
         end
+
+        margs, mopts, mkws = method_arg_types(sig)
     end
     !isempty(kws) && isempty(mkws) && return false
+
+    # Bounded `Vararg{T,N}`: require exactly nfixed + N positional args
+    # and match the trailing slots against `T`.
+    if vararg_N !== nothing
+        nfixed = length(margs) - 1
+        length(args) == nfixed + vararg_N || return false
+        tail = vararg_T === nothing ? CoreTypes.Any : vararg_T
+        for i in 1:nfixed
+            _has_type_intersection(args[i], margs[i], store) || return false
+        end
+        for i in (nfixed + 1):length(args)
+            _has_type_intersection(args[i], tail, store) || return false
+        end
+        return true
+    end
 
     if length(margs) < length(args)
         for i in 1:min(length(mopts), length(args) - length(margs))
             push!(margs, mopts[i])
         end
         if vararg
+            pad = vararg_T === nothing ? CoreTypes.Any : vararg_T
             for _ in 1:length(args) - length(margs)
-                push!(margs, CoreTypes.Any)
+                push!(margs, pad)
             end
         end
     end
 
     if length(args) == length(margs) || (vararg && length(args) == length(margs) - 1)
         for i in 1:length(args)
-            !_issubtype(args[i], margs[i], store) && !_issubtype(margs[i], args[i], store) && return false
+            _has_type_intersection(args[i], margs[i], store) || return false
         end
         return true
     end

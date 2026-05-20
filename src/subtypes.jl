@@ -21,22 +21,24 @@ _type_compare(a::SymbolServer.FakeTypeName, b::SymbolServer.DataTypeStore) = a =
 _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeName) = a.name == b
 _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnion) = _type_compare(a, b.a) || _type_compare(a, b.b)
 
-function _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeVar)
-    if b.ub isa SymbolServer.FakeUnion
-        return _type_compare(a, b.ub)
-    end
-    a == b
-end
+_type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeVar) = _type_compare(a, b.ub)
+_type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnionAll) = _type_compare(a, b.body)
+_type_compare(a::SymbolServer.FakeUnionAll, b::SymbolServer.DataTypeStore) = _type_compare(a.body, b)
+_type_compare(a::SymbolServer.FakeTypeName, b::SymbolServer.FakeUnionAll) = _type_compare(a, b.body)
+_type_compare(a::SymbolServer.FakeUnionAll, b::SymbolServer.FakeTypeName) = _type_compare(a.body, b)
 
 _type_compare(a, b) = a == b
 
 _super(a::SymbolServer.DataTypeStore, store) = SymbolServer._lookup(a.super.name, store)
-_super(a::SymbolServer.FakeTypeVar, store) = a.ub
-_super(a::SymbolServer.FakeUnionAll, store) = a.body
+_super(a::SymbolServer.FakeTypeVar, _) = a.ub
+_super(a::SymbolServer.FakeUnionAll, _) = a.body
 _super(a::SymbolServer.FakeTypeName, store) = _super(SymbolServer._lookup(a.name, store), store)
+_super(::SymbolServer.FakeUnion, store) = CoreTypes.Any
+_super(::SymbolServer.FakeTypeofBottom, store) = CoreTypes.Any
 @static if !(Vararg isa Type)
-    _super(a::SymbolServer.FakeTypeofVararg, store) = CoreTypes.Any
+    _super(a::SymbolServer.FakeTypeofVararg, _) = CoreTypes.Any
 end
+_super(_, _) = CoreTypes.Any
 
 function _super(b::Binding, store)
     StaticLint.CoreTypes.isdatatype(b.type) || return store[:Core][:Any]

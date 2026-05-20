@@ -679,6 +679,45 @@ f(arg) = arg
             @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
             @test StaticLint.errorof(cst[2]) === nothing
         end
+
+        @testset "bounded Vararg{T,N} — EXPR path" begin
+            # Mirror of the MethodStore-side handling: bounded `Vararg{T,N}`
+            # in a source-defined method must contribute exactly N to the
+            # arity and reject the wrong number of args.
+
+            # func_nargs(::EXPR) — bounded contributes exactly N, parametric/
+            # unbounded stay at typemax, regular args unchanged.
+            for (src, expected) in [
+                ("f(x::Vararg{Int,0}) = x",               (0, 0)),
+                ("f(x::Vararg{Int,1}) = x",               (1, 1)),
+                ("f(x::Vararg{Int,3}) = x",               (3, 3)),
+                ("f(x::Vararg{Int})   = x",               (0, typemax(Int))),
+                ("f(x::Int...)        = x",               (0, typemax(Int))),
+                ("h(p::Int, x::Vararg{Int,2}) = (p, x)",  (3, 3)),
+                ("g(y::Int) = y",                         (1, 1)),
+            ]
+                cst = CSTParser.parse(src)
+                got = StaticLint.func_nargs(cst)
+                @test (got[1], got[2]) == expected
+            end
+
+            # Full lint pipeline — bounded arity mismatches must flag
+            # IncorrectCallArgs; matching arities and unbounded varargs
+            # must stay clean.
+            for (src, expected) in [
+                ("f(x::Vararg{Int,3}) = x\nf(1,2,3)"   => nothing),
+                ("f(x::Vararg{Int,3}) = x\nf(1,2)"     => StaticLint.IncorrectCallArgs),
+                ("f(x::Vararg{Int,3}) = x\nf()"        => StaticLint.IncorrectCallArgs),
+                ("f(x::Vararg{Int,3}) = x\nf(1,2,3,4)" => StaticLint.IncorrectCallArgs),
+                ("f(x::Vararg{Int,0}) = x\nf()"        => nothing),
+                ("f(x::Vararg{Int,0}) = x\nf(1)"       => StaticLint.IncorrectCallArgs),
+                ("h(p::Int, x::Vararg{Int,2}) = (p, x)\nh(1,2,3)" => nothing),
+                ("h(p::Int, x::Vararg{Int,2}) = (p, x)\nh(1)"     => StaticLint.IncorrectCallArgs),
+            ]
+                cst = parse_and_pass(src)
+                @test StaticLint.errorof(cst.args[2]) === expected
+            end
+        end
         let cst = parse_and_pass("""
         function f(a, b; kw = kw) end
         f(1,2, kw = 1)
@@ -785,6 +824,77 @@ f(arg) = arg
             @test mm((int,),                      m_pref)  == false
             @test mm((int, int, int),             m_pref)  == true
             @test mm((int, int, int, int),        m_pref)  == false
+        end
+
+        @testset "Vararg{T} tail type intersection" begin
+            # The unbounded-vararg branch of match_method must still filter
+            # the trailing slots by `T`. Pins down: a `String` arg passed
+            # where a `Vararg{Int}` is expected fails to match. Requires a
+            # populated env so `_super` can walk Int64's supertype chain
+            # (the equal-type fast path in `_type_compare` would not
+            # exercise this).
+            using SymbolServer: MethodStore, FakeTypeName, FakeTypeofVararg, VarRef
+
+            env = StaticLint.getenv(server.files[""], server)
+            store = env.symbols
+
+            int_dt = SymbolServer.stdlibs[:Core][:Int]
+            str_dt = SymbolServer.stdlibs[:Core][:String]
+            any_dt = SymbolServer.stdlibs[:Core][:Any]
+            int_ft = FakeTypeName(VarRef(VarRef(nothing, :Core), :Int64), Any[])
+
+            # f(a, b::Int...)
+            m = MethodStore(:f, :M, "/tmp/M.jl", Int32(1),
+                            Pair{Any,Any}[:a => any_dt, :b => FakeTypeofVararg(int_ft)],
+                            Symbol[], any_dt)
+            mm(args) = StaticLint.match_method(Any[args...], Any[], m, store)
+
+            # Prefix is `::Any`, so anything matches the first slot.
+            @test mm((int_dt,))                            == true
+            @test mm((str_dt,))                            == true
+            @test mm(())                                   == false   # under-arg vs fixed prefix
+
+            # All-Int vararg tail matches.
+            @test mm((int_dt, int_dt, int_dt))             == true
+            @test mm((str_dt, int_dt, int_dt))             == true    # prefix Any accepts String
+
+            # Type mismatch in the vararg tail must reject.
+            @test mm((int_dt, str_dt))                     == false
+            @test mm((int_dt, str_dt, str_dt))             == false
+            @test mm((int_dt, int_dt, str_dt))             == false
+
+            # Source-defined methods reach the EXPR `match_method` path,
+            # which also filters trailing-slot types now. find_methods
+            # rejects the call whose vararg tail doesn't intersect T.
+            for (src, expect_matches) in [
+                # splat `b::Int...`
+                ("f(a, b::Int...) = a\nf(1, 2, 3)"          => 1),
+                ("f(a, b::Int...) = a\nf(1, \"a\", \"b\")"  => 0),
+                ("f(a, b::Int...) = a\nf()"                  => 0),
+                # explicit unbounded `::Vararg{Int}`
+                ("h(x::Vararg{Int}) = x\nh(1,2,3)"           => 1),
+                ("h(x::Vararg{Int}) = x\nh(\"a\",\"b\")"     => 0),
+                # bounded `::Vararg{String,2}`
+                ("g(x::Vararg{String,2}) = x\ng(\"a\",\"b\")" => 1),
+                ("g(x::Vararg{String,2}) = x\ng(1,2)"        => 0),
+                ("g(x::Vararg{String,2}) = x\ng(\"a\")"      => 0),
+                # parametric `Vararg{T,N} where {T,N}` — element type is
+                # an unbound typevar, so the trailing-slot type degrades
+                # to Any and any call shape is accepted.
+                ("k(x::Vararg{T,N}) where {T,N} = x\nk(1,2)"       => 1),
+                ("k(x::Vararg{T,N}) where {T,N} = x\nk(\"a\",\"b\")" => 1),
+            ]
+                cst = parse_and_pass(src)
+                ms = StaticLint.find_methods(cst.args[2], StaticLint.getenv(server.files[""], server).symbols)
+                @test length(ms) == expect_matches
+            end
+
+            # The lint warning ("Possible method call error") now also
+            # checks types — a type mismatch in a vararg tail trips
+            # `IncorrectCallArgs` even when arity matches.
+            let cst = parse_and_pass("f(a, b::Int...) = a\nf(1, \"a\", \"b\")")
+                @test StaticLint.errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
+            end
         end
     end
 
@@ -1905,7 +2015,7 @@ end
 
 @testset "where type param infer" begin
     cst = parse_and_pass("""
-    bar(u::Union) = 1
+    bar(u::Any) = 1
     foo(x::T, y::S, q::V) where {T, S <: V} where {V <: Integer} = x + y + q + bar(S) + bar(T) + bar(V)
     """)
 
