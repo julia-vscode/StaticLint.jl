@@ -137,29 +137,32 @@ end
 
 function match_method(args::Vector{Any}, kws::Vector{Any}, method::SymbolServer.MethodStore, store)
     !isempty(kws) && isempty(method.kws) && return false
-    nmargs = length(method.sig)
-    varargval = nothing
-    if nmargs > 0 && last(method.sig)[2] isa SymbolServer.FakeTypeofVararg
-        if length(args) == nmargs - 1
-            nmargs -= 1
-            # vararg can be zero length
-        elseif length(args) >= nmargs
-            # set aside the type param of the Vararg for later use
-            varargval = last(method.sig)[2].T
+    nsig = length(method.sig)
+    if nsig > 0 && last(method.sig)[2] isa SymbolServer.FakeTypeofVararg
+        va = last(method.sig)[2]
+        n_no_vararg = nsig - 1
+        # Bounded `Vararg{T,N}` consumes exactly N args at that position;
+        # unbounded `Vararg{T}` and `Vararg{T,N} where N` accept any count.
+        if isdefined(va, :N) && va.N isa Integer
+            length(args) == n_no_vararg + va.N || return false
+        else
+            length(args) >= n_no_vararg || return false
         end
-    end
-    if length(args) == nmargs
-        for i in 1:length(args)
-            if varargval !== nothing && i >= nmargs
-                !_issubtype(args[i], varargval, store) && !_issubtype(varargval, args[i], store) && return false
-            else
-                !_issubtype(args[i], method.sig[i][2], store) && !_issubtype(method.sig[i][2], args[i], store) && return false
-            end
-            
+        for i in 1:n_no_vararg
+            t = method.sig[i][2]
+            _has_type_intersection(args[i], t, store) || return false
+        end
+        for i in (n_no_vararg + 1):length(args)
+            _has_type_intersection(args[i], va.T, store) || return false
         end
         return true
     end
-    return false
+    length(args) == nsig || return false
+    for i in 1:length(args)
+        t = method.sig[i][2]
+        _has_type_intersection(args[i], t, store) || return false
+    end
+    return true
 end
 
 function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)

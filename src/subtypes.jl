@@ -7,6 +7,10 @@ function _issubtype(a, b, store)
     return false
 end
 
+function _has_type_intersection(a, b, store)
+    return _issubtype(a, b, store) || _issubtype(b, a, store)
+end
+
 _isany(x::SymbolServer.FakeTypeName) = x.name == VarRef(VarRef(nothing, :Core), :Any)
 _isany(x::SymbolServer.DataTypeStore) = x.name.name == VarRef(VarRef(nothing, :Core), :Any)
 _isany(x) = false

@@ -744,6 +744,48 @@ f(arg) = arg
             # ensure we strip all type decl code from around signature
             @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
         end
+
+        @testset "bounded Vararg{T,N}" begin
+            # Bounded `Vararg{T,N}` consumes exactly N args. The old
+            # MethodStore handling treated every Vararg as unbounded
+            # (max=typemax, accept any count). Now both arity (func_nargs)
+            # and signature matching (match_method) must honour `.N` when
+            # it's an Integer.
+            using SymbolServer: MethodStore, FakeTypeName, FakeTypeofVararg, VarRef
+
+            int = FakeTypeName(VarRef(VarRef(nothing, :Core), :Int64), Any[])
+            any_t = FakeTypeName(VarRef(VarRef(nothing, :Core), :Any), Any[])
+            mk(sig) = MethodStore(:f, :M, "/tmp/M.jl", Int32(1), sig, Symbol[], any_t)
+
+            m_bound = mk(Pair{Any,Any}[:x => FakeTypeofVararg(int, 3)])
+            m_unb   = mk(Pair{Any,Any}[:x => FakeTypeofVararg(int)])
+            m_pref  = mk(Pair{Any,Any}[:p => int, :x => FakeTypeofVararg(int, 2)])
+
+            # func_nargs: bounded → exact, unbounded → typemax
+            @test StaticLint.func_nargs(m_bound) == (3, 3,            Symbol[], false)
+            @test StaticLint.func_nargs(m_unb)   == (0, typemax(Int), Symbol[], false)
+            @test StaticLint.func_nargs(m_pref)  == (3, 3,            Symbol[], false)
+
+            # match_method: bounded rejects wrong arity, accepts only exact.
+            env = StaticLint.ExternalEnv(SymbolServer.EnvStore(),
+                                         Dict{VarRef,Vector{VarRef}}(), Symbol[])
+            mm(args, m) = StaticLint.match_method(Any[args...], Any[], m, env)
+
+            @test mm((),                          m_bound) == false
+            @test mm((int, int),                  m_bound) == false
+            @test mm((int, int, int),             m_bound) == true
+            @test mm((int, int, int, int),        m_bound) == false
+
+            # Unbounded behaviour preserved (also fixes a latent bug where
+            # length(args) > nfixed used to spuriously return false).
+            @test mm((),                          m_unb)   == true
+            @test mm((int, int),                  m_unb)   == true
+            @test mm((int, int, int, int, int),   m_unb)   == true
+
+            @test mm((int,),                      m_pref)  == false
+            @test mm((int, int, int),             m_pref)  == true
+            @test mm((int, int, int, int),        m_pref)  == false
+        end
     end
 
     @testset "check_modulename" begin

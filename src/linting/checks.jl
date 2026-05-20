@@ -201,8 +201,17 @@ function func_nargs(m::SymbolServer.MethodStore)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
 
     for arg in m.sig
-        if CoreTypes.isva(last(arg))
-            maxargs = typemax(Int)
+        t = last(arg)
+        if CoreTypes.isva(t)
+            va = unwrap_fakeunionall(t)
+            # Bounded `Vararg{T,N}` contributes exactly N args. Unbounded
+            # forms (`Vararg{T}` or `Vararg{T,N} where N`) allow any count.
+            if va isa SymbolServer.FakeTypeofVararg && isdefined(va, :N) && va.N isa Integer
+                minargs += va.N
+                maxargs !== typemax(Int) && (maxargs += va.N)
+            else
+                maxargs = typemax(Int)
+            end
         else
             minargs += 1
             maxargs !== typemax(Int) && (maxargs += 1)
