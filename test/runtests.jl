@@ -2948,3 +2948,35 @@ end
             end
         end"""))
 end
+
+@testitem "constructors on parameterized type aliases (#394)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    let cst = parse_and_pass(
+            """
+            module M
+            struct Container{T}
+                value::T
+            end
+            const IntContainer = Container{Int}
+            function IntContainer(x::Float64)
+                return IntContainer(round(Int, x))
+            end
+            end
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    let cst = parse_and_pass(
+            """
+            module M
+            struct Foo{A,B} end
+            const Bar = Foo{Int}
+            const Baz = Bar{Int}
+            Baz() = 1
+            end
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+end
