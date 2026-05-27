@@ -99,6 +99,49 @@ end
     @test cst.args[8].meta.scope.names["y"].type == cst.meta.scope.names["T"]
 end
 
+@testitem "destructuring aliased constructor (#398)" setup = [SLSetup] begin
+    # Unpacking via a `const` alias of a struct must not crash the LS.
+    cst = parse_and_pass(
+        """
+        struct Foo
+            a::Int
+            b::Int
+        end
+
+        const FOO = Foo
+
+        function bar(x)
+            (; a, b) = FOO(x, 2x)
+            a + b
+        end
+        """
+    )
+
+    barscope = cst.meta.scope.names["bar"].val.meta.scope
+    @test StaticLint.CoreTypes.isint(barscope.names["a"].type)
+    @test StaticLint.CoreTypes.isint(barscope.names["b"].type)
+end
+
+@testitem "destructuring direct constructor" setup = [SLSetup] begin
+    cst = parse_and_pass(
+        """
+        struct Foo
+            a::Int
+            b::Int
+        end
+
+        function bar(x)
+            (; a, b) = Foo(x, 2x)
+            a + b
+        end
+        """
+    )
+
+    barscope = cst.meta.scope.names["bar"].val.meta.scope
+    @test StaticLint.CoreTypes.isint(barscope.names["a"].type)
+    @test StaticLint.CoreTypes.isint(barscope.names["b"].type)
+end
+
 @testitem "Vector{T} infer" setup = [SLSetup] begin
     cst = parse_and_pass(
         """
