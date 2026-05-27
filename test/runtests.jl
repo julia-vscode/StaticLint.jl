@@ -2848,3 +2848,89 @@ end
         @test (StaticLint.semantic_pass(x); true)
     end
 end
+
+@testitem "assignment to outer local inside inner scope (#393)" setup = [SLSetup] begin
+    has_unused(cst) = any(errorof(x) === StaticLint.UnusedBinding for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    # Assigning to a variable that is already a local in an enclosing scope
+    # reassigns that variable rather than introducing a new (unused) local.
+    # A `let` block (the case from the issue):
+    @test !has_unused(parse_and_pass(
+        """
+        function f()
+            x = 1
+            let y = 2
+                x = y + 1
+            end
+            return x
+        end"""))
+
+    # Nested `let` blocks:
+    @test !has_unused(parse_and_pass(
+        """
+        function f()
+            x = 1
+            let
+                let
+                    x = 2
+                end
+            end
+            return x
+        end"""))
+
+    # A closure capturing and reassigning an outer local:
+    @test !has_unused(parse_and_pass(
+        """
+        function f()
+            x = 1
+            g() = (x = 2)
+            g()
+            return x
+        end"""))
+
+    # A `do` block (also a closure):
+    @test !has_unused(parse_and_pass(
+        """
+        function f()
+            x = 1
+            map([1]) do _
+                x = 2
+            end
+            return x
+        end"""))
+
+    # Nested soft scopes reaching an enclosing local:
+    @test !has_unused(parse_and_pass(
+        """
+        function f()
+            x = 1
+            for i in 1:2
+                for j in 1:2
+                    x = i + j
+                end
+            end
+            return x
+        end"""))
+
+    # A genuinely unused local introduced inside a `let` is still flagged.
+    @test has_unused(parse_and_pass(
+        """
+        function f()
+            let
+                z = 1
+            end
+        end"""))
+
+    # An explicit `local` inside a `let` introduces a distinct binding rather
+    # than reassigning the outer variable: here the outer `x` is used while the
+    # inner `local x` is not, so the inner one is still flagged.
+    @test has_unused(parse_and_pass(
+        """
+        function f()
+            x = 1
+            @show x
+            let
+                local x = 2
+            end
+        end"""))
+end
