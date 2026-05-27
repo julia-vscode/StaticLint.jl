@@ -1446,6 +1446,80 @@ end
     end
 end
 
+@testitem "constructor for existing type (#395)" setup = [SLSetup] begin
+    invalid_type_decls(cst, env) =
+        count(e -> errorof(e) === StaticLint.InvalidTypeDeclaration, e for (_, e) in StaticLint.collect_hints(cst, env))
+
+    # Adding a constructor to an existing type via a *qualified* name extends
+    # that type, so it is still understood as a datatype when used in a later
+    # type declaration. (This is what e.g. MultiFloats.jl does.)
+    let cst = parse_and_pass(
+            """
+            module M
+            struct MyNumber
+                sign::Bool
+                exponent::Int
+                mantissa::Int
+            end
+            function Base.BigFloat(x::MyNumber)
+                x
+            end
+            function foo(x::BigFloat)
+                x
+            end
+            end
+            """
+        )
+        @test invalid_type_decls(cst, getenv(server.files[""], server)) == 0
+    end
+
+    # Same, but extending via an explicit `import` of the type.
+    let cst = parse_and_pass(
+            """
+            module M
+            import Base: BigFloat
+            struct MyNumber
+                sign::Bool
+                exponent::Int
+                mantissa::Int
+            end
+            function BigFloat(x::MyNumber)
+                x
+            end
+            function cube_root(x::BigFloat)
+                x
+            end
+            end
+            """
+        )
+        @test invalid_type_decls(cst, getenv(server.files[""], server)) == 0
+    end
+
+    # A *bare* unqualified definition (no qualification and no import) does not
+    # extend `Base.BigFloat` - it introduces a new local function that shadows
+    # the type (this form is deprecated in Julia 1.12). Using the shadowing
+    # name in a type declaration is therefore correctly flagged.
+    let cst = parse_and_pass(
+            """
+            module M
+            struct MyNumber
+                sign::Bool
+                exponent::Int
+                mantissa::Int
+            end
+            function BigFloat(x::MyNumber)
+                x
+            end
+            function cube_root(x::BigFloat)
+                x
+            end
+            end
+            """
+        )
+        @test invalid_type_decls(cst, getenv(server.files[""], server)) == 1
+    end
+end
+
 @testitem "check for " setup = [SLSetup] begin # e.g. `using StaticLint: StaticLint`
     let cst = parse_and_pass(
             """
