@@ -1807,6 +1807,20 @@ end
     end
 end
 
+@testitem "issue #390 (nospecialize without argument)" setup = [SLSetup] begin
+    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize) end")) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize()) end")) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("f(@nospecialize) = 1")) == (1, 1, Symbol[], false)
+    # Full pipeline: defining and calling such a function must not crash.
+    @test parse_and_pass("""
+        function f(@nospecialize(x))
+            @nospecialize
+            return x
+        end
+        f(1)
+        """) isa CSTParser.EXPR
+end
+
 @testitem "issue #226" setup = [SLSetup] begin
     cst = parse_and_pass("function my_function(::Any...) end")
     @test !StaticLint.haserror(cst.args[1].args[1].args[2])
