@@ -1160,6 +1160,73 @@ end
     end
 end
 
+@testitem "@testitem/@testset blocks have isolated scopes (#405)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    # Each @testitem runs in its own module at runtime, so reusing the same
+    # const/struct names across sibling blocks must not be flagged.
+    let cst = parse_and_pass(
+            """
+            @testitem "A" begin
+                const X = 1
+                struct Foo end
+            end
+            @testitem "B" begin
+                const X = 2
+                struct Foo end
+            end
+            """
+        )
+        @test scopeof(cst.args[1]) isa StaticLint.Scope
+        @test scopeof(cst.args[2]) isa StaticLint.Scope
+        @test scopeof(cst.args[1]) !== scopeof(cst.args[2])
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+        @test !has_error(cst, StaticLint.CannotDeclareConst)
+    end
+
+    # @testset blocks evaluate in a local scope; the same isolation applies.
+    let cst = parse_and_pass(
+            """
+            @testset "A" begin
+                const X = 1
+            end
+            @testset "B" begin
+                const X = 2
+            end
+            """
+        )
+        @test scopeof(cst.args[1]) isa StaticLint.Scope
+        @test scopeof(cst.args[2]) isa StaticLint.Scope
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    # A genuine redefinition *within* a single block is still reported.
+    let cst = parse_and_pass(
+            """
+            @testitem "A" begin
+                const X = 1
+                const X = 2
+            end
+            """
+        )
+        @test has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    # References to file-level bindings still resolve from inside the block.
+    let cst = parse_and_pass(
+            """
+            helper(x) = x
+            @testitem "A" begin
+                helper(1)
+            end
+            """
+        )
+        helpers = filter(x -> CSTParser.valof(x) == "helper", get_ids(cst.args[2]))
+        @test length(helpers) == 1
+        @test refof(helpers[1]) !== nothing
+    end
+end
+
 @testitem "hoisting of inner constructors" setup = [SLSetup] begin
     let cst = parse_and_pass(
             """

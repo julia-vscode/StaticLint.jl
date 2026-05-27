@@ -88,8 +88,32 @@ function introduces_scope(x::EXPR, state)
             headof(x) === :primitive ||
             headof(x) === :struct
         return true
+    elseif is_scope_introducing_macrocall(x)
+        return true
     end
     return false
+end
+
+"""
+    is_scope_introducing_macrocall(x::EXPR)
+
+Whether `x` is a macrocall that wraps its body in an isolated scope at runtime.
+`@testitem` blocks (TestItemRunner.jl) each execute in a fresh module and
+`@testset` blocks evaluate in a local scope, so bindings made inside them do not
+leak into the enclosing scope. Giving them their own `Scope` here avoids false
+`InvalidRedefofConst` (and similar) errors when sibling blocks reuse the same
+`using`/`const`/`struct`/binding names.
+"""
+function is_scope_introducing_macrocall(x::EXPR)
+    CSTParser.ismacrocall(x) || return false
+    name = x.args[1]
+    # handle the `Module.@macro` form
+    if CSTParser.is_getfield_w_quotenode(name)
+        name = name.args[2].args[1]
+    end
+    isidentifier(name) || return false
+    n = valofid(name)
+    return n == "@testitem" || n == "@testset"
 end
 
 
