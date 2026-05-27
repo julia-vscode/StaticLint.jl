@@ -145,7 +145,10 @@ function get_named_toplevel_module(s::Scope, name::String)
     end
     return nothing
 end
-function _get_field(par, arg, state)
+function _get_field(par, arg, state, visited=Base.IdSet{Any}())
+    par in visited && return nothing
+    push!(visited, par)
+
     arg_str_rep = CSTParser.str_value(arg)
     if par isa SymbolServer.EnvStore
         if (arg_scope = retrieve_scope(arg)) !== nothing && (tlm = get_named_toplevel_module(arg_scope, arg_str_rep)) !== nothing && hasbinding(tlm)
@@ -187,17 +190,17 @@ function _get_field(par, arg, state)
         end
     elseif par isa Binding
         if par.val isa Binding
-            return _get_field(par.val, arg, state)
+            return _get_field(par.val, arg, state, visited)
         elseif par.val isa EXPR && CSTParser.defines_module(par.val) && scopeof(par.val) isa Scope
-            return _get_field(scopeof(par.val), arg, state)
+            return _get_field(scopeof(par.val), arg, state, visited)
         elseif par.val isa EXPR && isassignment(par.val)
             if hasref(par.val.args[2])
-                return _get_field(refof(par.val.args[2]), arg, state)
+                return _get_field(refof(par.val.args[2]), arg, state, visited)
             elseif is_getfield_w_quotenode(par.val.args[2])
-                return _get_field(refof_maybe_getfield(par.val.args[2]), arg, state)
+                return _get_field(refof_maybe_getfield(par.val.args[2]), arg, state, visited)
             end
         elseif par.val isa SymbolServer.ModuleStore
-            return _get_field(par.val, arg, state)
+            return _get_field(par.val, arg, state, visited)
         end
     end
     return
