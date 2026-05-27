@@ -2367,3 +2367,21 @@ end
         @test any(h -> errorof(h[1]) === StaticLint.IncludeLoop, hints)
     end
 end
+
+@testset "Circular binding resolution (#404)" begin
+    mktempdir() do dir
+        write(joinpath(dir, "test2.jl"), """
+        const Bar = Foo.Bar
+        """)
+        write(joinpath(dir, "test.jl"), """
+        module Foo
+        import Bar
+        import Bar: foo
+        include("test2.jl")
+        end
+        """)
+        s = StaticLint.FileServer()
+        x, _ = StaticLint.lint_file(joinpath(dir, "test.jl"), s; gethints=true)
+        @test (StaticLint.semantic_pass(x); true)
+    end
+end
