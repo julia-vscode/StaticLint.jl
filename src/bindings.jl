@@ -284,6 +284,11 @@ function add_binding(x, state, scope=state.scope)
         else
             return
         end
+
+        # it's not clear how this can happen, but we can just conservatively
+        # return early
+        name === nothing && return
+
         # check for global marker
         if isglobal(name, scope)
             scope = _get_global_scope(state.scope)
