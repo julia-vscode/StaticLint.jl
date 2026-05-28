@@ -355,6 +355,33 @@ end
             @test refof(cst.args[3].args[2].args[1].args[2].args[1]) == bindingof(cst.args[1].args[3].args[1])
         end
 
+        # property destructuring should infer the field's type, not the RHS type (#357)
+        let cst = parse_and_pass(
+                """
+                struct S
+                    a
+                end
+
+                struct T
+                    s::S
+                end
+
+                function f1(t::T)
+                    (; s) = t
+                    a = s.a
+                end
+
+                function f2(t::T)
+                    s = t.s
+                    x = s.a
+                end
+                """
+            )
+            S = cst.meta.scope.names["S"]
+            @test cst.meta.scope.names["f1"].val.meta.scope.names["s"].type == S
+            @test cst.meta.scope.names["f2"].val.meta.scope.names["s"].type == S
+        end
+
         let cst = parse_and_pass("""raw\"whatever\"""")
             @test refof(cst.args[1].args[1]) !== nothing
         end
@@ -723,6 +750,19 @@ end
         @test errorof(cst[3]) === StaticLint.NotEqDef
         @test errorof(cst[4]) === StaticLint.NotEqDef
     end
+
+    let cst = parse_and_pass(
+            """
+            import Base:sin
+            sin(x::Array{Number}) where {S} = 1
+            sin(x::Array{Number}) where {S} where {R} = 1
+            sin(x::Array{Number}) where {S} where {R} where {Q} = 1
+            """
+        )
+        @test errorof(cst[2]) === StaticLint.TypePiracy
+        @test errorof(cst[3]) === StaticLint.TypePiracy
+        @test errorof(cst[4]) === StaticLint.TypePiracy
+    end
 end
 
 @testitem "check_call" setup = [SLSetup] begin
@@ -782,7 +822,7 @@ end
             end
             """
         )
-        m_counts = StaticLint.func_nargs(cst.args[1])
+        m_counts = StaticLint.func_nargs(cst.args[1], server.external_env)
         call_counts = StaticLint.call_nargs(cst.args[1].args[2].args[1])
         @test StaticLint.errorof(cst.args[1].args[2].args[1]) === nothing
     end
@@ -792,7 +832,7 @@ end
             func(1, 2)
             """
         )
-        @test StaticLint.func_nargs(cst.args[1]) == (0, typemax(Int), String[], false)
+        @test StaticLint.func_nargs(cst.args[1], server.external_env) == (0, typemax(Int), String[], false)
         @test StaticLint.errorof(cst.args[2]) === nothing
     end
     let cst = parse_and_pass(
@@ -801,7 +841,7 @@ end
             tail(x::Tuple) = argtail(x...)
             """
         )
-        @test StaticLint.func_nargs(cst[1]) == (1, typemax(Int), String[], false)
+        @test StaticLint.func_nargs(cst[1], server.external_env) == (1, typemax(Int), String[], false)
         @test StaticLint.errorof(cst[2]) === nothing
     end
     let cst = parse_and_pass(
@@ -811,7 +851,7 @@ end
             """
         )
 
-        @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
+        @test StaticLint.func_nargs(cst[1], server.external_env) == (0, typemax(Int), String[], false)
         @test StaticLint.errorof(cst[2]) === nothing
     end
     let cst = parse_and_pass(
@@ -894,6 +934,24 @@ end
         )
         # ensure we strip all type decl code from around signature
         @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+    # #335: a default positional argument makes the definition's signature read
+    # like a call with a keyword arg, so the self-signature match falls back to
+    # comparing against the stripped signature. This must strip *all* `where`
+    # clauses, regardless of nesting depth.
+    let cst = parse_and_pass(
+            """
+            f1(c::TT=[1,1]) where {TT<:AbstractVector{T}} where {T} = (c,TT,T)
+            f2(c::TT=[1,1]) where {TT<:AbstractVector} = (c,TT)
+            f3(c::TT) where {TT<:AbstractVector{T}} where {T} = (c,TT,T)
+            f4(c::TT=[1,1]) where {TT<:AbstractArray{T,N}} where {T} where {N} = (c,TT,T,N)
+            """
+        )
+        has_callargs_err(x) = StaticLint.errorof(x) === StaticLint.IncorrectCallArgs
+        @test find_first(cst[1], has_callargs_err) === nothing
+        @test find_first(cst[2], has_callargs_err) === nothing
+        @test find_first(cst[3], has_callargs_err) === nothing
+        @test find_first(cst[4], has_callargs_err) === nothing
     end
 end
 
@@ -1131,6 +1189,19 @@ end
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
     end
+    # #330: an underscore (or otherwise skipped) argument must not stop
+    # subsequent arguments from being checked.
+    let cst = parse_and_pass("function f(_, y)\n    return\nend")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument
+    end
+    let cst = parse_and_pass("function f(x, _, z)\n    return\nend")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[7]) === StaticLint.UnusedFunctionArgument
+    end
 end
 
 @testitem "check redefinition of const" setup = [SLSetup] begin
@@ -1157,6 +1228,59 @@ end
             """
         )
         @test cst[2].meta.error === nothing
+    end
+end
+
+@testitem "importing a type is not a const redefinition (#352)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    let cst = parse_and_pass("import Base: AbstractDict")
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            import Base: AbstractDict
+            import Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            using Base
+            using Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            import Base
+            import Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            using Base
+            import Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            import Base: AbstractDict
+            const AbstractDict = 1
+            """
+        )
+        @test has_error(cst, StaticLint.InvalidRedefofConst)
     end
 end
 
@@ -1882,9 +2006,9 @@ end
 end
 
 @testitem "issue #390 (nospecialize without argument)" setup = [SLSetup] begin
-    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize) end")) == (1, 1, Symbol[], false)
-    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize()) end")) == (1, 1, Symbol[], false)
-    @test StaticLint.func_nargs(CSTParser.parse("f(@nospecialize) = 1")) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize) end"), server.external_env) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize()) end"), server.external_env) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("f(@nospecialize) = 1"), server.external_env) == (1, 1, Symbol[], false)
     # Full pipeline: defining and calling such a function must not crash.
     @test parse_and_pass("""
         function f(@nospecialize(x))
@@ -1893,6 +2017,51 @@ end
         end
         f(1)
         """) isa CSTParser.EXPR
+end
+
+@testitem "issue #389 (macro-rewritten call signature)" setup = [SLSetup] begin
+    # An unknown macro wrapping a function definition can rewrite its call
+    # signature (e.g. KernelAbstractions' `@kernel`), so calls with a differing
+    # number of arguments must not be flagged as `IncorrectCallArgs`.
+    let cst = parse_and_pass(
+            """
+            @kernel function mul2_kernel(A)
+                A[I] = 2 * A[I]
+            end
+            mul2_kernel(dev, 64)
+            """
+        )
+        @test errorof(cst.args[2]) === nothing
+        @test StaticLint.func_nargs(cst.args[1].args[end], server.external_env) ==
+            (0, typemax(Int), Symbol[], true)
+    end
+
+    # Signature-preserving Base macros (`@inline`, `Base.@propagate_inbounds`, ...)
+    # resolve to known Base macros, so argument counts are still checked.
+    let cst = parse_and_pass(
+            """
+            @inline function g(x)
+                x
+            end
+            g(1, 2)
+            """
+        )
+        @test errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
+        @test StaticLint.func_nargs(cst.args[1].args[end], server.external_env) ==
+            (1, 1, Symbol[], false)
+    end
+
+    # The module-qualified form (`Base.@propagate_inbounds`) resolves too.
+    let cst = parse_and_pass(
+            """
+            Base.@propagate_inbounds function h(a, b)
+                a + b
+            end
+            h(1)
+            """
+        )
+        @test errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
+    end
 end
 
 @testitem "issue #226" setup = [SLSetup] begin
@@ -2386,10 +2555,7 @@ end
         """
     )
     @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][3][1][1]))) == 2
-    # The function-level `x` has three references: its own name, the bare `x`
-    # used before the assignment (a forward reference to the same local, see
-    # #313), and the `x` used afterwards.
-    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 3
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 2
 end
 
 # @testset "test workspace packages" begin
@@ -2922,6 +3088,46 @@ end
     end
 end
 
+@testitem "include(joinpath(...)) with explicit strings (#311)" setup = [SLSetup] begin
+    # `include(joinpath("subdir", "myfile.jl"))` should be resolved the same way
+    # as `include("subdir/myfile.jl")`: the file is loaded and its bindings are
+    # visible, rather than being silently ignored.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "subdir"))
+        write(joinpath(dir, "subdir", "myfile.jl"), "foo() = 1\n")
+        write(
+            joinpath(dir, "main.jl"), """
+            include(joinpath("subdir", "myfile.jl"))
+            foo()
+            """
+        )
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints = true)
+        # the included file must actually be loaded
+        @test StaticLint.hasfile(s, joinpath(dir, "subdir", "myfile.jl"))
+        # no spurious MissingFile error
+        @test !any(h -> errorof(h[1]) === StaticLint.MissingFile, hints)
+        # the reference to `foo` (defined in the included file) resolves
+        @test !any(h -> startswith(last(h), "Missing reference"), hints)
+    end
+
+    # Including the same file via joinpath and via a plain string must resolve to
+    # the same path, which is detected as a DuplicateInclude.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "subdir"))
+        write(joinpath(dir, "subdir", "myfile.jl"), "x = 1\n")
+        write(
+            joinpath(dir, "main.jl"), """
+            include("subdir/myfile.jl")
+            include(joinpath("subdir", "myfile.jl"))
+            """
+        )
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints = true)
+        @test any(h -> errorof(h[1]) === StaticLint.DuplicateInclude, hints)
+    end
+end
+
 @testitem "Circular binding resolution (#404)" setup = [SLSetup] begin
     mktempdir() do dir
         write(joinpath(dir, "test2.jl"), """
@@ -3032,9 +3238,6 @@ end
     # A missing reference is collected as an identifier hint with no associated error code.
     has_missingref(cst) = any(errorof(x) === nothing for (_, x) in StaticLint.collect_hints(cst, env))
 
-    # The example from the issue: a closure reads `who`, which is assigned later
-    # in the enclosing function. The closure is only called after the assignment,
-    # so this is valid and should produce no warnings.
     let cst = parse_and_pass(
         """
         function f()
@@ -3048,7 +3251,6 @@ end
         @test !has_unused(cst)
     end
 
-    # Short-form closure variant.
     let cst = parse_and_pass(
         """
         function f()
@@ -3060,7 +3262,6 @@ end
         @test !has_unused(cst)
     end
 
-    # Two levels of nesting reaching a binding defined later in the outer function.
     let cst = parse_and_pass(
         """
         function f()
@@ -3077,7 +3278,6 @@ end
         @test !has_unused(cst)
     end
 
-    # A closure capturing a local defined later inside a `let`.
     let cst = parse_and_pass(
         """
         function f()
@@ -3091,8 +3291,6 @@ end
         @test !has_unused(cst)
     end
 
-    # A genuinely undefined reference inside a closure is still flagged, and since
-    # there is no binding it must not be reported as an unused binding.
     let cst = parse_and_pass(
         """
         function f()
@@ -3102,6 +3300,148 @@ end
         @test has_missingref(cst)
         @test !has_unused(cst)
     end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function bar()
+                x = 2
+            end
+            local x
+            bar()
+            return x
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+        local_x = bindingof(cst[1][3][2][2])
+        return_x = refof(cst[1][3][4][2])
+        @test return_x === local_x
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                return x
+            end
+            local x = 10
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g1()
+                return v
+            end
+            function g2()
+                return v + 1
+            end
+            v = 1
+            g1() + g2()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function reader()
+                return x
+            end
+            function writer()
+                x = 2
+            end
+            local x
+            writer()
+            reader()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                function h()
+                    x = 99
+                end
+                h()
+            end
+            local x
+            g()
+            return x
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function bar()
+                tmp = x + 1
+                x = tmp
+                return tmp
+            end
+            local x = 0
+            bar()
+            return x
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function bar()
+                y = 2
+            end
+            bar()
+        end""")
+        @test has_unused(cst)
+    end
+end
+
+@testitem "function definition satisfying a `local` declaration (#349)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    @test !has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            let
+                inner_fun(x) = x
+            end
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test !has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            inner_fun = 1
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test has_error(parse_and_pass(
+        """
+        function fun()
+            inner_fun = 1
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
 end
 
 @testitem "constructors on parameterized type aliases (#394)" setup = [SLSetup] begin
@@ -3133,5 +3473,189 @@ end
             """
         )
         @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # Aliasing a `UnionAll` via a `where` clause is also a valid constructor target.
+    let cst = parse_and_pass(
+            """
+            const MyVec = Vector{T} where T
+
+            MyVec(x::Int64) = [x]
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # Multiple type variables in the `where` clause.
+    let cst = parse_and_pass(
+            """
+            const MyArray = Array{T,N} where {T,N}
+
+            MyArray(x::Int64) = [x]
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # User-defined struct aliased through a `where` clause.
+    let cst = parse_and_pass(
+            """
+            module M
+            struct Foo{T} end
+            const Bar = Foo{T} where T
+            Bar(x::Int64) = 1
+            end
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+end
+
+@testitem "@enum with explicit values (#275)" setup = [SLSetup] begin
+    missing_refs(cst) = [x for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)) if !StaticLint.haserror(x)]
+
+    # Members given explicit values must still be bound and exportable.
+    let cst = parse_and_pass("@enum Foo x=1; export x")
+        @test isempty(missing_refs(cst))
+    end
+
+    let cst = parse_and_pass("@enum Foo x=1 y=2")
+        @test isempty(missing_refs(cst))
+    end
+
+    # Block form with explicit values.
+    let cst = parse_and_pass(
+            """
+            @enum Foo begin
+                x = 1
+                y = 2
+            end
+            export x, y
+            """
+        )
+        @test isempty(missing_refs(cst))
+    end
+
+    # Mixed bare and explicit-value members.
+    @test check_resolved(
+        """
+        @enum E a b=2 c
+        E
+        a
+        b
+        c
+        """
+    ) == [true, true, true, true, true, true, true, true, true]
+end
+
+@testitem "using Base in baremodule (#368)" setup = [SLSetup] begin
+    missing_refs(cst) = [x for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)) if !StaticLint.haserror(x)]
+
+    # Top-level baremodule (no enclosing module to supply Base).
+    let cst = parse_and_pass(
+            """
+            baremodule Flags
+            using Base: @enum
+            @enum Flag flag
+            end
+            """
+        )
+        baseid = find_first(cst, x -> StaticLint.headof(x) === :IDENTIFIER && CSTParser.valof(x) == "Base")
+        @test baseid !== nothing
+        @test StaticLint.hasref(baseid)
+        @test isempty(missing_refs(cst))
+    end
+end
+
+@testitem "hint offsets with unicode (#253)" setup = [SLSetup] begin
+    # Hint offsets are byte offsets into the source. Multibyte unicode
+    # characters (e.g. `α`) preceding an error must not shift the reported
+    # offset off the start of the flagged expression.
+    src = """
+    struct Buz
+        x::Integers
+        α::Array{Float65,1}
+    end
+    """
+    cst = parse_and_pass(src)
+    cu = codeunits(src)
+    hints = StaticLint.collect_hints(cst, getenv(server.files[""], server))
+
+    # For every hint, the byte offset + span must extract the expression's own
+    # text from the source (when the expression carries a value).
+    for (offset, x) in hints
+        v = CSTParser.valof(x)
+        v isa String || continue
+        snippet = String(cu[offset+1:offset+x.span])
+        @test snippet == v
+    end
+
+    # The `Float65` typo sits after the multibyte `α`; its offset must be the
+    # byte offset (after α's 2 bytes), not the character offset.
+    float65 = find_first(cst, x -> StaticLint.headof(x) === :IDENTIFIER && CSTParser.valof(x) == "Float65")
+    @test float65 !== nothing
+    off = first(o for (o, x) in hints if x === float65)
+    @test String(cu[off+1:off+float65.span]) == "Float65"
+    @test off == first(findfirst("Float65", src)) - 1  # 0-based byte offset
+end
+
+@testitem "global definition inside local scope (#315)" setup = [SLSetup] begin
+    let cst = parse_and_pass(
+            """
+            let x = 1
+                global function foo()
+                end
+            end
+
+            function bar()
+                foo()
+            end
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global gvar = 1
+                global gstruct_field = 2
+                global gfunc(x) = x
+                global struct GStruct end
+            end
+
+            use_gvar() = gvar
+            use_gfunc() = gfunc(1)
+            use_gstruct() = GStruct
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global single
+                single = 1
+            end
+
+            use_single() = single
+            """
+        )
+        use = last(filter(id -> CSTParser.valof(id) == "single", get_ids(cst)))
+        @test refof(use) !== nothing
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global foo, bar, baz
+                foo = 1
+                bar = 2
+                baz = 3
+            end
+
+            use() = foo + bar + baz
+            """
+        )
+        uses = filter(id -> CSTParser.valof(id) in ("foo", "bar", "baz"), get_ids(cst))[end-2:end]
+        @test all(id -> refof(id) !== nothing, uses)
     end
 end

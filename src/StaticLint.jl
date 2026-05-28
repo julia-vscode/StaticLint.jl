@@ -107,9 +107,10 @@ mutable struct Delayed <: State
     server
     flags::Int
     urefs::Vector{EXPR} # refs that failed to resolve
+    deferred_unused::Vector{Tuple{Binding,Scope}} # unused checks pending parent-scope completion
 end
 
-Delayed(scope, env, server, flags=0) = Delayed(scope, env, server, flags, EXPR[])
+Delayed(scope, env, server, flags=0) = Delayed(scope, env, server, flags, EXPR[], Tuple{Binding,Scope}[])
 
 function (state::Delayed)(x::EXPR)
     mark_bindings!(x, state)
@@ -127,7 +128,7 @@ function (state::Delayed)(x::EXPR)
         retry_urefs!(state)
         for b in values(state.scope.names)
             infer_type_by_use(b, state.env)
-            check_unused_binding(b, state.scope)
+            push!(state.deferred_unused, (b, state.scope))
         end
         state.scope = s0
     end
@@ -192,7 +193,12 @@ function semantic_pass(file, modified_expr = nothing)
                 check_unused_binding(b, scopeof(x))
             end
         else
-            traverse(x, Delayed(retrieve_delayed_scope(x), env, server))
+            ds = Delayed(retrieve_delayed_scope(x), env, server)
+            traverse(x, ds)
+            retry_urefs!(ds)
+        end
+        for (b, sc) in ds.deferred_unused
+            check_unused_binding(b, sc)
         end
     end
     if state.resolveonly !== nothing
@@ -388,7 +394,7 @@ function get_path(x::EXPR, state)
             path_elements = String[]
 
             for i = 2:length(parg.args)
-                arg = parg[i]
+                arg = parg.args[i]
                 if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.isstringliteral(arg)

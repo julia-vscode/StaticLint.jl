@@ -24,32 +24,41 @@ function resolve_ref(x, state)
     end
 end
 
-function resolve_ref(x, state::Delayed)
-    if !(parentof(x) isa EXPR && headof(parentof(x)) === :quotenode)
-        resolve_ref(x, state.scope, state)
-        if isidentifier(x) && !hasref(x) && !hasbinding(x)
-            push!(state.urefs, x)
-        end
+function resolve_ref(x, state::Delayed)::Bool
+    if parentof(x) isa EXPR && headof(parentof(x)) === :quotenode
+        return hasref(x)
     end
+    resolved = resolve_ref(x, state.scope, state)
+    if isidentifier(x) && !hasref(x) && !hasbinding(x)
+        push!(state.urefs, x)
+    end
+    return resolved
 end
 
+# Retry references that failed to resolve during the initial Delayed traversal.
+# Only consult STRICTLY enclosing scopes (parentof(sc) upward): bindings added
+# later in the ref's own scope are use-before-assignment, not closure forward
+# references, and we don't want to silently resolve those.
 function retry_urefs!(state::Delayed)
     isempty(state.urefs) && return
     s0 = state.scope
     remaining = EXPR[]
-    for x in state.urefs
-        if hasref(x)
-            continue
+    try
+        for x in state.urefs
+            hasref(x) && continue
+            sc = retrieve_scope(x)
+            sc isa Scope || (push!(remaining, x); continue)
+            psc = parentof(sc)
+            if psc isa Scope
+                state.scope = psc
+                resolve_ref(x, psc, state)
+            end
+            hasref(x) || push!(remaining, x)
         end
-        sc = retrieve_scope(x)
-        if sc isa Scope
-            state.scope = sc
-            resolve_ref(x, sc, state)
-        end
-        hasref(x) || push!(remaining, x)
+    finally
+        state.scope = s0
+        state.urefs = remaining
     end
-    state.scope = s0
-    state.urefs = remaining
     return
 end
 

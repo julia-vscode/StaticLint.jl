@@ -145,7 +145,7 @@ function _typeof(x, state)
 end
 
 # Call
-function struct_nargs(x::EXPR)
+function struct_nargs(x::EXPR, env::ExternalEnv)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
     parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x)) && return 0, typemax(Int), Symbol[], true
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
@@ -153,14 +153,34 @@ function struct_nargs(x::EXPR)
     length(args.args) == 0 && return 0, typemax(Int), kws, kwsplat
     inner_constructor = findfirst(a -> CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
-        return func_nargs(args.args[inner_constructor])
+        return func_nargs(args.args[inner_constructor], env)
     else
         minargs = maxargs = length(args.args)
     end
     return minargs, maxargs, kws, kwsplat
 end
 
-function func_nargs(x::EXPR)
+
+const SIGNATURE_PRESERVING_MACROS = Symbol[
+    Symbol("@inline"),
+    Symbol("@noinline"),
+    Symbol("@propagate_inbounds"),
+    Symbol("@generated"),
+    Symbol("@assume_effects"),
+    Symbol("@constprop"),
+    Symbol("@pure"),
+    Symbol("@nospecializeinfer"),
+]
+
+function func_nargs(x::EXPR, env::ExternalEnv)
+    # early return for macro-wrapped functions, unless we know that the macro
+    # does not modify the signature
+    if parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x))
+        macroname = parentof(x).args[1]
+        any(n -> _points_to_Base_macro(macroname, n, env), SIGNATURE_PRESERVING_MACROS) ||
+            return 0, typemax(Int), Symbol[], true
+    end
+
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
 
@@ -328,17 +348,17 @@ end
 
 function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     if CSTParser.defines_function(func)
-        m_counts = func_nargs(func)
+        m_counts = func_nargs(func, env)
     elseif CSTParser.defines_struct(func)
-        m_counts = struct_nargs(func)
+        m_counts = struct_nargs(func, env)
     else
         return true # We shouldn't get here
     end
     if compare_f_call(m_counts, call_counts)
         return true
     else
-        x1 = CSTParser.rem_where_decl(CSTParser.get_sig(func))
-        if (x1.head == :call && x1 == x) || (!(x1.args isa Nothing) && x1.args[1].head == :call && x1.args[1] == x)
+        x1 = CSTParser.rem_wheres_decls(CSTParser.get_sig(func))
+        if x1.head == :call && x1 == x
             return true
         end
     end
@@ -566,10 +586,10 @@ function check_farg_unused(x::EXPR)
                 arg = sig.args[i]
                 if arg.head === :parameters
                     for arg2 in arg.args
-                        !check_farg_unused_(arg2, arg_names) && return
+                        !check_farg_unused_(arg2, arg_names) && continue
                     end
                 else
-                    !check_farg_unused_(arg, arg_names) && return
+                    !check_farg_unused_(arg, arg_names) && continue
                 end
             end
         end
@@ -765,7 +785,7 @@ end
 
 function check_for_pirates(x::EXPR)
     if CSTParser.defines_function(x)
-        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
         fname = CSTParser.get_name(sig)
         if fname_is_noteq(fname)
             seterror!(x, NotEqDef)
@@ -825,6 +845,10 @@ end
 # Should return true/false indicating whether the binding should actually be added?
 function check_const_decl(name::String, b::Binding, scope)
     # assumes `scopehasbinding(scope, name)`
+
+    # imported/using-ed bindings are never const decls
+    is_in_fexpr(b.name, x -> headof(x) === :import || headof(x) === :using) && return
+
     b.val isa Binding && return check_const_decl(name, b.val, scope)
     if b.val isa EXPR && (CSTParser.defines_datatype(b.val) || is_const(bind))
         seterror!(b.val, CannotDeclareConst)
@@ -981,10 +1005,18 @@ function check_unused_binding(b::Binding, scope::Scope)
         refs = loose_refs(b)
         if (isempty(refs) || length(refs) == 1 && refs[1] == b.name) &&
                 !is_sig_arg(b.name) && !is_overwritten_in_loop(b.name) &&
-                !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b)
+                !is_overwritten_subsequently(b, scope) && !is_kw_of_macrocall(b) &&
+                !captures_outer_local(b, scope)
             seterror!(b.name, UnusedBinding)
         end
     end
+end
+
+function captures_outer_local(b::Binding, scope::Scope)
+    isidentifier(b.name) || return false
+    name = valofid(b.name)
+    name isa String || return false
+    return enclosing_local_binding_scope(scope, name) !== nothing
 end
 
 all_underscore(s) = false
