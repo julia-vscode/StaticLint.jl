@@ -9,10 +9,10 @@ function handle_macro(x::EXPR, state)
                 end
             elseif CSTParser.is_func_call(x.args[4])
                 sig = (x.args[4])
-                if sig isa EXPR 
+                if sig isa EXPR
                     hasscope(sig) && return # We've already done this, don't repeat
                     setscope!(sig, Scope(sig))
-                    mark_sig_args!(sig)                    
+                    mark_sig_args!(sig)
                 end
                 if state isa Toplevel
                     push!(state.resolveonly, x)
@@ -58,11 +58,11 @@ function handle_macro(x::EXPR, state)
                 end
                 if i == 4 && headof(x.args[4]) === :block
                     for j in 1:length(x.args[4].args)
-                        mark_binding!(x.args[4].args[j], x)
+                        mark_enum_member_binding!(x.args[4].args[j], x)
                     end
                     break
                 end
-                mark_binding!(x.args[i], x)
+                mark_enum_member_binding!(x.args[i], x)
             end
         elseif _points_to_Base_macro(x.args[1], Symbol("@goto"), state)
             if length(x.args) == 3 && isidentifier(x.args[3])
@@ -115,6 +115,14 @@ function handle_macro(x::EXPR, state)
         #         end
         #     end
         end
+    end
+end
+
+function mark_enum_member_binding!(arg::EXPR, val)
+    if CSTParser.isassignment(arg)
+        mark_binding!(arg.args[1], val)
+    else
+        mark_binding!(arg, val)
     end
 end
 

@@ -357,8 +357,8 @@ function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     if compare_f_call(m_counts, call_counts)
         return true
     else
-        x1 = CSTParser.rem_where_decl(CSTParser.get_sig(func))
-        if (x1.head == :call && x1 == x) || (!(x1.args isa Nothing) && x1.args[1].head == :call && x1.args[1] == x)
+        x1 = CSTParser.rem_wheres_decls(CSTParser.get_sig(func))
+        if x1.head == :call && x1 == x
             return true
         end
     end
@@ -586,10 +586,10 @@ function check_farg_unused(x::EXPR)
                 arg = sig.args[i]
                 if arg.head === :parameters
                     for arg2 in arg.args
-                        !check_farg_unused_(arg2, arg_names) && return
+                        !check_farg_unused_(arg2, arg_names) && continue
                     end
                 else
-                    !check_farg_unused_(arg, arg_names) && return
+                    !check_farg_unused_(arg, arg_names) && continue
                 end
             end
         end
@@ -785,7 +785,7 @@ end
 
 function check_for_pirates(x::EXPR)
     if CSTParser.defines_function(x)
-        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
         fname = CSTParser.get_name(sig)
         if fname_is_noteq(fname)
             seterror!(x, NotEqDef)

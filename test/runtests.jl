@@ -750,6 +750,19 @@ end
         @test errorof(cst[3]) === StaticLint.NotEqDef
         @test errorof(cst[4]) === StaticLint.NotEqDef
     end
+
+    let cst = parse_and_pass(
+            """
+            import Base:sin
+            sin(x::Array{Number}) where {S} = 1
+            sin(x::Array{Number}) where {S} where {R} = 1
+            sin(x::Array{Number}) where {S} where {R} where {Q} = 1
+            """
+        )
+        @test errorof(cst[2]) === StaticLint.TypePiracy
+        @test errorof(cst[3]) === StaticLint.TypePiracy
+        @test errorof(cst[4]) === StaticLint.TypePiracy
+    end
 end
 
 @testitem "check_call" setup = [SLSetup] begin
@@ -921,6 +934,24 @@ end
         )
         # ensure we strip all type decl code from around signature
         @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+    # #335: a default positional argument makes the definition's signature read
+    # like a call with a keyword arg, so the self-signature match falls back to
+    # comparing against the stripped signature. This must strip *all* `where`
+    # clauses, regardless of nesting depth.
+    let cst = parse_and_pass(
+            """
+            f1(c::TT=[1,1]) where {TT<:AbstractVector{T}} where {T} = (c,TT,T)
+            f2(c::TT=[1,1]) where {TT<:AbstractVector} = (c,TT)
+            f3(c::TT) where {TT<:AbstractVector{T}} where {T} = (c,TT,T)
+            f4(c::TT=[1,1]) where {TT<:AbstractArray{T,N}} where {T} where {N} = (c,TT,T,N)
+            """
+        )
+        has_callargs_err(x) = StaticLint.errorof(x) === StaticLint.IncorrectCallArgs
+        @test find_first(cst[1], has_callargs_err) === nothing
+        @test find_first(cst[2], has_callargs_err) === nothing
+        @test find_first(cst[3], has_callargs_err) === nothing
+        @test find_first(cst[4], has_callargs_err) === nothing
     end
 end
 
@@ -1157,6 +1188,19 @@ end
         StaticLint.check_farg_unused(cst[1])
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
+    end
+    # #330: an underscore (or otherwise skipped) argument must not stop
+    # subsequent arguments from being checked.
+    let cst = parse_and_pass("function f(_, y)\n    return\nend")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument
+    end
+    let cst = parse_and_pass("function f(x, _, z)\n    return\nend")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[7]) === StaticLint.UnusedFunctionArgument
     end
 end
 
@@ -3044,6 +3088,46 @@ end
     end
 end
 
+@testitem "include(joinpath(...)) with explicit strings (#311)" setup = [SLSetup] begin
+    # `include(joinpath("subdir", "myfile.jl"))` should be resolved the same way
+    # as `include("subdir/myfile.jl")`: the file is loaded and its bindings are
+    # visible, rather than being silently ignored.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "subdir"))
+        write(joinpath(dir, "subdir", "myfile.jl"), "foo() = 1\n")
+        write(
+            joinpath(dir, "main.jl"), """
+            include(joinpath("subdir", "myfile.jl"))
+            foo()
+            """
+        )
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints = true)
+        # the included file must actually be loaded
+        @test StaticLint.hasfile(s, joinpath(dir, "subdir", "myfile.jl"))
+        # no spurious MissingFile error
+        @test !any(h -> errorof(h[1]) === StaticLint.MissingFile, hints)
+        # the reference to `foo` (defined in the included file) resolves
+        @test !any(h -> startswith(last(h), "Missing reference"), hints)
+    end
+
+    # Including the same file via joinpath and via a plain string must resolve to
+    # the same path, which is detected as a DuplicateInclude.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "subdir"))
+        write(joinpath(dir, "subdir", "myfile.jl"), "x = 1\n")
+        write(
+            joinpath(dir, "main.jl"), """
+            include("subdir/myfile.jl")
+            include(joinpath("subdir", "myfile.jl"))
+            """
+        )
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints = true)
+        @test any(h -> errorof(h[1]) === StaticLint.DuplicateInclude, hints)
+    end
+end
+
 @testitem "Circular binding resolution (#404)" setup = [SLSetup] begin
     mktempdir() do dir
         write(joinpath(dir, "test2.jl"), """
@@ -3148,6 +3232,41 @@ end
         end"""))
 end
 
+@testitem "function definition satisfying a `local` declaration (#349)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    @test !has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            let
+                inner_fun(x) = x
+            end
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test !has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            inner_fun = 1
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test has_error(parse_and_pass(
+        """
+        function fun()
+            inner_fun = 1
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+end
+
 @testitem "constructors on parameterized type aliases (#394)" setup = [SLSetup] begin
     has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 
@@ -3178,6 +3297,75 @@ end
         )
         @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
     end
+    # Aliasing a `UnionAll` via a `where` clause is also a valid constructor target.
+    let cst = parse_and_pass(
+            """
+            const MyVec = Vector{T} where T
+
+            MyVec(x::Int64) = [x]
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # Multiple type variables in the `where` clause.
+    let cst = parse_and_pass(
+            """
+            const MyArray = Array{T,N} where {T,N}
+
+            MyArray(x::Int64) = [x]
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # User-defined struct aliased through a `where` clause.
+    let cst = parse_and_pass(
+            """
+            module M
+            struct Foo{T} end
+            const Bar = Foo{T} where T
+            Bar(x::Int64) = 1
+            end
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+end
+
+@testitem "@enum with explicit values (#275)" setup = [SLSetup] begin
+    missing_refs(cst) = [x for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)) if !StaticLint.haserror(x)]
+
+    # Members given explicit values must still be bound and exportable.
+    let cst = parse_and_pass("@enum Foo x=1; export x")
+        @test isempty(missing_refs(cst))
+    end
+
+    let cst = parse_and_pass("@enum Foo x=1 y=2")
+        @test isempty(missing_refs(cst))
+    end
+
+    # Block form with explicit values.
+    let cst = parse_and_pass(
+            """
+            @enum Foo begin
+                x = 1
+                y = 2
+            end
+            export x, y
+            """
+        )
+        @test isempty(missing_refs(cst))
+    end
+
+    # Mixed bare and explicit-value members.
+    @test check_resolved(
+        """
+        @enum E a b=2 c
+        E
+        a
+        b
+        c
+        """
+    ) == [true, true, true, true, true, true, true, true, true]
 end
 
 @testitem "using Base in baremodule (#368)" setup = [SLSetup] begin
@@ -3229,4 +3417,68 @@ end
     off = first(o for (o, x) in hints if x === float65)
     @test String(cu[off+1:off+float65.span]) == "Float65"
     @test off == first(findfirst("Float65", src)) - 1  # 0-based byte offset
+end
+
+@testitem "global definition inside local scope (#315)" setup = [SLSetup] begin
+    let cst = parse_and_pass(
+            """
+            let x = 1
+                global function foo()
+                end
+            end
+
+            function bar()
+                foo()
+            end
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global gvar = 1
+                global gstruct_field = 2
+                global gfunc(x) = x
+                global struct GStruct end
+            end
+
+            use_gvar() = gvar
+            use_gfunc() = gfunc(1)
+            use_gstruct() = GStruct
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global single
+                single = 1
+            end
+
+            use_single() = single
+            """
+        )
+        use = last(filter(id -> CSTParser.valof(id) == "single", get_ids(cst)))
+        @test refof(use) !== nothing
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global foo, bar, baz
+                foo = 1
+                bar = 2
+                baz = 3
+            end
+
+            use() = foo + bar + baz
+            """
+        )
+        uses = filter(id -> CSTParser.valof(id) in ("foo", "bar", "baz"), get_ids(cst))[end-2:end]
+        @test all(id -> refof(id) !== nothing, uses)
+    end
 end
