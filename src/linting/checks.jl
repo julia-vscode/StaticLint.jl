@@ -825,6 +825,10 @@ end
 # Should return true/false indicating whether the binding should actually be added?
 function check_const_decl(name::String, b::Binding, scope)
     # assumes `scopehasbinding(scope, name)`
+
+    # imported/using-ed bindings are never const decls
+    is_in_fexpr(b.name, x -> headof(x) === :import || headof(x) === :using) && return
+
     b.val isa Binding && return check_const_decl(name, b.val, scope)
     if b.val isa EXPR && (CSTParser.defines_datatype(b.val) || is_const(bind))
         seterror!(b.val, CannotDeclareConst)
