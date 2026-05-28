@@ -3230,6 +3230,38 @@ end
         )
         @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
     end
+    # Aliasing a `UnionAll` via a `where` clause is also a valid constructor target.
+    let cst = parse_and_pass(
+            """
+            const MyVec = Vector{T} where T
+
+            MyVec(x::Int64) = [x]
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # Multiple type variables in the `where` clause.
+    let cst = parse_and_pass(
+            """
+            const MyArray = Array{T,N} where {T,N}
+
+            MyArray(x::Int64) = [x]
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
+    # User-defined struct aliased through a `where` clause.
+    let cst = parse_and_pass(
+            """
+            module M
+            struct Foo{T} end
+            const Bar = Foo{T} where T
+            Bar(x::Int64) = 1
+            end
+            """
+        )
+        @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
+    end
 end
 
 @testitem "using Base in baremodule (#368)" setup = [SLSetup] begin
