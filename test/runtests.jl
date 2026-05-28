@@ -3121,6 +3121,41 @@ end
         end"""))
 end
 
+@testitem "function definition satisfying a `local` declaration (#349)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    @test !has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            let
+                inner_fun(x) = x
+            end
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test !has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test has_error(parse_and_pass(
+        """
+        function fun()
+            local inner_fun
+            inner_fun = 1
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+
+    @test has_error(parse_and_pass(
+        """
+        function fun()
+            inner_fun = 1
+            inner_fun(x) = x
+        end"""), StaticLint.CannotDefineFuncAlreadyHasValue)
+end
+
 @testitem "constructors on parameterized type aliases (#394)" setup = [SLSetup] begin
     has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 

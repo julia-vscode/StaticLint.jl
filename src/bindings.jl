@@ -123,6 +123,10 @@ function mark_bindings!(x::EXPR, state)
     end
 end
 
+function is_bare_local_decl(b)
+    b isa Binding && b.type === nothing && b.val isa EXPR && isidentifier(b.val) &&
+        parentof(b.val) isa EXPR && headof(parentof(b.val)) === :local
+end
 
 function mark_binding!(x::EXPR, val=x)
     if CSTParser.iskwarg(x) || (CSTParser.isdeclaration(x) && CSTParser.istuple(x.args[1]))
@@ -344,6 +348,8 @@ function add_binding(x, state, scope=state.scope)
                     end
                     if (existing_binding isa Binding && ((CoreTypes.isfunction(existing_binding.type) || CoreTypes.isdatatype(existing_binding.type))) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
                         # do nothing name of `x` will resolve to the root method
+                    elseif is_bare_local_decl(existing_binding)
+                        # a bare local decl does not assign a value
                     else
                         seterror!(x, CannotDefineFuncAlreadyHasValue)
                     end
