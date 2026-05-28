@@ -3232,6 +3232,183 @@ end
         end"""))
 end
 
+@testitem "closures referencing variables defined later (#313)" setup = [SLSetup] begin
+    env = getenv(server.files[""], server)
+    has_unused(cst) = any(errorof(x) === StaticLint.UnusedBinding for (_, x) in StaticLint.collect_hints(cst, env))
+    # A missing reference is collected as an identifier hint with no associated error code.
+    has_missingref(cst) = any(errorof(x) === nothing for (_, x) in StaticLint.collect_hints(cst, env))
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                println("hello, \$(who)")
+            end
+            who = "world"
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            g() = who
+            who = 1
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                function h()
+                    return who
+                end
+                h()
+            end
+            who = 1
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            let
+                g() = v
+                v = 1
+                g()
+            end
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            g() = undefined_var
+            g()
+        end""")
+        @test has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function bar()
+                x = 2
+            end
+            local x
+            bar()
+            return x
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+        local_x = bindingof(cst[1][3][2][2])
+        return_x = refof(cst[1][3][4][2])
+        @test return_x === local_x
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                return x
+            end
+            local x = 10
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g1()
+                return v
+            end
+            function g2()
+                return v + 1
+            end
+            v = 1
+            g1() + g2()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function reader()
+                return x
+            end
+            function writer()
+                x = 2
+            end
+            local x
+            writer()
+            reader()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                function h()
+                    x = 99
+                end
+                h()
+            end
+            local x
+            g()
+            return x
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function bar()
+                tmp = x + 1
+                x = tmp
+                return tmp
+            end
+            local x = 0
+            bar()
+            return x
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    let cst = parse_and_pass(
+        """
+        function foo()
+            function bar()
+                y = 2
+            end
+            bar()
+        end""")
+        @test has_unused(cst)
+    end
+end
+
 @testitem "function definition satisfying a `local` declaration (#349)" setup = [SLSetup] begin
     has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 

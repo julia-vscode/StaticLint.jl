@@ -106,9 +106,11 @@ mutable struct Delayed <: State
     env::ExternalEnv
     server
     flags::Int
+    urefs::Vector{EXPR} # refs that failed to resolve
+    deferred_unused::Vector{Tuple{Binding,Scope}} # unused checks pending parent-scope completion
 end
 
-Delayed(scope, env, server) = Delayed(scope, env, server, 0)
+Delayed(scope, env, server, flags=0) = Delayed(scope, env, server, flags, EXPR[], Tuple{Binding,Scope}[])
 
 function (state::Delayed)(x::EXPR)
     mark_bindings!(x, state)
@@ -123,9 +125,10 @@ function (state::Delayed)(x::EXPR)
     traverse(x, state)
     state.flags = old
     if state.scope != s0
+        retry_urefs!(state)
         for b in values(state.scope.names)
             infer_type_by_use(b, state.env)
-            check_unused_binding(b, state.scope)
+            push!(state.deferred_unused, (b, state.scope))
         end
         state.scope = s0
     end
@@ -182,13 +185,20 @@ function semantic_pass(file, modified_expr = nothing)
     state(getcst(file))
     for x in state.delayed
         if hasscope(x)
-            traverse(x, Delayed(scopeof(x), env, server))
+            ds = Delayed(scopeof(x), env, server)
+            traverse(x, ds)
+            retry_urefs!(ds)
             for (k, b) in scopeof(x).names
                 infer_type_by_use(b, env)
                 check_unused_binding(b, scopeof(x))
             end
         else
-            traverse(x, Delayed(retrieve_delayed_scope(x), env, server))
+            ds = Delayed(retrieve_delayed_scope(x), env, server)
+            traverse(x, ds)
+            retry_urefs!(ds)
+        end
+        for (b, sc) in ds.deferred_unused
+            check_unused_binding(b, sc)
         end
     end
     if state.resolveonly !== nothing
