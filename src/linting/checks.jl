@@ -566,10 +566,10 @@ function check_farg_unused(x::EXPR)
                 arg = sig.args[i]
                 if arg.head === :parameters
                     for arg2 in arg.args
-                        !check_farg_unused_(arg2, arg_names) && return
+                        !check_farg_unused_(arg2, arg_names) && continue
                     end
                 else
-                    !check_farg_unused_(arg, arg_names) && return
+                    !check_farg_unused_(arg, arg_names) && continue
                 end
             end
         end

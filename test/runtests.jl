@@ -1131,6 +1131,19 @@ end
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
         @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
     end
+    # #330: an underscore (or otherwise skipped) argument must not stop
+    # subsequent arguments from being checked.
+    let cst = parse_and_pass("function f(_, y)\n    return\nend")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === StaticLint.UnusedFunctionArgument
+    end
+    let cst = parse_and_pass("function f(x, _, z)\n    return\nend")
+        StaticLint.check_farg_unused(cst[1])
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[3]) === StaticLint.UnusedFunctionArgument
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[5]) === nothing
+        @test StaticLint.errorof(CSTParser.get_sig(cst[1])[7]) === StaticLint.UnusedFunctionArgument
+    end
 end
 
 @testitem "check redefinition of const" setup = [SLSetup] begin
