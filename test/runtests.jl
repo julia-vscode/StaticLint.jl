@@ -3054,3 +3054,67 @@ end
         @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
     end
 end
+
+@testitem "global definition inside local scope (#315)" setup = [SLSetup] begin
+    let cst = parse_and_pass(
+            """
+            let x = 1
+                global function foo()
+                end
+            end
+
+            function bar()
+                foo()
+            end
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global gvar = 1
+                global gstruct_field = 2
+                global gfunc(x) = x
+                global struct GStruct end
+            end
+
+            use_gvar() = gvar
+            use_gfunc() = gfunc(1)
+            use_gstruct() = GStruct
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global single
+                single = 1
+            end
+
+            use_single() = single
+            """
+        )
+        use = last(filter(id -> CSTParser.valof(id) == "single", get_ids(cst)))
+        @test refof(use) !== nothing
+    end
+
+    let cst = parse_and_pass(
+            """
+            let
+                global foo, bar, baz
+                foo = 1
+                bar = 2
+                baz = 3
+            end
+
+            use() = foo + bar + baz
+            """
+        )
+        uses = filter(id -> CSTParser.valof(id) in ("foo", "bar", "baz"), get_ids(cst))[end-2:end]
+        @test all(id -> refof(id) !== nothing, uses)
+    end
+end
