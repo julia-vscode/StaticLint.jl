@@ -123,6 +123,10 @@ function mark_bindings!(x::EXPR, state)
     end
 end
 
+function is_bare_local_decl(b)
+    b isa Binding && b.type === nothing && b.val isa EXPR && isidentifier(b.val) &&
+        parentof(b.val) isa EXPR && headof(parentof(b.val)) === :local
+end
 
 function mark_binding!(x::EXPR, val=x)
     if CSTParser.iskwarg(x) || (CSTParser.isdeclaration(x) && CSTParser.istuple(x.args[1]))
@@ -284,6 +288,11 @@ function add_binding(x, state, scope=state.scope)
         else
             return
         end
+
+        # it's not clear how this can happen, but we can just conservatively
+        # return early
+        name === nothing && return
+
         # check for global marker
         if isglobal(name, scope)
             scope = _get_global_scope(state.scope)
@@ -339,6 +348,8 @@ function add_binding(x, state, scope=state.scope)
                     end
                     if (existing_binding isa Binding && ((CoreTypes.isfunction(existing_binding.type) || CoreTypes.isdatatype(existing_binding.type))) || existing_binding isa SymbolServer.FunctionStore || existing_binding isa SymbolServer.DataTypeStore)
                         # do nothing name of `x` will resolve to the root method
+                    elseif is_bare_local_decl(existing_binding)
+                        # a bare local decl does not assign a value
                     else
                         seterror!(x, CannotDefineFuncAlreadyHasValue)
                     end
@@ -360,6 +371,12 @@ function add_binding(x, state, scope=state.scope)
             scope.names[name] = b
         elseif is_soft_scope(scope) && parentof(scope) isa Scope && isidentifier(b.name) && scopehasbinding(parentof(scope), valofid(b.name)) && !enforce_hard_scope(x, scope)
             add_binding(x, state, scope.parent)
+        elseif isidentifier(b.name) && !enforce_hard_scope(x, scope) &&
+                (outer_scope = enclosing_local_binding_scope(scope, valofid(b.name))) !== nothing
+            # Assigning to a name that is already a local in an enclosing local
+            # scope (e.g. inside a `let` block or closure) reassigns that variable
+            # rather than introducing a new local, so register the binding there.
+            add_binding(x, state, outer_scope)
         else
             scope.names[name] = b
         end
@@ -371,6 +388,28 @@ end
 
 function enforce_hard_scope(x::EXPR, scope)
     scope.expr.head === :for && is_in_fexpr(x, x-> x == scope.expr.args[1])
+end
+
+"""
+    enclosing_local_binding_scope(scope, name::String)
+
+Walk up the chain of scopes enclosing `scope` - stopping before the global
+(module/file) scope - and return the nearest one that already binds `name`, or
+`nothing` if there is none.
+
+This is used to decide whether an assignment in a local scope reassigns a
+variable inherited from an enclosing local scope (e.g. inside a `let` block or
+closure) rather than introducing a fresh local. The global scope is deliberately
+excluded: assigning to a global name from within a hard local scope introduces a
+new local instead of touching the global.
+"""
+function enclosing_local_binding_scope(scope, name::String)
+    p = parentof(scope)
+    while p isa Scope && !is_toplevel_scope(p)
+        scopehasbinding(p, name) && return p
+        p = parentof(p)
+    end
+    return nothing
 end
 
 name_is_getfield(x) = parentof(x) isa EXPR && parentof(parentof(x)) isa EXPR && CSTParser.is_getfield_w_quotenode(parentof(parentof(x)))
@@ -388,14 +427,25 @@ eventually_overloads(b, ss, state) = false
 isglobal(name, scope) = false
 isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
 
+function global_decl_name(arg::EXPR)
+    isidentifier(arg) && return valofid(arg)
+    if isassignment(arg) || CSTParser.isdeclaration(arg)
+        return global_decl_name(arg.args[1])
+    end
+    nm = CSTParser.get_name(arg)
+    nm isa EXPR && isidentifier(nm) && return valofid(nm)
+    return nothing
+end
+
 function mark_globals(x::EXPR, state)
     if headof(x) === :global
         if !scopehasbinding(state.scope, "#globals")
             state.scope.names["#globals"] = Binding(EXPR(:IDENTIFIER, EXPR[], nothing, 0, 0, "#globals", nothing, nothing), nothing, nothing, [])
         end
-        for i = 2:length(x.args)
-            if isidentifier(x.args[i]) && !scopehasbinding(state.scope, valofid(x.args[i]))
-                push!(state.scope.names["#globals"].refs, valofid(x.args[i]))
+        for i = 1:length(x.args)
+            name = global_decl_name(x.args[i])
+            if name !== nothing && !scopehasbinding(state.scope, name)
+                push!(state.scope.names["#globals"].refs, name)
             end
         end
     end

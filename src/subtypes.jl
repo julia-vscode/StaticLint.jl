@@ -22,10 +22,37 @@ _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeName) = a.n
 _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnion) = _type_compare(a, b.a) || _type_compare(a, b.b)
 
 _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeTypeVar) = _type_compare(a, b.ub)
-_type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnionAll) = _type_compare(a, b.body)
-_type_compare(a::SymbolServer.FakeUnionAll, b::SymbolServer.DataTypeStore) = _type_compare(a.body, b)
-_type_compare(a::SymbolServer.FakeTypeName, b::SymbolServer.FakeUnionAll) = _type_compare(a, b.body)
-_type_compare(a::SymbolServer.FakeUnionAll, b::SymbolServer.FakeTypeName) = _type_compare(a.body, b)
+
+# When matching against a `FakeUnionAll`, the type's parameters get
+# hoisted into UnionAll vars and the inner `FakeTypeName` ends up with
+# empty `.parameters`. Compare base name VarRefs only so e.g.
+# `Array{T,N}` still intersects with `AbstractArray where N where T`.
+_unionall_basename(x::SymbolServer.FakeUnionAll) =
+    x.body isa SymbolServer.FakeUnionAll ? _unionall_basename(x.body) : x.body
+_basename(x::SymbolServer.FakeTypeName) = x.name
+_basename(x::SymbolServer.DataTypeStore) = x.name.name
+_basename(_) = nothing
+
+function _type_compare(a::SymbolServer.DataTypeStore, b::SymbolServer.FakeUnionAll)
+    inner = _unionall_basename(b)
+    bn = _basename(inner)
+    bn === nothing ? _type_compare(a, inner) : a.name.name == bn
+end
+function _type_compare(a::SymbolServer.FakeUnionAll, b::SymbolServer.DataTypeStore)
+    inner = _unionall_basename(a)
+    bn = _basename(inner)
+    bn === nothing ? _type_compare(inner, b) : bn == b.name.name
+end
+function _type_compare(a::SymbolServer.FakeTypeName, b::SymbolServer.FakeUnionAll)
+    inner = _unionall_basename(b)
+    bn = _basename(inner)
+    bn === nothing ? _type_compare(a, inner) : a.name == bn
+end
+function _type_compare(a::SymbolServer.FakeUnionAll, b::SymbolServer.FakeTypeName)
+    inner = _unionall_basename(a)
+    bn = _basename(inner)
+    bn === nothing ? _type_compare(inner, b) : bn == b.name
+end
 
 _type_compare(a, b) = a == b
 

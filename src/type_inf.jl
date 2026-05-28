@@ -41,9 +41,10 @@ function infer_type(binding::Binding, scope, state)
 end
 
 function infer_type_assignment_rhs(binding, state, scope)
-    is_destructuring = false
     lhs = binding.val.args[1]
     rhs = binding.val.args[2]
+
+    is_destructuring = CSTParser.istuple(lhs) && !isempty(lhs.args) && CSTParser.isparameters(lhs.args[1])
     if is_loop_iter_assignment(binding.val)
         settype!(binding, infer_eltype(rhs, state))
     elseif headof(rhs) === :ref && length(rhs.args) > 1
@@ -53,12 +54,8 @@ function infer_type_assignment_rhs(binding, state, scope)
         end
     else
         if CSTParser.is_func_call(rhs)
-            if CSTParser.istuple(lhs)
-                if CSTParser.isparameters(lhs.args[1])
-                    is_destructuring = true
-                else
-                    return
-                end
+            if CSTParser.istuple(lhs) && !is_destructuring
+                return
             end
             callname = CSTParser.get_name(rhs)
             if isidentifier(callname)
@@ -70,6 +67,24 @@ function infer_type_assignment_rhs(binding, state, scope)
                             infer_destructuring_type(binding, rb)
                         else
                             settype!(binding, rb)
+                        end
+                    end
+                end
+            end
+        elseif CSTParser.iscurly(rhs) || CSTParser.iswhere(rhs)
+            # `const Alias = SomeType{...}` aliases a parameterized type, possibly
+            # behind `where` clauses (e.g. `const Alias = SomeType{T} where T`).
+            # The alias is itself a type, so adding methods to it is valid. Peel
+            # any `where`/declaration wrappers to get at the underlying `curly`.
+            unwrapped = CSTParser.rem_wheres_decls(rhs)
+            if CSTParser.iscurly(unwrapped)
+                callname = CSTParser.get_name(unwrapped)
+                if isidentifier(callname)
+                    resolve_ref(callname, scope, state)
+                    if hasref(callname)
+                        rb = get_root_method(refof(callname), state.server)
+                        if (rb isa Binding && (CoreTypes.isdatatype(rb.type) || rb.val isa SymbolServer.DataTypeStore)) || rb isa SymbolServer.DataTypeStore
+                            settype!(binding, CoreTypes.DataType)
                         end
                     end
                 end
@@ -94,7 +109,13 @@ function infer_type_assignment_rhs(binding, state, scope)
             settype!(binding, CoreTypes.Bool)
         elseif isidentifier(rhs) || is_getfield_w_quotenode(rhs)
             refof_rhs = isidentifier(rhs) ? refof(rhs) : refof_maybe_getfield(rhs)
-            if refof_rhs isa Binding
+            if is_destructuring
+                if refof_rhs isa Binding
+                    infer_destructuring_type(binding, refof_rhs.type)
+                else
+                    infer_destructuring_type(binding, refof_rhs)
+                end
+            elseif refof_rhs isa Binding
                 if refof_rhs.val isa SymbolServer.GenericStore && refof_rhs.val.typ isa SymbolServer.FakeTypeName
                     settype!(binding, maybe_lookup(refof_rhs.val.typ.name, state))
                 elseif refof_rhs.val isa SymbolServer.FunctionStore
@@ -115,7 +136,8 @@ function infer_type_assignment_rhs(binding, state, scope)
     end
 end
 
-function infer_destructuring_type(binding, rb::SymbolServer.DataTypeStore)
+const MAX_DESTRUCTURE_INFER_DEPTH = 20
+function infer_destructuring_type(binding, rb::SymbolServer.DataTypeStore, depth=0)
     assigned_name = CSTParser.get_name(binding.val)
     for (fieldname, fieldtype) in zip(rb.fieldnames, rb.types)
         if fieldname == assigned_name
@@ -124,16 +146,28 @@ function infer_destructuring_type(binding, rb::SymbolServer.DataTypeStore)
         end
     end
 end
-function infer_destructuring_type(binding::Binding, rb::EXPR)
-    assigned_name = string(to_codeobject(binding.name))
+function infer_destructuring_type(binding::Binding, rb::EXPR, depth=0)
     scope = scopeof(rb)
+    if scope === nothing
+        if depth < MAX_DESTRUCTURE_INFER_DEPTH && isassignment(rb) && !CSTParser.defines_datatype(rb)
+            infer_destructuring_type(binding, refof_maybe_getfield(rb.args[2]), depth + 1)
+        end
+        return
+    end
+    assigned_name = string(to_codeobject(binding.name))
     names = scope.names
     if haskey(names, assigned_name)
         b = names[assigned_name]
         settype!(binding, b.type)
     end
 end
-infer_destructuring_type(binding, rb::Binding) = infer_destructuring_type(binding, rb.val)
+function infer_destructuring_type(binding, rb::Binding, depth=0)
+    depth >= MAX_DESTRUCTURE_INFER_DEPTH && return
+    return infer_destructuring_type(binding, rb.val, depth + 1)
+end
+# An alias may resolve to something carrying no field information (or `nothing`);
+# those cannot contribute a destructured type, so ignore them.
+infer_destructuring_type(binding, rb, depth=0) = nothing
 
 function infer_type_decl(binding, state, scope)
     t = binding.val.args[2]

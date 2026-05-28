@@ -145,7 +145,7 @@ function _typeof(x, state)
 end
 
 # Call
-function struct_nargs(x::EXPR)
+function struct_nargs(x::EXPR, env::ExternalEnv)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
     parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x)) && return 0, typemax(Int), Symbol[], true
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
@@ -153,14 +153,34 @@ function struct_nargs(x::EXPR)
     length(args.args) == 0 && return 0, typemax(Int), kws, kwsplat
     inner_constructor = findfirst(a -> CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
-        return func_nargs(args.args[inner_constructor])
+        return func_nargs(args.args[inner_constructor], env)
     else
         minargs = maxargs = length(args.args)
     end
     return minargs, maxargs, kws, kwsplat
 end
 
-function func_nargs(x::EXPR)
+
+const SIGNATURE_PRESERVING_MACROS = Symbol[
+    Symbol("@inline"),
+    Symbol("@noinline"),
+    Symbol("@propagate_inbounds"),
+    Symbol("@generated"),
+    Symbol("@assume_effects"),
+    Symbol("@constprop"),
+    Symbol("@pure"),
+    Symbol("@nospecializeinfer"),
+]
+
+function func_nargs(x::EXPR, env::ExternalEnv)
+    # early return for macro-wrapped functions, unless we know that the macro
+    # does not modify the signature
+    if parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x))
+        macroname = parentof(x).args[1]
+        any(n -> _points_to_Base_macro(macroname, n, env), SIGNATURE_PRESERVING_MACROS) ||
+            return 0, typemax(Int), Symbol[], true
+    end
+
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
 
@@ -356,16 +376,19 @@ end
 
 function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     if CSTParser.defines_function(func) || CSTParser.defines_struct(func)
-        # `@kwdef`-style macro-wrapped struct defs synthesise extra
-        # constructors at expansion time; we can't see them statically.
-        # `struct_nargs` already returns a permissive `(0, typemax, …)`
-        # for that case — defer to arity-only here.
-        if CSTParser.defines_struct(func) && parentof(func) isa EXPR && CSTParser.ismacrocall(parentof(func))
-            return compare_f_call(struct_nargs(func), call_counts)
+        # Macro-wrapped definitions can rewrite arity/constructors at
+        # expansion time (`@kwdef` structs, `@kernel` functions, …). For
+        # unknown macros we can't see that statically — fall back to
+        # arity-only matching, which `func_nargs`/`struct_nargs` already
+        # render permissive (`(0, typemax, …)`) for non-signature-preserving
+        # macros.
+        if parentof(func) isa EXPR && CSTParser.ismacrocall(parentof(func))
+            m_counts = CSTParser.defines_struct(func) ? struct_nargs(func, env) : func_nargs(func, env)
+            return compare_f_call(m_counts, call_counts)
         end
         # Splat in the call → unknown actual arity, fall back to arity-only.
         if call_has_splat(x)
-            m_counts = CSTParser.defines_struct(func) ? struct_nargs(func) : func_nargs(func)
+            m_counts = CSTParser.defines_struct(func) ? struct_nargs(func, env) : func_nargs(func, env)
             compare_f_call(m_counts, call_counts) && return true
         else
             args, kws = call_arg_types(x, false)
@@ -374,7 +397,7 @@ function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
         # Preserve the existing sig-self check: if the call expression
         # being analysed *is* the method's own signature, don't flag it
         # (e.g. when checking inside a method definition).
-        x1 = CSTParser.rem_where_decl(CSTParser.get_sig(func))
+        x1 = CSTParser.rem_wheres_decls(CSTParser.get_sig(func))
         if (x1.head == :call && x1 == x) || (!(x1.args isa Nothing) && x1.args[1].head == :call && x1.args[1] == x)
             return true
         end
@@ -604,10 +627,10 @@ function check_farg_unused(x::EXPR)
                 arg = sig.args[i]
                 if arg.head === :parameters
                     for arg2 in arg.args
-                        !check_farg_unused_(arg2, arg_names) && return
+                        !check_farg_unused_(arg2, arg_names) && continue
                     end
                 else
-                    !check_farg_unused_(arg, arg_names) && return
+                    !check_farg_unused_(arg, arg_names) && continue
                 end
             end
         end
@@ -652,6 +675,7 @@ end
 
 function unwrap_nospecialize(x)
     is_nospecialize_call(x) || return x
+    length(x.args) >= 3 || return x
     x.args[3]
 end
 
@@ -802,7 +826,7 @@ end
 
 function check_for_pirates(x::EXPR)
     if CSTParser.defines_function(x)
-        sig = CSTParser.rem_where_decl(CSTParser.get_sig(x))
+        sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
         fname = CSTParser.get_name(sig)
         if fname_is_noteq(fname)
             seterror!(x, NotEqDef)
@@ -862,6 +886,10 @@ end
 # Should return true/false indicating whether the binding should actually be added?
 function check_const_decl(name::String, b::Binding, scope)
     # assumes `scopehasbinding(scope, name)`
+
+    # imported/using-ed bindings are never const decls
+    is_in_fexpr(b.name, x -> headof(x) === :import || headof(x) === :using) && return
+
     b.val isa Binding && return check_const_decl(name, b.val, scope)
     if b.val isa EXPR && (CSTParser.defines_datatype(b.val) || is_const(bind))
         seterror!(b.val, CannotDeclareConst)
