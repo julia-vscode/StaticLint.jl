@@ -723,6 +723,19 @@ end
         @test errorof(cst[3]) === StaticLint.NotEqDef
         @test errorof(cst[4]) === StaticLint.NotEqDef
     end
+
+    let cst = parse_and_pass(
+            """
+            import Base:sin
+            sin(x::Array{Number}) where {S} = 1
+            sin(x::Array{Number}) where {S} where {R} = 1
+            sin(x::Array{Number}) where {S} where {R} where {Q} = 1
+            """
+        )
+        @test errorof(cst[2]) === StaticLint.TypePiracy
+        @test errorof(cst[3]) === StaticLint.TypePiracy
+        @test errorof(cst[4]) === StaticLint.TypePiracy
+    end
 end
 
 @testitem "check_call" setup = [SLSetup] begin
@@ -894,6 +907,24 @@ end
         )
         # ensure we strip all type decl code from around signature
         @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+    # #335: a default positional argument makes the definition's signature read
+    # like a call with a keyword arg, so the self-signature match falls back to
+    # comparing against the stripped signature. This must strip *all* `where`
+    # clauses, regardless of nesting depth.
+    let cst = parse_and_pass(
+            """
+            f1(c::TT=[1,1]) where {TT<:AbstractVector{T}} where {T} = (c,TT,T)
+            f2(c::TT=[1,1]) where {TT<:AbstractVector} = (c,TT)
+            f3(c::TT) where {TT<:AbstractVector{T}} where {T} = (c,TT,T)
+            f4(c::TT=[1,1]) where {TT<:AbstractArray{T,N}} where {T} where {N} = (c,TT,T,N)
+            """
+        )
+        has_callargs_err(x) = StaticLint.errorof(x) === StaticLint.IncorrectCallArgs
+        @test find_first(cst[1], has_callargs_err) === nothing
+        @test find_first(cst[2], has_callargs_err) === nothing
+        @test find_first(cst[3], has_callargs_err) === nothing
+        @test find_first(cst[4], has_callargs_err) === nothing
     end
 end
 
