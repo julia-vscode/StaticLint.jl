@@ -3099,3 +3099,22 @@ end
         @test !has_error(cst, StaticLint.CannotDefineFuncAlreadyHasValue)
     end
 end
+
+@testitem "using Base in baremodule (#368)" setup = [SLSetup] begin
+    missing_refs(cst) = [x for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)) if !StaticLint.haserror(x)]
+
+    # Top-level baremodule (no enclosing module to supply Base).
+    let cst = parse_and_pass(
+            """
+            baremodule Flags
+            using Base: @enum
+            @enum Flag flag
+            end
+            """
+        )
+        baseid = find_first(cst, x -> StaticLint.headof(x) === :IDENTIFIER && CSTParser.valof(x) == "Base")
+        @test baseid !== nothing
+        @test StaticLint.hasref(baseid)
+        @test isempty(missing_refs(cst))
+    end
+end
