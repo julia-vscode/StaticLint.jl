@@ -145,7 +145,7 @@ function _typeof(x, state)
 end
 
 # Call
-function struct_nargs(x::EXPR)
+function struct_nargs(x::EXPR, env::ExternalEnv)
     # struct defs wrapped in macros are likely to have some arbirtary additional constructors, so lets allow anything
     parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x)) && return 0, typemax(Int), Symbol[], true
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
@@ -153,14 +153,34 @@ function struct_nargs(x::EXPR)
     length(args.args) == 0 && return 0, typemax(Int), kws, kwsplat
     inner_constructor = findfirst(a -> CSTParser.defines_function(a), args.args)
     if inner_constructor !== nothing
-        return func_nargs(args.args[inner_constructor])
+        return func_nargs(args.args[inner_constructor], env)
     else
         minargs = maxargs = length(args.args)
     end
     return minargs, maxargs, kws, kwsplat
 end
 
-function func_nargs(x::EXPR)
+
+const SIGNATURE_PRESERVING_MACROS = Symbol[
+    Symbol("@inline"),
+    Symbol("@noinline"),
+    Symbol("@propagate_inbounds"),
+    Symbol("@generated"),
+    Symbol("@assume_effects"),
+    Symbol("@constprop"),
+    Symbol("@pure"),
+    Symbol("@nospecializeinfer"),
+]
+
+function func_nargs(x::EXPR, env::ExternalEnv)
+    # early return for macro-wrapped functions, unless we know that the macro
+    # does not modify the signature
+    if parentof(x) isa EXPR && CSTParser.ismacrocall(parentof(x))
+        macroname = parentof(x).args[1]
+        any(n -> _points_to_Base_macro(macroname, n, env), SIGNATURE_PRESERVING_MACROS) ||
+            return 0, typemax(Int), Symbol[], true
+    end
+
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
     sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(x))
 
@@ -328,9 +348,9 @@ end
 
 function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
     if CSTParser.defines_function(func)
-        m_counts = func_nargs(func)
+        m_counts = func_nargs(func, env)
     elseif CSTParser.defines_struct(func)
-        m_counts = struct_nargs(func)
+        m_counts = struct_nargs(func, env)
     else
         return true # We shouldn't get here
     end

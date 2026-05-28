@@ -782,7 +782,7 @@ end
             end
             """
         )
-        m_counts = StaticLint.func_nargs(cst.args[1])
+        m_counts = StaticLint.func_nargs(cst.args[1], server.external_env)
         call_counts = StaticLint.call_nargs(cst.args[1].args[2].args[1])
         @test StaticLint.errorof(cst.args[1].args[2].args[1]) === nothing
     end
@@ -792,7 +792,7 @@ end
             func(1, 2)
             """
         )
-        @test StaticLint.func_nargs(cst.args[1]) == (0, typemax(Int), String[], false)
+        @test StaticLint.func_nargs(cst.args[1], server.external_env) == (0, typemax(Int), String[], false)
         @test StaticLint.errorof(cst.args[2]) === nothing
     end
     let cst = parse_and_pass(
@@ -801,7 +801,7 @@ end
             tail(x::Tuple) = argtail(x...)
             """
         )
-        @test StaticLint.func_nargs(cst[1]) == (1, typemax(Int), String[], false)
+        @test StaticLint.func_nargs(cst[1], server.external_env) == (1, typemax(Int), String[], false)
         @test StaticLint.errorof(cst[2]) === nothing
     end
     let cst = parse_and_pass(
@@ -811,7 +811,7 @@ end
             """
         )
 
-        @test StaticLint.func_nargs(cst[1]) == (0, typemax(Int), String[], false)
+        @test StaticLint.func_nargs(cst[1], server.external_env) == (0, typemax(Int), String[], false)
         @test StaticLint.errorof(cst[2]) === nothing
     end
     let cst = parse_and_pass(
@@ -1882,9 +1882,9 @@ end
 end
 
 @testitem "issue #390 (nospecialize without argument)" setup = [SLSetup] begin
-    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize) end")) == (1, 1, Symbol[], false)
-    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize()) end")) == (1, 1, Symbol[], false)
-    @test StaticLint.func_nargs(CSTParser.parse("f(@nospecialize) = 1")) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize) end"), server.external_env) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("function f(@nospecialize()) end"), server.external_env) == (1, 1, Symbol[], false)
+    @test StaticLint.func_nargs(CSTParser.parse("f(@nospecialize) = 1"), server.external_env) == (1, 1, Symbol[], false)
     # Full pipeline: defining and calling such a function must not crash.
     @test parse_and_pass("""
         function f(@nospecialize(x))
@@ -1893,6 +1893,51 @@ end
         end
         f(1)
         """) isa CSTParser.EXPR
+end
+
+@testitem "issue #389 (macro-rewritten call signature)" setup = [SLSetup] begin
+    # An unknown macro wrapping a function definition can rewrite its call
+    # signature (e.g. KernelAbstractions' `@kernel`), so calls with a differing
+    # number of arguments must not be flagged as `IncorrectCallArgs`.
+    let cst = parse_and_pass(
+            """
+            @kernel function mul2_kernel(A)
+                A[I] = 2 * A[I]
+            end
+            mul2_kernel(dev, 64)
+            """
+        )
+        @test errorof(cst.args[2]) === nothing
+        @test StaticLint.func_nargs(cst.args[1].args[end], server.external_env) ==
+            (0, typemax(Int), Symbol[], true)
+    end
+
+    # Signature-preserving Base macros (`@inline`, `Base.@propagate_inbounds`, ...)
+    # resolve to known Base macros, so argument counts are still checked.
+    let cst = parse_and_pass(
+            """
+            @inline function g(x)
+                x
+            end
+            g(1, 2)
+            """
+        )
+        @test errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
+        @test StaticLint.func_nargs(cst.args[1].args[end], server.external_env) ==
+            (1, 1, Symbol[], false)
+    end
+
+    # The module-qualified form (`Base.@propagate_inbounds`) resolves too.
+    let cst = parse_and_pass(
+            """
+            Base.@propagate_inbounds function h(a, b)
+                a + b
+            end
+            h(1)
+            """
+        )
+        @test errorof(cst.args[2]) === StaticLint.IncorrectCallArgs
+    end
 end
 
 @testitem "issue #226" setup = [SLSetup] begin
