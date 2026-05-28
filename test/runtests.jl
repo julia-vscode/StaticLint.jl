@@ -3304,6 +3304,43 @@ end
     end
 end
 
+@testitem "@enum with explicit values (#275)" setup = [SLSetup] begin
+    missing_refs(cst) = [x for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)) if !StaticLint.haserror(x)]
+
+    # Members given explicit values must still be bound and exportable.
+    let cst = parse_and_pass("@enum Foo x=1; export x")
+        @test isempty(missing_refs(cst))
+    end
+
+    let cst = parse_and_pass("@enum Foo x=1 y=2")
+        @test isempty(missing_refs(cst))
+    end
+
+    # Block form with explicit values.
+    let cst = parse_and_pass(
+            """
+            @enum Foo begin
+                x = 1
+                y = 2
+            end
+            export x, y
+            """
+        )
+        @test isempty(missing_refs(cst))
+    end
+
+    # Mixed bare and explicit-value members.
+    @test check_resolved(
+        """
+        @enum E a b=2 c
+        E
+        a
+        b
+        c
+        """
+    ) == [true, true, true, true, true, true, true, true, true]
+end
+
 @testitem "using Base in baremodule (#368)" setup = [SLSetup] begin
     missing_refs(cst) = [x for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)) if !StaticLint.haserror(x)]
 
