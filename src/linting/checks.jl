@@ -208,7 +208,13 @@ function func_nargs(x::EXPR, env::ExternalEnv)
                 (isdeclaration(arg) &&
                 ((isidentifier(arg.args[2]) && valofid(arg.args[2]) == "Vararg") ||
                 (iscurly(arg.args[2]) && isidentifier(arg.args[2].args[1]) && valofid(arg.args[2].args[1]) == "Vararg")))
-                maxargs = typemax(Int)
+                bn = bounded_vararg_N(arg)
+                if bn !== nothing
+                    minargs += bn
+                    maxargs !== typemax(Int) && (maxargs += bn)
+                else
+                    maxargs = typemax(Int)
+                end
             else
                 minargs += 1
                 maxargs !== typemax(Int) && (maxargs += 1)
@@ -223,8 +229,17 @@ function func_nargs(m::SymbolServer.MethodStore)
     minargs, maxargs, kws, kwsplat = 0, 0, Symbol[], false
 
     for arg in m.sig
-        if CoreTypes.isva(last(arg))
-            maxargs = typemax(Int)
+        t = last(arg)
+        if CoreTypes.isva(t)
+            va = unwrap_fakeunionall(t)
+            # Bounded `Vararg{T,N}` contributes exactly N args. Unbounded
+            # forms (`Vararg{T}` or `Vararg{T,N} where N`) allow any count.
+            if va isa SymbolServer.FakeTypeofVararg && isdefined(va, :N) && va.N isa Integer
+                minargs += va.N
+                maxargs !== typemax(Int) && (maxargs += va.N)
+            else
+                maxargs = typemax(Int)
+            end
         else
             minargs += 1
             maxargs !== typemax(Int) && (maxargs += 1)
@@ -325,7 +340,20 @@ function check_call(x, env::ExternalEnv)
 end
 
 function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls::Scope, env::ExternalEnv)
-    iterate_over_ss_methods(func_ref, tls, env, m -> compare_f_call(func_nargs(m), call_counts))
+    # we can't statically determine how many arguments a splat will take up
+    if call_has_splat(x)
+        return iterate_over_ss_methods(func_ref, tls, env, m -> compare_f_call(func_nargs(m), call_counts))
+    end
+    args, kws = call_arg_types(x, false)
+    iterate_over_ss_methods(func_ref, tls, env, m -> match_method(args, kws, m, getsymbols(env)))
+end
+
+function call_has_splat(x::EXPR)
+    x.args === nothing && return false
+    for a in x.args
+        CSTParser.issplat(a) && return true
+    end
+    return false
 end
 
 function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::ExternalEnv)
@@ -347,22 +375,35 @@ function sig_match_any(func_ref::Binding, x, call_counts, tls::Scope, env::Exter
 end
 
 function sig_match_any(func::EXPR, x, call_counts, tls::Scope, env::ExternalEnv)
-    if CSTParser.defines_function(func)
-        m_counts = func_nargs(func, env)
-    elseif CSTParser.defines_struct(func)
-        m_counts = struct_nargs(func, env)
-    else
-        return true # We shouldn't get here
-    end
-    if compare_f_call(m_counts, call_counts)
-        return true
-    else
+    if CSTParser.defines_function(func) || CSTParser.defines_struct(func)
+        # Macro-wrapped definitions can rewrite arity/constructors at
+        # expansion time (`@kwdef` structs, `@kernel` functions, …). For
+        # unknown macros we can't see that statically — fall back to
+        # arity-only matching, which `func_nargs`/`struct_nargs` already
+        # render permissive (`(0, typemax, …)`) for non-signature-preserving
+        # macros.
+        if parentof(func) isa EXPR && CSTParser.ismacrocall(parentof(func))
+            m_counts = CSTParser.defines_struct(func) ? struct_nargs(func, env) : func_nargs(func, env)
+            return compare_f_call(m_counts, call_counts)
+        end
+        # Splat in the call → unknown actual arity, fall back to arity-only.
+        if call_has_splat(x)
+            m_counts = CSTParser.defines_struct(func) ? struct_nargs(func, env) : func_nargs(func, env)
+            compare_f_call(m_counts, call_counts) && return true
+        else
+            args, kws = call_arg_types(x, false)
+            match_method(args, kws, func, getsymbols(env)) && return true
+        end
+        # Preserve the existing sig-self check: if the call expression
+        # being analysed *is* the method's own signature, don't flag it
+        # (e.g. when checking inside a method definition).
         x1 = CSTParser.rem_wheres_decls(CSTParser.get_sig(func))
-        if x1.head == :call && x1 == x
+        if (x1.head == :call && x1 == x) || (!(x1.args isa Nothing) && x1.args[1].head == :call && x1.args[1] == x)
             return true
         end
+        return false
     end
-    return false
+    return true # We shouldn't get here
 end
 
 function get_method(name::EXPR)

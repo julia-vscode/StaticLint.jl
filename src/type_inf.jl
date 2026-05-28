@@ -30,6 +30,9 @@ function infer_type(binding::Binding, scope, state)
                 end
             elseif binding.val.head isa EXPR && valof(binding.val.head) == "::"
                 infer_type_decl(binding, state, scope)
+            elseif CSTParser.issplat(binding.val) && length(binding.val.args) >= 1 &&
+                   binding.val.args[1].head isa EXPR && valof(binding.val.args[1].head) == "::"
+                infer_type_decl(binding, binding.val.args[1].args[2], state, scope)
             elseif iswhere(parentof(binding.val))
                 settype!(binding, CoreTypes.DataType)
             end
