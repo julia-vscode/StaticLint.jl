@@ -645,6 +645,34 @@ function is_nospecialize_call(x)
 end
 
 """
+    in_macrocall_arg(x::EXPR)
+
+True if walking up from `x` we reach a macrocall (with `x` in its argument list,
+not the macroname) without first crossing a scope-introducing expression
+(function/let/struct/...).
+
+If a user-written scope sits between the identifier and the macrocall, we assume
+the macro respects normal Julia scoping.
+"""
+function in_macrocall_arg(x::EXPR)
+    cur = x
+    while parentof(cur) isa EXPR
+        p = parentof(cur)
+        if CSTParser.ismacrocall(p)
+            return !(length(p.args) > 0 && p.args[1] === cur)
+        end
+        h = headof(p)
+        if h === :function || h === :macro || h === :for || h === :while ||
+           h === :let || h === :generator || h === :try || h === :do ||
+           h === :module || h === :abstract || h === :primitive || h === :struct
+            return false
+        end
+        cur = p
+    end
+    return false
+end
+
+"""
 collect_hints(x::EXPR, env, missingrefs = :all, isquoted = false, errs = Tuple{Int,EXPR}[], pos = 0)
 
 Collect hints and errors from an expression. `missingrefs` = (:none, :id, :all) determines whether unresolved
@@ -662,7 +690,8 @@ function collect_hints(x::EXPR, env, missingrefs=:all, isquoted=false, errs=Tupl
     elseif !isquoted
         if missingrefs != :none && isidentifier(x) && !hasref(x) &&
             !(valof(x) == "var" && parentof(x) isa EXPR && isnonstdid(parentof(x))) &&
-            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall"))
+            !((valof(x) == "stdcall" || valof(x) == "cdecl" || valof(x) == "fastcall" || valof(x) == "thiscall" || valof(x) == "llvmcall") && is_in_fexpr(x, x -> iscall(x) && isidentifier(x.args[1]) && valof(x.args[1]) == "ccall")) &&
+            !in_macrocall_arg(x)
 
             push!(errs, (pos, x))
         elseif haserror(x) && errorof(x) isa StaticLint.LintCodes
