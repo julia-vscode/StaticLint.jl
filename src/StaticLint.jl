@@ -106,9 +106,10 @@ mutable struct Delayed <: State
     env::ExternalEnv
     server
     flags::Int
+    urefs::Vector{EXPR} # refs that failed to resolve
 end
 
-Delayed(scope, env, server) = Delayed(scope, env, server, 0)
+Delayed(scope, env, server, flags=0) = Delayed(scope, env, server, flags, EXPR[])
 
 function (state::Delayed)(x::EXPR)
     mark_bindings!(x, state)
@@ -123,6 +124,7 @@ function (state::Delayed)(x::EXPR)
     traverse(x, state)
     state.flags = old
     if state.scope != s0
+        retry_urefs!(state)
         for b in values(state.scope.names)
             infer_type_by_use(b, state.env)
             check_unused_binding(b, state.scope)
@@ -182,7 +184,9 @@ function semantic_pass(file, modified_expr = nothing)
     state(getcst(file))
     for x in state.delayed
         if hasscope(x)
-            traverse(x, Delayed(scopeof(x), env, server))
+            ds = Delayed(scopeof(x), env, server)
+            traverse(x, ds)
+            retry_urefs!(ds)
             for (k, b) in scopeof(x).names
                 infer_type_by_use(b, env)
                 check_unused_binding(b, scopeof(x))

@@ -24,6 +24,35 @@ function resolve_ref(x, state)
     end
 end
 
+function resolve_ref(x, state::Delayed)
+    if !(parentof(x) isa EXPR && headof(parentof(x)) === :quotenode)
+        resolve_ref(x, state.scope, state)
+        if isidentifier(x) && !hasref(x) && !hasbinding(x)
+            push!(state.urefs, x)
+        end
+    end
+end
+
+function retry_urefs!(state::Delayed)
+    isempty(state.urefs) && return
+    s0 = state.scope
+    remaining = EXPR[]
+    for x in state.urefs
+        if hasref(x)
+            continue
+        end
+        sc = retrieve_scope(x)
+        if sc isa Scope
+            state.scope = sc
+            resolve_ref(x, sc, state)
+        end
+        hasref(x) || push!(remaining, x)
+    end
+    state.scope = s0
+    state.urefs = remaining
+    return
+end
+
 
 # The first method that is tried. Searches the current scope for local bindings
 # that match `x`. Steps:

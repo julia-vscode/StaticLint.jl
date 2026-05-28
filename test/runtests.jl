@@ -2386,7 +2386,10 @@ end
         """
     )
     @test length(StaticLint.loose_refs(bindingof(cst[1][3][1][3][1][1]))) == 2
-    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 2
+    # The function-level `x` has three references: its own name, the bare `x`
+    # used before the assignment (a forward reference to the same local, see
+    # #313), and the `x` used afterwards.
+    @test length(StaticLint.loose_refs(bindingof(cst[1][3][3][1]))) == 3
 end
 
 # @testset "test workspace packages" begin
@@ -3021,6 +3024,84 @@ end
                 local x = 2
             end
         end"""))
+end
+
+@testitem "closures referencing variables defined later (#313)" setup = [SLSetup] begin
+    env = getenv(server.files[""], server)
+    has_unused(cst) = any(errorof(x) === StaticLint.UnusedBinding for (_, x) in StaticLint.collect_hints(cst, env))
+    # A missing reference is collected as an identifier hint with no associated error code.
+    has_missingref(cst) = any(errorof(x) === nothing for (_, x) in StaticLint.collect_hints(cst, env))
+
+    # The example from the issue: a closure reads `who`, which is assigned later
+    # in the enclosing function. The closure is only called after the assignment,
+    # so this is valid and should produce no warnings.
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                println("hello, \$(who)")
+            end
+            who = "world"
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    # Short-form closure variant.
+    let cst = parse_and_pass(
+        """
+        function f()
+            g() = who
+            who = 1
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    # Two levels of nesting reaching a binding defined later in the outer function.
+    let cst = parse_and_pass(
+        """
+        function f()
+            function g()
+                function h()
+                    return who
+                end
+                h()
+            end
+            who = 1
+            g()
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    # A closure capturing a local defined later inside a `let`.
+    let cst = parse_and_pass(
+        """
+        function f()
+            let
+                g() = v
+                v = 1
+                g()
+            end
+        end""")
+        @test !has_missingref(cst)
+        @test !has_unused(cst)
+    end
+
+    # A genuinely undefined reference inside a closure is still flagged, and since
+    # there is no binding it must not be reported as an unused binding.
+    let cst = parse_and_pass(
+        """
+        function f()
+            g() = undefined_var
+            g()
+        end""")
+        @test has_missingref(cst)
+        @test !has_unused(cst)
+    end
 end
 
 @testitem "constructors on parameterized type aliases (#394)" setup = [SLSetup] begin
