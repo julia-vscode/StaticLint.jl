@@ -355,6 +355,33 @@ end
             @test refof(cst.args[3].args[2].args[1].args[2].args[1]) == bindingof(cst.args[1].args[3].args[1])
         end
 
+        # property destructuring should infer the field's type, not the RHS type (#357)
+        let cst = parse_and_pass(
+                """
+                struct S
+                    a
+                end
+
+                struct T
+                    s::S
+                end
+
+                function f1(t::T)
+                    (; s) = t
+                    a = s.a
+                end
+
+                function f2(t::T)
+                    s = t.s
+                    x = s.a
+                end
+                """
+            )
+            S = cst.meta.scope.names["S"]
+            @test cst.meta.scope.names["f1"].val.meta.scope.names["s"].type == S
+            @test cst.meta.scope.names["f2"].val.meta.scope.names["s"].type == S
+        end
+
         let cst = parse_and_pass("""raw\"whatever\"""")
             @test refof(cst.args[1].args[1]) !== nothing
         end
@@ -3170,4 +3197,36 @@ end
         @test StaticLint.hasref(baseid)
         @test isempty(missing_refs(cst))
     end
+end
+
+@testitem "hint offsets with unicode (#253)" setup = [SLSetup] begin
+    # Hint offsets are byte offsets into the source. Multibyte unicode
+    # characters (e.g. `α`) preceding an error must not shift the reported
+    # offset off the start of the flagged expression.
+    src = """
+    struct Buz
+        x::Integers
+        α::Array{Float65,1}
+    end
+    """
+    cst = parse_and_pass(src)
+    cu = codeunits(src)
+    hints = StaticLint.collect_hints(cst, getenv(server.files[""], server))
+
+    # For every hint, the byte offset + span must extract the expression's own
+    # text from the source (when the expression carries a value).
+    for (offset, x) in hints
+        v = CSTParser.valof(x)
+        v isa String || continue
+        snippet = String(cu[offset+1:offset+x.span])
+        @test snippet == v
+    end
+
+    # The `Float65` typo sits after the multibyte `α`; its offset must be the
+    # byte offset (after α's 2 bytes), not the character offset.
+    float65 = find_first(cst, x -> StaticLint.headof(x) === :IDENTIFIER && CSTParser.valof(x) == "Float65")
+    @test float65 !== nothing
+    off = first(o for (o, x) in hints if x === float65)
+    @test String(cu[off+1:off+float65.span]) == "Float65"
+    @test off == first(findfirst("Float65", src)) - 1  # 0-based byte offset
 end
