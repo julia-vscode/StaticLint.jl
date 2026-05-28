@@ -1160,6 +1160,59 @@ end
     end
 end
 
+@testitem "importing a type is not a const redefinition (#352)" setup = [SLSetup] begin
+    has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+
+    let cst = parse_and_pass("import Base: AbstractDict")
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            import Base: AbstractDict
+            import Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            using Base
+            using Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            import Base
+            import Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            using Base
+            import Base: AbstractDict
+            """
+        )
+        @test !has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+
+    let cst = parse_and_pass(
+            """
+            import Base: AbstractDict
+            const AbstractDict = 1
+            """
+        )
+        @test has_error(cst, StaticLint.InvalidRedefofConst)
+    end
+end
+
 @testitem "@testitem/@testset blocks have isolated scopes (#405)" setup = [SLSetup] begin
     has_error(cst, err) = any(errorof(x) === err for (_, x) in StaticLint.collect_hints(cst, getenv(server.files[""], server)))
 
