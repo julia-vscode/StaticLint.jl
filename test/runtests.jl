@@ -3017,6 +3017,46 @@ end
     end
 end
 
+@testitem "include(joinpath(...)) with explicit strings (#311)" setup = [SLSetup] begin
+    # `include(joinpath("subdir", "myfile.jl"))` should be resolved the same way
+    # as `include("subdir/myfile.jl")`: the file is loaded and its bindings are
+    # visible, rather than being silently ignored.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "subdir"))
+        write(joinpath(dir, "subdir", "myfile.jl"), "foo() = 1\n")
+        write(
+            joinpath(dir, "main.jl"), """
+            include(joinpath("subdir", "myfile.jl"))
+            foo()
+            """
+        )
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints = true)
+        # the included file must actually be loaded
+        @test StaticLint.hasfile(s, joinpath(dir, "subdir", "myfile.jl"))
+        # no spurious MissingFile error
+        @test !any(h -> errorof(h[1]) === StaticLint.MissingFile, hints)
+        # the reference to `foo` (defined in the included file) resolves
+        @test !any(h -> startswith(last(h), "Missing reference"), hints)
+    end
+
+    # Including the same file via joinpath and via a plain string must resolve to
+    # the same path, which is detected as a DuplicateInclude.
+    mktempdir() do dir
+        mkpath(joinpath(dir, "subdir"))
+        write(joinpath(dir, "subdir", "myfile.jl"), "x = 1\n")
+        write(
+            joinpath(dir, "main.jl"), """
+            include("subdir/myfile.jl")
+            include(joinpath("subdir", "myfile.jl"))
+            """
+        )
+        s = StaticLint.FileServer()
+        _, hints = StaticLint.lint_file(joinpath(dir, "main.jl"), s; gethints = true)
+        @test any(h -> errorof(h[1]) === StaticLint.DuplicateInclude, hints)
+    end
+end
+
 @testitem "Circular binding resolution (#404)" setup = [SLSetup] begin
     mktempdir() do dir
         write(joinpath(dir, "test2.jl"), """

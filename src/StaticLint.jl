@@ -384,7 +384,7 @@ function get_path(x::EXPR, state)
             path_elements = String[]
 
             for i = 2:length(parg.args)
-                arg = parg[i]
+                arg = parg.args[i]
                 if _is_macrocall_to_BaseDIR(arg) # Assumes @__DIR__ points to Base macro.
                     push!(path_elements, dirname(getpath(state.file)))
                 elseif CSTParser.isstringliteral(arg)
