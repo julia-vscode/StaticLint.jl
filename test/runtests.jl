@@ -3659,3 +3659,43 @@ end
         @test all(id -> refof(id) !== nothing, uses)
     end
 end
+
+@testitem "issue #282 (missing reference in macrocall args)" setup = [SLSetup] begin
+    let cst = parse_and_pass(
+            """
+            macro Jacobian(u, v, w)
+                :( (u, v) -> \$w )
+            end
+            f = @Jacobian(u, v, u+v^2)
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    let cst = parse_and_pass(
+            """
+            macro m(x)
+                :(\$x)
+            end
+            @m(undefined_var)
+            """
+        )
+        @test isempty(StaticLint.collect_hints(cst, getenv(server.files[""], server)))
+    end
+
+    # still check identifiers in user specified local scopes in macro calls
+    let cst = parse_and_pass(
+            """
+            \"\"\"
+            docstring
+            \"\"\"
+            function foo()
+                undefined_in_body
+            end
+            """
+        )
+        hints = StaticLint.collect_hints(cst, getenv(server.files[""], server))
+        @test length(hints) == 1
+        @test CSTParser.valof(hints[1][2]) == "undefined_in_body"
+    end
+end
