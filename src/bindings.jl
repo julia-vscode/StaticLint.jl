@@ -427,14 +427,25 @@ eventually_overloads(b, ss, state) = false
 isglobal(name, scope) = false
 isglobal(name::String, scope) = scope !== nothing && scopehasbinding(scope, "#globals") && name in scope.names["#globals"].refs
 
+function global_decl_name(arg::EXPR)
+    isidentifier(arg) && return valofid(arg)
+    if isassignment(arg) || CSTParser.isdeclaration(arg)
+        return global_decl_name(arg.args[1])
+    end
+    nm = CSTParser.get_name(arg)
+    nm isa EXPR && isidentifier(nm) && return valofid(nm)
+    return nothing
+end
+
 function mark_globals(x::EXPR, state)
     if headof(x) === :global
         if !scopehasbinding(state.scope, "#globals")
             state.scope.names["#globals"] = Binding(EXPR(:IDENTIFIER, EXPR[], nothing, 0, 0, "#globals", nothing, nothing), nothing, nothing, [])
         end
-        for i = 2:length(x.args)
-            if isidentifier(x.args[i]) && !scopehasbinding(state.scope, valofid(x.args[i]))
-                push!(state.scope.names["#globals"].refs, valofid(x.args[i]))
+        for i = 1:length(x.args)
+            name = global_decl_name(x.args[i])
+            if name !== nothing && !scopehasbinding(state.scope, name)
+                push!(state.scope.names["#globals"].refs, name)
             end
         end
     end
