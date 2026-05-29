@@ -911,6 +911,14 @@ end
     end
 
     for src in [
+        "f(@nospecialize) = 1\nf(1)",
+        "f(a, @nospecialize) = a\nf(1, 2)",
+    ]
+        cst = parse_and_pass(src)
+        @test StaticLint.errorof(cst.args[2]) === nothing
+    end
+
+    for src in [
         "function f end\nf(1)",
         "function f end\nf()",
         "function f end\nf(1, 2, 3)",
