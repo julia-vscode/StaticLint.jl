@@ -892,6 +892,23 @@ end
         @test StaticLint.errorof(cst.args[2]) === expected
     end
 
+    for src in [
+        "function f end\nf(1)",
+        "function f end\nf()",
+        "function f end\nf(1, 2, 3)",
+    ]
+        cst = parse_and_pass(src)
+        @test StaticLint.errorof(cst.args[2]) === StaticLint.FunctionHasNoMethods
+    end
+
+    let cst = parse_and_pass("function f end\nf(x) = x\nf(1)")
+        @test StaticLint.errorof(cst.args[3]) === nothing
+    end
+
+    let cst = parse_and_pass("function f end\nf(x) = x\nf(1, 2, 3)")
+        @test StaticLint.errorof(cst.args[3]) === StaticLint.IncorrectCallArgs
+    end
+
     let cst = parse_and_pass(
             """
             function f(a, b; kw = kw) end
