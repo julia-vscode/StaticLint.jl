@@ -35,6 +35,7 @@
     FileNotAvailable,
     RelativeImportTooManyDots,
     DuplicateInclude,
+    FunctionHasNoMethods,
 )
 
 const LintCodeDescriptions = Dict{LintCodes,String}(
@@ -71,6 +72,7 @@ const LintCodeDescriptions = Dict{LintCodes,String}(
     FileTooBig => "File too big, not following include.",
     FileNotAvailable => "File not available.",
     RelativeImportTooManyDots => "Relative import has more leading dots than available module nesting.",
+    FunctionHasNoMethods => "Called function has no methods.",
 )
 
 haserror(m::Meta) = m.error !== nothing
@@ -335,8 +337,32 @@ function check_call(x, env::ExternalEnv)
         tls = retrieve_toplevel_scope(x)
         tls === nothing && return @warn "Couldn't get top-level scope." # General check, this means something has gone wrong.
         func_ref === nothing && return
-        !sig_match_any(func_ref, x, call_counts, tls, env) && seterror!(x, IncorrectCallArgs)
+        if func_has_no_methods(func_ref)
+            seterror!(x, FunctionHasNoMethods)
+        elseif !sig_match_any(func_ref, x, call_counts, tls, env)
+            seterror!(x, IncorrectCallArgs)
+        end
     end
+end
+
+# True when every visible definition of `func_ref` is a bare forward
+# declaration (`function f end`) — i.e. the function has no methods, so any
+# call to it can only throw a `MethodError`.
+_is_real_method(m::EXPR) =
+    (CSTParser.defines_function(m) || CSTParser.defines_macro(m)) &&
+    (s = CSTParser.rem_wheres_decls(CSTParser.get_sig(m))) !== nothing && s.args !== nothing
+
+function func_has_no_methods(func_ref)
+    func_ref isa Binding || return false
+    func_ref.val isa EXPR && CSTParser.defines_function(func_ref.val) || return false
+    _is_real_method(func_ref.val) && return false
+    for r in func_ref.refs
+        method = get_method(r)
+        method === nothing && continue
+        method isa EXPR || return false  # external (stdlib/package) backing has methods
+        _is_real_method(method) && return false
+    end
+    return true
 end
 
 function sig_match_any(func_ref::Union{SymbolServer.FunctionStore,SymbolServer.DataTypeStore}, x, call_counts, tls::Scope, env::ExternalEnv)

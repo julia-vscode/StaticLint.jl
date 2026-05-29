@@ -285,6 +285,12 @@ function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)
         # `arg_type` itself unwraps `<decl>...` splats and `@nospecialize`
         # wrappers internally, so we don't need to walk inner decls here.
         sig = CSTParser.rem_wheres_decls(CSTParser.get_sig(method))
+
+        # Bare forward declaration `function f end`: `get_sig` returns the
+        # lone name (an EXPR with `args === nothing`), no signature to match.
+        # It is not a method, so it matches no call.
+        sig.args === nothing && return false
+
         # Element type for an explicit `::Vararg{T,...}` slot. `arg_type`
         # on the decl returns the *Vararg* binding, not `T`, so we extract
         # `T` from the AST and use it for the trailing-arg type check.
