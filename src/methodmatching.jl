@@ -261,7 +261,7 @@ function _resolve_type_expr(t, store)
 end
 
 function match_method(args::Vector{Any}, kws::Vector{Any}, method::EXPR, store)
-    margs, mkws = [], []
+    margs, mopts, mkws = [], [], []
     vararg = false
     vararg_N = nothing
     if CSTParser.defines_struct(method)
