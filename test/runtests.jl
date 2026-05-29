@@ -899,6 +899,17 @@ end
         @test StaticLint.errorof(cst.args[2]) === expected
     end
 
+    for (src, expected) in [
+        ("struct Foo\n    x\nend\nFoo(1)"    => nothing),
+        ("struct Foo\n    x\nend\nFoo(1, 2)" => StaticLint.IncorrectCallArgs),
+        ("struct Foo\n    x\n    y\nend\nFoo(1)"       => StaticLint.IncorrectCallArgs),
+        ("struct Foo\n    x\n    y\nend\nFoo(1, 2)"    => nothing),
+        ("struct Foo\n    x\n    y\nend\nFoo(1, 2, 3)" => StaticLint.IncorrectCallArgs),
+    ]
+        cst = parse_and_pass(src)
+        @test StaticLint.errorof(cst.args[2]) === expected
+    end
+
     for src in [
         "function f end\nf(1)",
         "function f end\nf()",
