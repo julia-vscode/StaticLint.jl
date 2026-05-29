@@ -765,6 +765,13 @@ end
     end
 end
 
+@testitem "_super resolves declared supertype" setup = [SLSetup] begin
+    sup(src) = (cst = parse_and_pass(src); StaticLint._super(cst.args[1], getenv(server.files[""], server).symbols))
+    @test CSTParser.valof(sup("primitive type MyInt <: Integer 8 end")) == "Integer"
+    @test CSTParser.valof(sup("abstract type MyAbs <: Real end")) == "Real"
+    @test CSTParser.valof(sup("struct MyS <: Number end")) == "Number"
+end
+
 @testitem "check_call" setup = [SLSetup] begin
     let cst = parse_and_pass(
             """
